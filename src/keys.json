@@ -1,0 +1,53 @@
+{
+  "TYPE": [
+    "ERROR",
+    "CARD",
+    "LEAGUE",
+    "LOADED",
+    "READY",
+    "CHECKCONFIG",
+    "MARKDIRTY",
+    "NOCONNECTION"
+  ],
+  "METHOD": [
+    "ERROR",
+    "SIZE",
+    "DATA",
+    "END",
+    "REQUESTCARDS",
+    "REQUESTCARD",
+    "REQUESTGAME",
+    "SUBSCRIBE",
+    "UNSUBSCRIBE",
+    "TD",
+    "READY",
+    "SCREEN_CHANGE",
+    "BUZZ_CHANGE"
+  ],
+  "LEAGUE": [
+    "FAVS",
+    "NFL",
+    "MLB",
+    "NHL",
+    "NBA",
+    "WNBA",
+    "NCAAF",
+    "NCAAM",
+    "NCAAW"
+  ],
+  "GAMESTATE": [
+    "INGAME",
+    "PREGAME",
+    "POSTGAME"
+  ],
+  "PERSIST": [
+    "BUZZON",
+    "HASTEAMS",
+    "CONFIG_STATUS"
+  ],
+  "TD": [
+    "APP_OPEN",
+    "CARD_OPEN",
+    "READY"
+  ]
+}

@@ -1,3 +1,3 @@
 'use strict';
 
-var PEBBLE_SPORTS_API_ROOT = 'http://10.0.30.186';
+var PEBBLE_SPORTS_API_ROOT = 'http://sports-api.rojas.tech';

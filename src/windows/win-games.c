@@ -390,10 +390,19 @@ static void window_load(Window *window) {
   });
   layer_add_child(window_layer, menu_layer_get_layer(s_menu_layer));
 
-  s_header_text = text_layer_create(PBL_IF_RECT_ELSE(GRect(0, -2, bounds.size.w, 15),
-                                                     GRect(0, 4, 180, 20)));
+  // One create, not three: the previous version built a TextLayer, configured
+  // it, then overwrote the pointer inside the #if — leaking a layer per push
+  // and losing the GColorClear background with it. STATUS_TEXT_OFFSET is the
+  // same nudge win-card's status bar uses.
+  s_header_text = text_layer_create(GRect(bounds.origin.x,
+                                          bounds.origin.y + STATUS_TEXT_OFFSET,
+                                          bounds.size.w, STATUS_BAR_LAYER_HEIGHT));
   text_layer_set_background_color(s_header_text, GColorClear);
+#if (PBL_DISPLAY_WIDTH >= 200)
+  text_layer_set_font(s_header_text, fonts_get_system_font(FONT_KEY_GOTHIC_18));
+#else
   text_layer_set_font(s_header_text, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+#endif
   text_layer_set_text_alignment(s_header_text, GTextAlignmentCenter);
   layer_add_child(window_layer, text_layer_get_layer(s_header_text));
 }

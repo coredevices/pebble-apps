@@ -235,11 +235,17 @@ static void set_compositing_mode(GContext *ctx) {
 }
 
 static void draw_status_bar(GContext *ctx, GRect box) {
+#if (PBL_DISPLAY_HEIGHT >= 200)
+  const int16_t MARGIN = 8;
+#else
   const int16_t MARGIN = 6;
+#endif
 
-  const int16_t status_box_offset = PBL_IF_RECT_ELSE(-1, 4);
-  GRect status_box = GRect(MARGIN, box.origin.y + status_box_offset, box.size.w - (MARGIN * 2),
-                           box.size.h);
+  // STATUS_TEXT_OFFSET (config.h) is shared with win-games' header so the two
+  // screens put their status text on the same baseline; it used to be a private
+  // constant here and the header was tuned 2px apart from it.
+  GRect status_box = GRect(MARGIN, box.origin.y + STATUS_TEXT_OFFSET,
+                           box.size.w - (MARGIN * 2), box.size.h);
 
   graphics_context_set_text_color(ctx, GColorBlack);
 
@@ -251,8 +257,13 @@ static void draw_status_bar(GContext *ctx, GRect box) {
 
   const bool should_draw = PBL_IF_RECT_ELSE(true, time_showing);
   if (should_draw) {
+#if (PBL_DISPLAY_HEIGHT >= 200)
+    graphics_draw_text(ctx, time_text, fonts_get_system_font(FONT_KEY_GOTHIC_18), status_box,
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#else
     graphics_draw_text(ctx, time_text, fonts_get_system_font(FONT_KEY_GOTHIC_14), status_box,
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#endif
   }
 
   char pagination_text[6];
@@ -260,22 +271,38 @@ static void draw_status_bar(GContext *ctx, GRect box) {
   if (espn_get_num_cards() > 0) {
     snprintf(pagination_text, sizeof(pagination_text), "%d/%d", espn_get_selected_card() + 1,
              espn_get_num_cards() ? espn_get_num_cards() : 1);
+
   }
 
 #ifdef PBL_RECT
+#if (PBL_DISPLAY_HEIGHT >= 200)
+  graphics_draw_text(ctx, pagination_text, fonts_get_system_font(FONT_KEY_GOTHIC_18), status_box,
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+#else
   graphics_draw_text(ctx, pagination_text, fonts_get_system_font(FONT_KEY_GOTHIC_14), status_box,
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+#endif
   prv_draw_dotted_line(ctx, GPoint(box.origin.y, box.size.h), box.size.w, false);
 
   if (card_get_data()->gameState == KEY_GAMESTATE_INGAME) {
     graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
-    graphics_draw_text(ctx, "LIVE", fonts_get_system_font(FONT_KEY_GOTHIC_14), status_box,
+#if (PBL_DISPLAY_HEIGHT >= 200)
+    graphics_draw_text(ctx, "LIVE", fonts_get_system_font(FONT_KEY_GOTHIC_18), status_box,
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+#else
+    graphics_draw_text(ctx, "LIVE", fonts_get_system_font(FONT_KEY_GOTHIC_14), status_box,
+                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+#endif
   }
 #elif PBL_ROUND
-  if (!time_showing) {
+if (!time_showing) {
+#if (PBL_DISPLAY_HEIGHT >= 200)
+    graphics_draw_text(ctx, pagination_text, fonts_get_system_font(FONT_KEY_GOTHIC_18), status_box,
+                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#else
     graphics_draw_text(ctx, pagination_text, fonts_get_system_font(FONT_KEY_GOTHIC_14), status_box,
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#endif
   }
 #endif
 }
@@ -564,14 +591,13 @@ static void main_layer_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
 
   GRect status_box = bounds;
-  status_box.size.h = 16;
+  status_box.size.h = STATUS_BAR_LAYER_HEIGHT;
 
   draw_status_bar(ctx, status_box);
 
   graphics_context_set_stroke_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
 
-  prv_draw_dotted_line(ctx, GPoint(0, bounds.size.h + PBL_IF_RECT_ELSE(-26, -48)), bounds.size.w,
-                       false);
+  prv_draw_dotted_line(ctx, GPoint(0, bounds.size.h - CARD_FOOTER_H), bounds.size.w, false);
 }
 
 static void league_layer_update_proc(Layer *layer, GContext *ctx) {

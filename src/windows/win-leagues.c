@@ -106,6 +106,31 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
 #else
   graphics_context_set_text_color(ctx, PBL_IF_BW_ELSE(GColorBlack, GColorWhite));
 #endif
+
+#if PBL_PLATFORM_GABBRO
+  graphics_draw_text(ctx, espn_get_league_title(section),
+                     fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
+                     GRect(38, 7, 120, 28),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, espn_get_league_subtitle(section),
+                     fonts_get_system_font(FONT_KEY_GOTHIC_24),
+                     GRect(38, 31, 150, 20),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
+                               GRect(197, 23, 25, 25));
+#elif PBL_PLATFORM_EMERY
+  graphics_draw_text(ctx, espn_get_league_title(section),
+                    fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
+                    GRect(38, 5, 150, 20),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, espn_get_league_subtitle(section),
+                    fonts_get_system_font(FONT_KEY_GOTHIC_24),
+                    GRect(38, 30, 150, 20),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
+                                PBL_IF_RECT_ELSE(GRect(9, 18, 25, 25),
+                                                GRect(186, 23, 25, 25)));
+#else
   graphics_draw_text(ctx, espn_get_league_title(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      PBL_IF_RECT_ELSE(GRect(34, 5, 100, 20), GRect(40, 5, 90, 20)),
@@ -117,6 +142,7 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
   graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
                                PBL_IF_RECT_ELSE(GRect(6, 9, 25, 25),
                                                 GRect(125, 11, 25, 25)));
+#endif
 }
 
 static void menu_draw_row_callback(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
@@ -135,20 +161,34 @@ static uint16_t menu_get_num_rows_callback(struct MenuLayer *menu_layer, uint16_
 
 static int16_t menu_get_cell_height_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
                                              void *context) {
-  return 50;
+#if PBL_PLATFORM_GABBRO
+    return 72;
+#elif PBL_PLATFORM_EMERY
+    return 67;
+#else
+    return 50;
+#endif
 }
 
 static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
+  
   window_set_background_color(window, GColorBlack);
-
-#ifdef PBL_RECT
+  
+#if PBL_PLATFORM_EMERY
   const GRect bounds = layer_get_bounds(window_layer);
   s_menu_layer = menu_layer_create(bounds);
+#elif PBL_PLATFORM_GABBRO
+  s_menu_layer = menu_layer_create(GRect(0, 15, 260, 230));
+  menu_layer_set_center_focused(s_menu_layer, true);
 #elif PBL_ROUND
   s_menu_layer = menu_layer_create(GRect(0, 15, 180, 150));
   menu_layer_set_center_focused(s_menu_layer, true);
+#elif PBL_RECT
+  const GRect bounds = layer_get_bounds(window_layer);
+  s_menu_layer = menu_layer_create(bounds);
 #endif
+
   menu_layer_set_normal_colors(s_menu_layer, GColorBlack, GColorWhite);
   menu_layer_set_highlight_colors(s_menu_layer, GColorBlack, GColorWhite);
   menu_layer_pad_bottom_enable(s_menu_layer, false);

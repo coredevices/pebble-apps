@@ -1,5 +1,8 @@
 #pragma once
 
+#define PROGRESS_LAYER_WINDOW_DELTA 33
+#define PROGRESS_LAYER_WINDOW_WIDTH 80
+
 void win_splash_init(void);
 void win_splash_push(void);
 void win_splash_pop(void);

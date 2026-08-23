@@ -65,10 +65,10 @@ static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
 
-  s_progress_layer = progress_layer_create(PBL_IF_RECT_ELSE(GRect(32, bounds.size.h / 2, 80, 6),
-                                                            GRect(bounds.size.w / 4,
-                                                                  bounds.size.h / 2,
-                                                                  bounds.size.w / 2, 6)));
+  s_progress_layer = progress_layer_create(GRect((bounds.size.w - PROGRESS_LAYER_WINDOW_WIDTH) / 2, 
+                                                  bounds.size.h / 2 - 3, 
+                                                  PROGRESS_LAYER_WINDOW_WIDTH, 
+                                                  6));
   progress_layer_set_progress(s_progress_layer, 10);
   progress_layer_set_corner_radius(s_progress_layer, 2);
   progress_layer_set_foreground_color(s_progress_layer, GColorWhite);

@@ -107,6 +107,9 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
   const uint16_t row = cell_index->row;
   const GRect bounds = layer_get_bounds(cell_layer);
   const GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+#ifdef PBL_PLATFORM_EMERY
+  const GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
+#endif
   set_compositing_mode(ctx);
   if (espn_get_num_cards() == 0) {
     char *title = get_title_status();
@@ -119,11 +122,18 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
         graphics_text_layout_get_content_size(title, font_gothic_24_bold, bounds,
                                               GTextOverflowModeTrailingEllipsis,
                                               GTextAlignmentCenter).h;
+#ifdef PBL_PLATFORM_EMERY
+    const uint16_t y_offset = (bounds.size.h - title_height) / 2 - 7;
+    graphics_draw_text(ctx, title, font_gothic_28_bold, GRect(0, y_offset, bounds.size.w,
+                                                              bounds.size.h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#else
     const uint16_t y_offset = (bounds.size.h - title_height) / 2 + PBL_IF_COLOR_ELSE(10, -25);
-
     graphics_draw_text(ctx, title, font_gothic_24_bold, GRect(0, y_offset, bounds.size.w,
                                                               bounds.size.h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#endif
+
   } else {
     graphics_context_set_fill_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ?
                                          COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack) :
@@ -135,6 +145,32 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
     const CardData *data = espn_get_card_data(row);
     const bool is_pregame = data->gameState == KEY_GAMESTATE_PREGAME;
 
+#ifdef PBL_PLATFORM_EMERY
+    // The y values are box origins, not glyph positions: GOTHIC_28_BOLD lays
+    // its ink 10px below the box top and runs 18px, so -4 puts the first row's
+    // caps 6px into the cell and 19 leaves a 5px gap under them — the same
+    // 6/5/5/6 rhythm the 144px layout below gets from -4/15/39 in a 59px cell.
+    // The 30 is ink (28) + 2 slack; at 26 the box cut the last pixel row off
+    // every name and score.
+    graphics_draw_text(ctx, data->nameAway, font_gothic_28_bold, GRect(9, -2, 182, 30),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, data->nameHome, font_gothic_28_bold, GRect(9, 22, 182, 30),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+    graphics_draw_text(ctx, is_pregame ? data->recordAway : data->scoreAway,
+                    font_gothic_28_bold, GRect(9, -2, 182, 30),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+    graphics_draw_text(ctx, is_pregame ? data->recordHome : data->scoreHome,
+                    font_gothic_28_bold, GRect(9, 22, 182, 30),
+                    GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+
+    graphics_draw_text(ctx, data->subtitle, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                    GRect(9, bounds.size.h - 26, 182, 20), GTextOverflowModeTrailingEllipsis,
+                    GTextAlignmentRight, NULL);
+    graphics_draw_text(ctx, data->league, fonts_get_system_font(FONT_KEY_GOTHIC_18),
+                    GRect(9, bounds.size.h - 26, 182, 20), GTextOverflowModeTrailingEllipsis,
+                    GTextAlignmentLeft, NULL);
+#else
     graphics_draw_text(ctx, data->nameAway, font_gothic_24_bold, GRect(9, -4, 126, 26),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     graphics_draw_text(ctx, data->nameHome, font_gothic_24_bold, GRect(9, 15, 126, 26),
@@ -153,6 +189,7 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
     graphics_draw_text(ctx, data->league, fonts_get_system_font(FONT_KEY_GOTHIC_14),
                        GRect(9, 39, 126, 20), GTextOverflowModeTrailingEllipsis,
                        GTextAlignmentLeft, NULL);
+#endif
   }
 }
 
@@ -165,20 +202,39 @@ static bool menu_layer_cell_is_selected(MenuIndex *cell_index) {
 static void draw_games_row_round(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index) {
   const uint16_t row = cell_index->row;
   const GRect bounds = layer_get_bounds(cell_layer);
+  
+#ifdef PBL_PLATFORM_GABBRO
+  const GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
+#endif
   const GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  
   set_compositing_mode(ctx);
   if (espn_get_num_cards() == 0) {
     char *title = get_title_status();
     graphics_context_set_text_color(ctx, COLOR_FALLBACK(GColorLightGray, GColorBlack));
+    
+#ifdef PBL_PLATFORM_GABBRO
+    const uint16_t title_height =
+        graphics_text_layout_get_content_size(title, font_gothic_28_bold, bounds,
+                                            GTextOverflowModeTrailingEllipsis,
+                                            GTextAlignmentCenter).h;
+    const uint16_t y_offset = (bounds.size.h / 2) - (title_height / 2);
+
+    graphics_draw_text(ctx, title, font_gothic_28_bold, GRect(0, y_offset, bounds.size.w,
+                                                              bounds.size.h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+#else
     const uint16_t title_height =
         graphics_text_layout_get_content_size(title, font_gothic_24_bold, bounds,
-                                              GTextOverflowModeTrailingEllipsis,
-                                              GTextAlignmentCenter).h;
+                                            GTextOverflowModeTrailingEllipsis,
+                                            GTextAlignmentCenter).h;
     const uint16_t y_offset = (bounds.size.h / 2) - (title_height / 2);
 
     graphics_draw_text(ctx, title, font_gothic_24_bold, GRect(0, y_offset, bounds.size.w,
                                                               bounds.size.h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    
+#endif
   } else {
     graphics_context_set_fill_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ?
                                          COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack) :
@@ -190,6 +246,38 @@ static void draw_games_row_round(GContext *ctx, const Layer *cell_layer, MenuInd
     const CardData *data = espn_get_card_data(row);
     const int16_t text_buffer_length = 64;
     char text[text_buffer_length];
+
+#ifdef PBL_PLATFORM_GABBRO
+    graphics_draw_text(ctx, "@", font_gothic_24_bold, GRect(0, 0, 260, 26),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+
+    if (menu_layer_cell_is_selected(cell_index)) {
+      bool is_pregame = data->gameState == KEY_GAMESTATE_PREGAME;
+      graphics_draw_text(ctx, data->nameAway, font_gothic_28_bold, GRect(0, 0, 94, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      graphics_draw_text(ctx, data->nameHome, font_gothic_28_bold, GRect(166, 0, 94, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+      graphics_draw_text(ctx, is_pregame ? data->recordAway : data->scoreAway,
+                         font_gothic_28_bold, GRect(0, 29, 94, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      graphics_draw_text(ctx, is_pregame ? data->recordHome : data->scoreHome,
+                         font_gothic_28_bold, GRect(166, 29, 94, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+      // Anchored to the cell bottom rather than a fixed y, so it tracks any
+      // change to the gabbro cell height instead of silently drifting.
+      snprintf(text, sizeof(text), "%s - %s", data->league, data->subtitle);
+      graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_24),
+                         GRect(0, bounds.size.h - 38, 260, 20),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    } else {
+      graphics_draw_text(ctx, data->nameAway, font_gothic_28_bold, GRect(0, 0, 108, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+      graphics_draw_text(ctx, data->nameHome, font_gothic_28_bold, GRect(152, 0, 108, 26),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
+#else
     graphics_draw_text(ctx, "@", font_gothic_24_bold, GRect(0, 0, 180, 26),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
@@ -217,6 +305,7 @@ static void draw_games_row_round(GContext *ctx, const Layer *cell_layer, MenuInd
       graphics_draw_text(ctx, data->nameHome, font_gothic_24_bold, GRect(105, 0, 75, 26),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     }
+#endif
   }
 }
 #endif
@@ -241,22 +330,56 @@ static uint16_t menu_get_num_rows_callback(struct MenuLayer *menu_layer, uint16_
 static int16_t menu_get_cell_height_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
                                              void *context) {
   if (espn_get_num_cards() > 0) {
+      
+#if PBL_PLATFORM_GABBRO
+    return menu_layer_cell_is_selected(cell_index) ? 100 : 50;
+#elif PBL_PLATFORM_EMERY
+    return 75;
+#else
     return PBL_IF_RECT_ELSE(59, menu_layer_cell_is_selected(cell_index) ? 70 : 35);
+ #endif
+
   } else {
+      
+#if PBL_PLATFORM_EMERY
+    return PBL_DISPLAY_HEIGHT - STATUS_BAR_LAYER_HEIGHT;
+#elif PBL_PLATFORM_GABBRO
+    // Round viewport is inset at top and bottom, so the full-bleed cell is
+    // shorter than on the rect platforms by one more header height.
+    return PBL_DISPLAY_HEIGHT - (STATUS_BAR_LAYER_HEIGHT * 2);
+#else
     return PBL_IF_COLOR_ELSE(115, 180);
+#endif
+
   }
 }
 
 static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
+  GRect bounds = layer_get_bounds(window_layer);
   window_set_background_color(window, GColorWhite);
-#ifdef PBL_RECT
-  const GRect bounds = layer_get_bounds(window_layer);
-  s_menu_layer = menu_layer_create(GRect(bounds.origin.x, 15, bounds.size.w, bounds.size.h));
-#elif PBL_ROUND
-  s_menu_layer = menu_layer_create(GRect(0, 15, 180, 150));
+
+  // Top and height both come from STATUS_BAR_LAYER_HEIGHT (16 / 20 emery+gabbro
+  // / 24 chalk) so the cell the draw callbacks measure against is exactly the
+  // area below the header. The literal 15 this replaced disagreed with
+  // menu_get_cell_height_callback, which already used the constant, and left
+  // the rect menu a full header-height too tall.
+#if PBL_ROUND
+  // Symmetric inset on round: with center_focused the MenuLayer centres the
+  // focused cell in the viewport, so the viewport itself has to stay centred on
+  // the screen or every row sits low. win-leagues insets the same way.
+  s_menu_layer = menu_layer_create(GRect(bounds.origin.x,
+                                         STATUS_BAR_LAYER_HEIGHT,
+                                         bounds.size.w,
+                                         bounds.size.h - (STATUS_BAR_LAYER_HEIGHT * 2)));
   menu_layer_set_center_focused(s_menu_layer, true);
+#else
+  s_menu_layer = menu_layer_create(GRect(bounds.origin.x,
+                                         STATUS_BAR_LAYER_HEIGHT,
+                                         bounds.size.w,
+                                         bounds.size.h - STATUS_BAR_LAYER_HEIGHT));
 #endif
+
   menu_layer_set_normal_colors(s_menu_layer, GColorWhite, GColorBlack);
   menu_layer_set_highlight_colors(s_menu_layer, GColorWhite, GColorBlack);
   menu_layer_set_callbacks(s_menu_layer, NULL, (MenuLayerCallbacks) {

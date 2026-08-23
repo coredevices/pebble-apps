@@ -103,8 +103,8 @@ void win_actions_push(void) {
            data->nameHome,
            data->subscribedHome ? "from" : "to");
 
-  action_menu_level_add_action(s_root_level, awayText, action_performed_callback, (void*)1);
-  action_menu_level_add_action(s_root_level, homeText, action_performed_callback, (void*)2);
+  // action_menu_level_add_action(s_root_level, awayText, action_performed_callback, (void*)1);
+  // action_menu_level_add_action(s_root_level, homeText, action_performed_callback, (void*)2);
 
   ActionMenuConfig config = {
     .root_level = s_root_level,
@@ -156,8 +156,13 @@ static void confirmation_layer_update_proc(Layer *layer, GContext *ctx) {
   GDrawCommandFrame *frame = gdraw_command_sequence_get_frame_by_elapsed(s_confirmation_sequence,
                                                                          elapsed);
   if (frame) {
+#if (PBL_DISPLAY_HEIGHT >= 200)
+    GPoint p = GPoint(PBL_IF_RECT_ELSE(60, 90), PBL_IF_RECT_ELSE(74, 90));
+    gdraw_command_frame_draw(ctx, s_confirmation_sequence, frame, p);
+#else
     GPoint p = GPoint(PBL_IF_RECT_ELSE(32, 50), PBL_IF_RECT_ELSE(44, 40));
     gdraw_command_frame_draw(ctx, s_confirmation_sequence, frame, p);
+#endif
   }
 #else
   GPoint p = GPoint(32, 36);
@@ -182,13 +187,24 @@ static void result_window_load(Window *window) {
 #endif
 
   GRect text_bounds;
+#if (PBL_DISPLAY_HEIGHT >= 200)
+  text_bounds.origin.x = PBL_IF_RECT_ELSE(8, 16);
+  text_bounds.origin.y = PBL_IF_RECT_ELSE(162, 172);
+  text_bounds.size.w = bounds.size.w - (text_bounds.origin.x * 2);
+  text_bounds.size.h = 64;
+#else
   text_bounds.origin.x = PBL_IF_RECT_ELSE(8, 16);
   text_bounds.origin.y = PBL_IF_RECT_ELSE(120, 120);
   text_bounds.size.w = bounds.size.w - (text_bounds.origin.x * 2);
   text_bounds.size.h = 64;
-
+#endif
+  
   s_confirmation_text_layer = text_layer_create(text_bounds);
+#if (PBL_DISPLAY_HEIGHT >= 200)
+  text_layer_set_font(s_confirmation_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+#else
   text_layer_set_font(s_confirmation_text_layer, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+#endif
   text_layer_set_text_color(s_confirmation_text_layer, PBL_IF_COLOR_ELSE(GColorWhite, GColorBlack));
   text_layer_set_background_color(s_confirmation_text_layer, GColorClear);
   text_layer_set_text_alignment(s_confirmation_text_layer, GTextAlignmentCenter);

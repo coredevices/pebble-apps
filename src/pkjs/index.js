@@ -46,6 +46,68 @@ var parseCardData = function(evnt) {
   return msg;
 };
 
+/*
+ * leadChange decision.
+ *
+ * Preferred path: the API publishes `leadChangedAt`, an ISO timestamp that only
+ * advances when the leader actually changes. We remember the last value seen
+ * per game, so re-polling an unchanged card is a no-op no matter how often the
+ * refresh timer fires.
+ *
+ * Fallback for an API that predates the field: compare the scores numerically.
+ * The original compared `msg.score*` (strings, straight from the API) against
+ * `opts.score*` (parseInt'd numbers), so "6" > "17" was true; since that half of
+ * the test depends only on the current score it stayed true and re-fired the
+ * buzz on every single refresh.
+ */
+var LEAD_SEEN_KEY = 'leadSeen';
+var LEAD_SEEN_MAX = 64;
+
+function loadLeadSeen() {
+  try {
+    return JSON.parse(localStorage.getItem(LEAD_SEEN_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveLeadSeen(seen) {
+  try {
+    localStorage.setItem(LEAD_SEEN_KEY, JSON.stringify(seen));
+  } catch (e) {}
+}
+
+function computeLeadChange(res, opts) {
+  if (res.leadChangedAt) {
+    var seen = loadLeadSeen();
+    var key = String(opts.id);
+    var was = seen[key];
+
+    // Bounded: a season of ids would otherwise accumulate forever. Dropping
+    // history only ever costs a re-seed, which is silent.
+    if (Object.keys(seen).length > LEAD_SEEN_MAX) {
+      seen = {};
+    }
+    seen[key] = res.leadChangedAt;
+    saveLeadSeen(seen);
+
+    // ISO-8601 UTC strings are fixed width, so > is a valid ordering. First
+    // sighting seeds silently; only an advance is a real change.
+    return (was && res.leadChangedAt > was) ? 1 : 0;
+  }
+
+  var newAway = parseInt(res.scoreAway, 10);
+  var newHome = parseInt(res.scoreHome, 10);
+
+  if (isNaN(newAway) || isNaN(newHome) ||
+      isNaN(opts.scoreAway) || isNaN(opts.scoreHome)) {
+    return 0;
+  }
+
+  return ((newHome > newAway && opts.scoreHome <= opts.scoreAway) ||
+          (newAway > newHome && opts.scoreAway <= opts.scoreHome)) ? 1 : 0;
+}
+
 function requestCard(opts) {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
@@ -60,12 +122,7 @@ function requestCard(opts) {
       msg.type = TYPE.CARD;
       msg.method = METHOD.DATA;
 
-      msg.leadChange = 0;
-
-      if ((msg.scoreHome > msg.scoreAway && opts.scoreHome <= opts.scoreAway) ||
-          (msg.scoreAway > msg.scoreHome && opts.scoreAway <= opts.scoreHome)) {
-        msg.leadChange = 1;
-      }
+      msg.leadChange = computeLeadChange(res, opts);
 
       appMessageQueue.send(msg);
 
@@ -92,12 +149,9 @@ function requestGame(opts) {
       msg.leagueIndex = opts.leagueIndex;
       msg.index = opts.gameIndex;
 
-      msg.leadChange = 0;
+      msg.leadChange = computeLeadChange(res, opts);
 
-      if ((msg.scoreHome > msg.scoreAway && opts.scoreHome <= opts.scoreAway) ||
-          (msg.scoreAway > msg.scoreHome && opts.scoreAway <= opts.scoreHome)) {
-        msg.leadChange = 1;
-      }
+      console.log('Sending LEAGUE');
 
       appMessageQueue.send(msg);
 
@@ -188,7 +242,7 @@ Sports.sendFavs = function() {
 Sports.refreshAllLeagues = function(callback) {
   Sports.favs = [];
   async.eachSeries(Sports.supportedLeagues, Sports.sendEvents, function() {
-    Sports.sendFavs();
+    // Sports.sendFavs();
     appMessageQueue.send({ type: TYPE.MARKDIRTY });
     if (typeof callback === 'function') {
       callback();
@@ -235,14 +289,16 @@ function updateTimelineToken() {
 }
 
 function updateTeamList() {
-  Pebble.timelineSubscriptions(function(topics) {
-    console.log('subscribed to ' + topics.join(', '));
-    Sports.teams = topics;
-    localStorage.setItem('teams', JSON.stringify(Sports.teams));
-  }, function(err) {
-    console.log('error getting subscriptions: ' + err);
-    appMessageQueue.send({ type: TYPE.NOCONNECTION });
-  });
+  Sports.teams = []
+  localStorage.setItem('teams', JSON.stringify(Sports.teams));
+  // Pebble.timelineSubscriptions(function(topics) {
+  //   console.log('subscribed to ' + topics.join(', '));
+  //   Sports.teams = topics;
+  //   localStorage.setItem('teams', JSON.stringify(Sports.teams));
+  // }, function(err) {
+  //   console.log('error getting subscriptions: ' + err);
+  //   appMessageQueue.send({ type: TYPE.NOCONNECTION });
+  // });
 }
 
 Sports.onReady = function() {
@@ -250,7 +306,7 @@ Sports.onReady = function() {
 
   TD.timeStart = getTimeInSeconds();
 
-  updateTimelineToken();
+  // updateTimelineToken();
 
   try {
     Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];

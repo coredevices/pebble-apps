@@ -1,9 +1,8 @@
 #include <pebble.h>
-#include <pebble-assist.h>
+#include <libs/pebble-assist.h>
 #include "generated/keys.h"
 #include "win-leagues.h"
 #include "win-games.h"
-#include "win-card.h"
 #include "card.h"
 #include "espn.h"
 #include "config.h"

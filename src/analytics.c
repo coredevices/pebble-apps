@@ -1,6 +1,6 @@
 #include <pebble.h>
-#include <pebble-assist.h>
-#include "generated/appinfo.h"
+#include <libs/pebble-assist.h>
+// #include "generated/appinfo.h"
 #include "generated/keys.h"
 #include "analytics.h"
 
@@ -13,12 +13,12 @@ static Screen s_previous_screen = SCREEN_NONE;
 void analytics_send_screen_analytics(uint8_t button_id) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_SCREEN_CHANGE);
-  dict_write_uint8(iter, APP_KEY_CURRENTSCREEN, s_current_screen);
-  dict_write_uint8(iter, APP_KEY_PREVIOUSSCREEN, s_previous_screen);
-  dict_write_uint8(iter, APP_KEY_EVENTBUTTON, button_id);
-  dict_write_uint16(iter, APP_KEY_SCREENUPCLICKS, s_screen_up_clicks);
-  dict_write_uint16(iter, APP_KEY_SCREENDOWNCLICKS, s_screen_down_clicks);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_SCREEN_CHANGE);
+  dict_write_uint8(iter, MESSAGE_KEY_currentScreen, s_current_screen);
+  dict_write_uint8(iter, MESSAGE_KEY_previousScreen, s_previous_screen);
+  dict_write_uint8(iter, MESSAGE_KEY_eventButton, button_id);
+  dict_write_uint16(iter, MESSAGE_KEY_screenUpClicks, s_screen_up_clicks);
+  dict_write_uint16(iter, MESSAGE_KEY_screenDownClicks, s_screen_down_clicks);
   dict_write_end(iter);
   app_message_outbox_send();
   s_screen_up_clicks = 0;
@@ -28,8 +28,8 @@ void analytics_send_screen_analytics(uint8_t button_id) {
 void analytics_send_buzz_analytics(bool buzz_on) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_BUZZ_CHANGE);
-  dict_write_uint8(iter, APP_KEY_BUZZCHANGE, buzz_on);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_BUZZ_CHANGE);
+  dict_write_uint8(iter, MESSAGE_KEY_buzzChange, buzz_on);
   dict_write_end(iter);
   app_message_outbox_send();
 }

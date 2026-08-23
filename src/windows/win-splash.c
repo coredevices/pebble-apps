@@ -1,5 +1,5 @@
 #include <pebble.h>
-#include <pebble-assist.h>
+#include <libs/pebble-assist.h>
 #include "layers/progress_layer.h"
 #include "win-splash.h"
 #include "config.h"

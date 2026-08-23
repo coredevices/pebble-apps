@@ -1,5 +1,5 @@
 #include <pebble.h>
-#include <pebble-assist.h>
+#include <libs/pebble-assist.h>
 #include "generated/keys.h"
 #include "win-games.h"
 #include "win-card.h"

@@ -1,11 +1,12 @@
 #include <pebble.h>
-#include <pebble-assist.h>
+#include <libs/pebble-assist.h>
 #include "win-actions.h"
 #include "card.h"
 #include "espn.h"
 #include "config.h"
 
-#define NUM_ACTION_MENU_ITEMS 3
+// we currently don't support timeline actions. drop from 3 -> 1 for now
+#define NUM_ACTION_MENU_ITEMS 1
 #define ACTION_LABEL_LENGTH_MAX 32
 
 static ActionMenu *s_action_menu = NULL;

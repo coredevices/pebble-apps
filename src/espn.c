@@ -1,6 +1,6 @@
 #include <pebble.h>
-#include <pebble-assist.h>
-#include "generated/appinfo.h"
+#include <libs/pebble-assist.h>
+// #include "generated/appinfo.h"
 #include "generated/keys.h"
 #include "espn.h"
 #include "card.h"
@@ -99,7 +99,7 @@ void espn_deinit(void) {
 }
 
 static void in_received_handler(DictionaryIterator *iter, void *context) {
-  Tuple *tuple = dict_find(iter, APP_KEY_TYPE);
+  Tuple *tuple = dict_find(iter, MESSAGE_KEY_type);
   if (!tuple) return;
   switch (tuple->value->uint8) {
     case KEY_TYPE_CHECKCONFIG:
@@ -147,14 +147,14 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
       break;
 
     case KEY_TYPE_LEAGUE: {
-      tuple = dict_find(iter, APP_KEY_METHOD);
+      tuple = dict_find(iter, MESSAGE_KEY_method);
       if (!tuple) break;
       switch (tuple->value->uint8) {
         case KEY_METHOD_SIZE: {
-          tuple = dict_find(iter, APP_KEY_INDEX);
+          tuple = dict_find(iter, MESSAGE_KEY_index);
           if (!tuple) break;
           uint16_t idx = tuple->value->uint16;
-          tuple = dict_find(iter, APP_KEY_COUNT);
+          tuple = dict_find(iter, MESSAGE_KEY_count);
           if (!tuple) break;
           s_leagues[idx].num_cards = tuple->value->uint16;
           free_safe(s_leagues[idx].cards);
@@ -163,7 +163,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           break;
         }
         case KEY_METHOD_DATA: {
-          tuple = dict_find(iter, APP_KEY_LEAGUEINDEX);
+          tuple = dict_find(iter, MESSAGE_KEY_leagueIndex);
           if (!tuple) break;
           uint16_t league = tuple->value->uint16;
 
@@ -171,7 +171,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
             s_has_teams = true;
           }
 
-          tuple = dict_find(iter, APP_KEY_INDEX);
+          tuple = dict_find(iter, MESSAGE_KEY_index);
           if (!tuple) break;
           uint16_t idx = tuple->value->uint16;
 
@@ -180,82 +180,82 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
             break;
           }
 
-          tuple = dict_find(iter, APP_KEY_ID);
+          tuple = dict_find(iter, MESSAGE_KEY_id);
           if (tuple) {
             data->id = tuple->value->int32;
           }
 
-          tuple = dict_find(iter, APP_KEY_LEAGUE);
+          tuple = dict_find(iter, MESSAGE_KEY_league);
           if (tuple) {
             strncpy(data->league, tuple->value->cstring, sizeof(data->league) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_SUBTITLE);
+          tuple = dict_find(iter, MESSAGE_KEY_subtitle);
           if (tuple) {
             strncpy(data->subtitle, tuple->value->cstring, sizeof(data->subtitle) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_BROADCASTER);
+          tuple = dict_find(iter, MESSAGE_KEY_broadcaster);
           if (tuple) {
             strncpy(data->broadcaster, tuple->value->cstring, sizeof(data->broadcaster) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_NAMEAWAY);
+          tuple = dict_find(iter, MESSAGE_KEY_nameAway);
           if (tuple) {
             strncpy(data->nameAway, tuple->value->cstring, sizeof(data->nameAway) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_NAMEHOME);
+          tuple = dict_find(iter, MESSAGE_KEY_nameHome);
           if (tuple) {
             strncpy(data->nameHome, tuple->value->cstring, sizeof(data->nameHome) - 1);
           }
 #ifndef LOW_MEM
-          tuple = dict_find(iter, APP_KEY_RANKAWAY);
+          tuple = dict_find(iter, MESSAGE_KEY_rankAway);
           if (tuple) {
             strncpy(data->rankAway, tuple->value->cstring, sizeof(data->rankAway) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_RANKHOME);
+          tuple = dict_find(iter, MESSAGE_KEY_rankHome);
           if (tuple) {
             strncpy(data->rankHome, tuple->value->cstring, sizeof(data->rankHome) - 1);
           }
 #endif
-          tuple = dict_find(iter, APP_KEY_RECORDAWAY);
+          tuple = dict_find(iter, MESSAGE_KEY_recordAway);
           if (tuple) {
             strncpy(data->recordAway, tuple->value->cstring, sizeof(data->recordAway) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_RECORDHOME);
+          tuple = dict_find(iter, MESSAGE_KEY_recordHome);
           if (tuple) {
             strncpy(data->recordHome, tuple->value->cstring, sizeof(data->recordHome) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_SCOREAWAY);
+          tuple = dict_find(iter, MESSAGE_KEY_scoreAway);
           if (tuple) {
             strncpy(data->scoreAway, tuple->value->cstring, sizeof(data->scoreAway) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_SCOREHOME);
+          tuple = dict_find(iter, MESSAGE_KEY_scoreHome);
           if (tuple) {
             strncpy(data->scoreHome, tuple->value->cstring, sizeof(data->scoreHome) - 1);
           }
 
-          tuple = dict_find(iter, APP_KEY_GAMESTATE);
+          tuple = dict_find(iter, MESSAGE_KEY_gameState);
           if (tuple) {
             data->gameState = tuple->value->uint8;
           }
 
-          tuple = dict_find(iter, APP_KEY_SUBSCRIBEDAWAY);
+          tuple = dict_find(iter, MESSAGE_KEY_subscribedAway);
           if (tuple) {
             data->subscribedAway = tuple->value->uint8;
           }
 
-          tuple = dict_find(iter, APP_KEY_SUBSCRIBEDHOME);
+          tuple = dict_find(iter, MESSAGE_KEY_subscribedHome);
           if (tuple) {
             data->subscribedHome = tuple->value->uint8;
           }
 
-          tuple = dict_find(iter, APP_KEY_LEADCHANGE);
+          tuple = dict_find(iter, MESSAGE_KEY_leadChange);
           if (tuple && tuple->value->uint8 && s_buzz_on && win_card_is_loaded()) {
             vibes_short_pulse();
           }
@@ -281,7 +281,7 @@ static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reas
 void espn_request_cards() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_REQUESTCARDS);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTCARDS);
   dict_write_end(iter);
   app_message_outbox_send();
 }
@@ -289,11 +289,11 @@ void espn_request_cards() {
 void espn_request_card() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_REQUESTCARD);
-  dict_write_uint32(iter, APP_KEY_ID, launch_get_args());
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTCARD);
+  dict_write_uint32(iter, MESSAGE_KEY_id, launch_get_args());
   if (card_get_data() != NULL) {
-    dict_write_cstring(iter, APP_KEY_SCOREAWAY, card_get_data()->scoreAway);
-    dict_write_cstring(iter, APP_KEY_SCOREHOME, card_get_data()->scoreHome);
+    dict_write_cstring(iter, MESSAGE_KEY_scoreAway, card_get_data()->scoreAway);
+    dict_write_cstring(iter, MESSAGE_KEY_scoreHome, card_get_data()->scoreHome);
   }
   dict_write_end(iter);
   app_message_outbox_send();
@@ -302,12 +302,12 @@ void espn_request_card() {
 void espn_request_game() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_REQUESTGAME);
-  dict_write_uint32(iter, APP_KEY_ID, card_get_data()->id);
-  dict_write_uint16(iter, APP_KEY_LEAGUEINDEX, s_selected_league);
-  dict_write_uint16(iter, APP_KEY_INDEX, s_selected_card);
-  dict_write_cstring(iter, APP_KEY_SCOREAWAY, card_get_data()->scoreAway);
-  dict_write_cstring(iter, APP_KEY_SCOREHOME, card_get_data()->scoreHome);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTGAME);
+  dict_write_uint32(iter, MESSAGE_KEY_id, card_get_data()->id);
+  dict_write_uint16(iter, MESSAGE_KEY_leagueIndex, s_selected_league);
+  dict_write_uint16(iter, MESSAGE_KEY_index, s_selected_card);
+  dict_write_cstring(iter, MESSAGE_KEY_scoreAway, card_get_data()->scoreAway);
+  dict_write_cstring(iter, MESSAGE_KEY_scoreHome, card_get_data()->scoreHome);
   dict_write_end(iter);
   app_message_outbox_send();
 }
@@ -323,8 +323,8 @@ static bool espn_is_NCAA(uint16_t section) {
 void espn_subscribe(const char *topic) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_SUBSCRIBE);
-  dict_write_cstring(iter, APP_KEY_TITLE, topic);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_SUBSCRIBE);
+  dict_write_cstring(iter, MESSAGE_KEY_title, topic);
   dict_write_end(iter);
   app_message_outbox_send();
 }
@@ -332,8 +332,8 @@ void espn_subscribe(const char *topic) {
 void espn_unsubscribe(const char *topic) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
-  dict_write_uint8(iter, APP_KEY_METHOD, KEY_METHOD_UNSUBSCRIBE);
-  dict_write_cstring(iter, APP_KEY_TITLE, topic);
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_UNSUBSCRIBE);
+  dict_write_cstring(iter, MESSAGE_KEY_title, topic);
   dict_write_end(iter);
   app_message_outbox_send();
 }

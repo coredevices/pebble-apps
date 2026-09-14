@@ -396,7 +396,7 @@ static void window_load(Window *window) {
   // same nudge win-card's status bar uses.
   s_header_text = text_layer_create(GRect(bounds.origin.x,
                                           bounds.origin.y + STATUS_TEXT_OFFSET,
-                                          bounds.size.w, STATUS_BAR_LAYER_HEIGHT));
+                                          bounds.size.w, STATUS_BAR_LAYER_HEIGHT + 4));
   text_layer_set_background_color(s_header_text, GColorClear);
 #if (PBL_DISPLAY_WIDTH >= 200)
   text_layer_set_font(s_header_text, fonts_get_system_font(FONT_KEY_GOTHIC_18));

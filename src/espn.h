@@ -4,7 +4,7 @@
 #include "card.h"
 
 typedef struct {
-  char title[12];
+  char title[16];
   CardData *cards;
   uint16_t num_cards;
   GBitmap *icon;

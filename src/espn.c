@@ -22,6 +22,7 @@ static LeagueData s_leagues[] = {
   { .title = "NCAAF"},
   { .title = "NCAAM"},
   { .title = "NCAAW"},
+  { .title = "Premier League"},
 };
 
 static void in_received_handler(DictionaryIterator *iter, void *context);
@@ -44,6 +45,7 @@ void espn_init(void) {
   s_leagues[KEY_LEAGUE_NHL].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_HOCKEY);
   s_leagues[KEY_LEAGUE_NFL].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_FOOTBALL);
   s_leagues[KEY_LEAGUE_NBA].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_BASKETBALL);
+  s_leagues[KEY_LEAGUE_EPL].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_SOCCER);
 
 #ifdef PBL_COLOR
   s_leagues[KEY_LEAGUE_FAVS].card_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_FAVS_RED);
@@ -51,6 +53,7 @@ void espn_init(void) {
   s_leagues[KEY_LEAGUE_NHL].card_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_HOCKEY_RED);
   s_leagues[KEY_LEAGUE_NFL].card_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_FOOTBALL_RED);
   s_leagues[KEY_LEAGUE_NBA].card_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_BASKETBALL_RED);
+  s_leagues[KEY_LEAGUE_EPL].card_icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_SOCCER_RED);
 #endif
 
   if (persist_exists(KEY_PERSIST_BUZZON)) {

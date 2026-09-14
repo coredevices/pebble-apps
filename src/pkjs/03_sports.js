@@ -10,7 +10,8 @@ Sports.supportedLeagues = [
   LEAGUE.WNBA,
   LEAGUE.NCAAF,
   LEAGUE.NCAAM,
-  LEAGUE.NCAAW
+  LEAGUE.NCAAW,
+  LEAGUE.EPL
 ];
 
 Sports.getLeagueName = function(league) {
@@ -31,6 +32,8 @@ Sports.getLeagueName = function(league) {
       return 'mens-college-basketball';
     case LEAGUE.NCAAW:
       return 'womens-college-basketball';
+    case LEAGUE.EPL:
+      return 'english-premier-league';
     default:
       return '';
   }

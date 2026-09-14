@@ -34,7 +34,8 @@ var LEAGUE = {
   WNBA: 5,
   NCAAF: 6,
   NCAAM: 7,
-  NCAAW: 8
+  NCAAW: 8,
+  EPL: 9
 };
 var GAMESTATE = {
   INGAME: 0,

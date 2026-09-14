@@ -110,7 +110,7 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
 #if PBL_PLATFORM_GABBRO
   graphics_draw_text(ctx, espn_get_league_title(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
-                     GRect(38, 7, 120, 28),
+                     GRect(38, 7, 160, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   graphics_draw_text(ctx, espn_get_league_subtitle(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_24),
@@ -121,7 +121,7 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
 #elif PBL_PLATFORM_EMERY
   graphics_draw_text(ctx, espn_get_league_title(section),
                     fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
-                    GRect(38, 5, 150, 20),
+                    GRect(38, 5, 180, 20),
                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   graphics_draw_text(ctx, espn_get_league_subtitle(section),
                     fonts_get_system_font(FONT_KEY_GOTHIC_24),

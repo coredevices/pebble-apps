@@ -93,6 +93,16 @@
         },
         {
           "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_SOCCER",
+          "file": "icn-soccer.png"
+        },
+        {
+          "targetPlatforms": [
             "basalt",
             "chalk",
             "emery",
@@ -145,6 +155,17 @@
           "type": "png",
           "name": "ICON_HOCKEY",
           "file": "icn-hockey.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_SOCCER",
+          "file": "icn-soccer.png"
         },
         {
           "type": "png",
@@ -205,6 +226,17 @@
           "type": "png",
           "name": "ICON_HOCKEY_RED",
           "file": "icn-hockey-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_SOCCER_RED",
+          "file": "icn-soccer-blue.png"
         },
         {
           "type": "raw",

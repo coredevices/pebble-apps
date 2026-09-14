@@ -20,7 +20,7 @@ void prompt_show(Layer *window_layer, const char *error_message, uint8_t key) {
   s_message_buffer[buf_size - 1] = '\0';
   const GRect bounds = layer_get_bounds(window_layer);
   s_title_layer = text_layer_create(GRect(0, 0, bounds.size.w, bounds.size.h));
-  text_layer_set_text(s_title_layer, "ESPN");
+  text_layer_set_text(s_title_layer, "Sports");
   text_layer_set_text_color(s_title_layer, GColorBlack);
   text_layer_set_background_color(s_title_layer, GColorWhite);
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);

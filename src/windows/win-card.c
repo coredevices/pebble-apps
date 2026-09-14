@@ -9,7 +9,7 @@
 #include "config.h"
 #include "analytics.h"
 
-#define REFRESH_TIME 1000 * 30
+#define REFRESH_TIME 1000 * 60
 
 // Height of the footer strip. main_layer_update_proc draws the dotted rule
 // along its top edge, so both must read the same value or the line detaches

@@ -746,6 +746,44 @@ static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_BACK, back_click_handler);
 }
 
+#ifdef PBL_TOUCH
+static void card_swipe_handler(const Recognizer *recognizer, RecognizerEvent event) {
+  switch (event) {
+    case RecognizerEvent_Completed: {
+      SwipeDirection direction = swipe_recognizer_get_direction(recognizer);
+      if (direction == SwipeDirection_Down) {
+        ask_for_scroll(ScrollDirectionUp);
+        analytics_increment_screen_clicks(true);
+      } else if (direction == SwipeDirection_Up) {
+        ask_for_scroll(ScrollDirectionDown);
+      } else if (direction == SwipeDirection_Left) {
+        win_actions_push();
+      } else if (direction == SwipeDirection_Right) {
+        analytics_set_screen(analytics_get_previous_screen(), BUTTON_ID_BACK);
+        window_stack_remove(s_window, true);
+      }
+#ifdef PBL_ROUND
+      reset_showing();
+#endif
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+static void card_tap_handler(const Recognizer *recognizer, RecognizerEvent event) {
+  switch (event) {
+    case RecognizerEvent_Completed: {
+      win_actions_push();
+      break;
+    }
+    default:
+      break;
+  }
+}
+#endif
+
 static void window_load(Window *window) {
   Layer *window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
@@ -802,6 +840,19 @@ static void window_load(Window *window) {
   layer_add_child(window_layer, s_progress_layer);
   layer_set_hidden(s_progress_layer, *card_get_data()->league);
 
+#ifdef PBL_TOUCH
+  window_set_touch_bridge_disabled(window, true);
+  
+  Recognizer *swipe = swipe_recognizer_create(card_swipe_handler, NULL, SwipeDirection_Up|
+                                                                        SwipeDirection_Down|
+                                                                        SwipeDirection_Left|
+                                                                        SwipeDirection_Right);
+  window_attach_recognizer(window, swipe);
+  
+  Recognizer *tap = tap_recognizer_create(card_tap_handler, NULL);
+  window_attach_recognizer(window, tap);
+#endif
+  
   tick_timer_service_subscribe(MINUTE_UNIT, handle_tick);
 #ifdef PBL_ROUND
   tick_timer_service_subscribe(SECOND_UNIT, tick_handler);

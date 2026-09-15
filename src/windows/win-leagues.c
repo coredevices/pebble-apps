@@ -17,6 +17,8 @@ static int16_t menu_get_cell_height_callback(struct MenuLayer *menu_layer, MenuI
                                              void *context);
 static void menu_draw_row_callback(GContext *ctx, const Layer *cell_layer, MenuIndex *cell_index,
                                    void *context);
+static void menu_select_click_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
+                                       void *context);
 static void window_load(Window *window);
 static void window_unload(Window *window);
 
@@ -58,15 +60,19 @@ static void down_up_click_handler(ClickRecognizerRef recognizer, void *context) 
   analytics_increment_screen_clicks(is_up);
 }
 
-static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+// Shared by the SELECT button and a tap on the highlighted row.
+static void select_league(MenuIndex cell_index) {
   if (prompt_is_showing()) {
     prompt_hide();
     persist_write_bool(KEY_PERSIST_CONFIG_STATUS, true);
   } else {
-    const MenuIndex cell_index = menu_layer_get_selected_index(s_menu_layer);
     espn_set_selected_league(cell_index.section);
     win_games_push();
   }
+}
+
+static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
+  select_league(menu_layer_get_selected_index(s_menu_layer));
 }
 
 static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
@@ -159,6 +165,11 @@ static uint16_t menu_get_num_rows_callback(struct MenuLayer *menu_layer, uint16_
   return 1;
 }
 
+static void menu_select_click_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
+                                       void *context) {
+  select_league(*cell_index);
+}
+
 static int16_t menu_get_cell_height_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
                                              void *context) {
 #if PBL_PLATFORM_GABBRO
@@ -197,6 +208,7 @@ static void window_load(Window *window) {
     .get_num_rows = menu_get_num_rows_callback,
     .get_cell_height = menu_get_cell_height_callback,
     .draw_row = menu_draw_row_callback,
+    .select_click = menu_select_click_callback,
   });
   layer_add_child(window_layer, menu_layer_get_layer(s_menu_layer));
 

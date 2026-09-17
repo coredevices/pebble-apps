@@ -175,6 +175,16 @@ function requestPin(opts) {
       var pin = {
         "id": `sports-${opts.id}`,
         "time": new Date(res.startTime).toISOString(),
+        // The watch launches the parent app itself for an openWatchApp action,
+        // with launchCode in launch_get_args() - which is where espn.c's
+        // APP_LAUNCH_TIMELINE_ACTION path reads the game id from. The phone
+        // always appends its own 'Remove' action, so this is the only one to
+        // send; other action types are dropped before they reach the watch.
+        "actions": [{
+          "title": "Open Game",
+          "type": "openWatchApp",
+          "launchCode": parseInt(opts.id, 10)
+        }],
         "layout": {
           "type": "sportsPin",
           "title": `${res.nameAwayFull} at ${res.nameHomeFull}`,
@@ -182,8 +192,11 @@ function requestPin(opts) {
           "tinyIcon": "system://images/NOTIFICATION_FLAG",
           "largeIcon": "system://images/NOTIFICATION_FLAG",
           "lastUpdated": new Date().toISOString(),
-          // "rankAway": "00",
-          // "rankHome": "00",
+          // Empty for every team outside the college leagues, and sent anyway:
+          // the layout wants strings, not missing keys. In a playoff or
+          // tournament game ESPN's rank is the seed.
+          "rankAway": event.rankAway || '',
+          "rankHome": event.rankHome || '',
           "nameAway": event.nameAway,
           "nameHome": event.nameHome,
           "recordAway": event.recordAway,

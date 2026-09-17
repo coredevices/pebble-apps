@@ -18,8 +18,8 @@ void espn_request_cards();
 void espn_request_card();
 void espn_request_game();
 
-void espn_subscribe(const char *topic);
-void espn_unsubscribe(const char *topic);
+void timeline_add(const char *team, uint32_t id);
+void timeline_remove(const char *team, uint32_t id);
 
 uint16_t espn_get_num_leagues();
 uint16_t espn_get_selected_league();

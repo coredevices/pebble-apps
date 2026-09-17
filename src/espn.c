@@ -323,20 +323,22 @@ static bool espn_is_NCAA(uint16_t section) {
 }
 #endif
 
-void espn_subscribe(const char *topic) {
+void timeline_add(const char *team, uint32_t id) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_SUBSCRIBE);
-  dict_write_cstring(iter, MESSAGE_KEY_title, topic);
+  dict_write_cstring(iter, MESSAGE_KEY_title, team);
+  dict_write_uint32(iter, MESSAGE_KEY_id, id);
   dict_write_end(iter);
   app_message_outbox_send();
 }
 
-void espn_unsubscribe(const char *topic) {
+void timeline_remove(const char *team, uint32_t id) {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_UNSUBSCRIBE);
-  dict_write_cstring(iter, MESSAGE_KEY_title, topic);
+  dict_write_cstring(iter, MESSAGE_KEY_title, team);
+  dict_write_uint32(iter, MESSAGE_KEY_gameState, id);
   dict_write_end(iter);
   app_message_outbox_send();
 }

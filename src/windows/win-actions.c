@@ -5,8 +5,7 @@
 #include "espn.h"
 #include "config.h"
 
-// we currently don't support timeline actions. drop from 3 -> 1 for now
-#define NUM_ACTION_MENU_ITEMS 1
+#define NUM_ACTION_MENU_ITEMS 3
 #define ACTION_LABEL_LENGTH_MAX 32
 
 static ActionMenu *s_action_menu = NULL;
@@ -44,9 +43,9 @@ static void action_performed_callback(ActionMenu *action_menu,
     case 1:
       snprintf(topic, sizeof(topic), "%s:%s", data->league, data->nameAway);
       if (data->subscribedAway) {
-        espn_unsubscribe(topic);
+        timeline_remove(topic, data->id);
       } else {
-        espn_subscribe(topic);
+        timeline_add(topic, data->id);
       }
       data->subscribedAway = !data->subscribedAway;
       snprintf(s_confirmation_text, sizeof(s_confirmation_text),
@@ -57,9 +56,9 @@ static void action_performed_callback(ActionMenu *action_menu,
     case 2:
       snprintf(topic, sizeof(topic), "%s:%s", data->league, data->nameHome);
       if (data->subscribedHome) {
-        espn_unsubscribe(topic);
+        timeline_remove(topic, data->id);
       } else {
-        espn_subscribe(topic);
+        timeline_add(topic, data->id);
       }
       data->subscribedHome = !data->subscribedHome;
       snprintf(s_confirmation_text, sizeof(s_confirmation_text),
@@ -103,8 +102,8 @@ void win_actions_push(void) {
            data->nameHome,
            data->subscribedHome ? "from" : "to");
 
-  // action_menu_level_add_action(s_root_level, awayText, action_performed_callback, (void*)1);
-  // action_menu_level_add_action(s_root_level, homeText, action_performed_callback, (void*)2);
+  action_menu_level_add_action(s_root_level, awayText, action_performed_callback, (void*)1);
+  action_menu_level_add_action(s_root_level, homeText, action_performed_callback, (void*)2);
 
   ActionMenuConfig config = {
     .root_level = s_root_level,

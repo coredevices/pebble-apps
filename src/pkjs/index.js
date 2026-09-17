@@ -162,6 +162,93 @@ function requestGame(opts) {
   xhr.send(null);
 }
 
+function requestPin(opts) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
+  xhr.onload = function() {
+    try {
+      var res = JSON.parse(xhr.responseText);
+
+      if (!res.league) return;
+
+      var event = parseCardData(res);
+      var pin = {
+        "id": `sports-${opts.id}`,
+        "time": new Date(res.startTime).toISOString(),
+        "layout": {
+          "type": "sportsPin",
+          "title": `${res.nameAwayFull} at ${res.nameHomeFull}`,
+          "subtitle": event.subtitle,
+          "tinyIcon": "system://images/NOTIFICATION_FLAG",
+          "largeIcon": "system://images/NOTIFICATION_FLAG",
+          "lastUpdated": new Date().toISOString(),
+          // "rankAway": "00",
+          // "rankHome": "00",
+          "nameAway": event.nameAway,
+          "nameHome": event.nameHome,
+          "recordAway": event.recordAway,
+          "recordHome": event.recordHome,
+          "scoreAway": event.scoreAway,
+          "scoreHome": event.scoreHome,
+          "sportsGameState": "pre-game"
+        }
+      };
+
+      // Keyed on the display name the API puts on a card, which is ESPN's own
+      // abbreviation (NCAAF, NCAAM, NCAAW, WNBA) except for the Premier League,
+      // shortened to EPL in the API's alternateLeagueNames. A league with no
+      // case keeps the NOTIFICATION_FLAG set on the layout above.
+      var icon = '';
+
+      switch (event.league) {
+        case "NFL":
+        case "NCAAF": {
+          icon = 'system://images/AMERICAN_FOOTBALL';
+          break;
+        }
+        case "MLB": {
+          icon = 'system://images/TIMELINE_BASEBALL';
+          break;
+        }
+        case "NHL": {
+          icon = 'system://images/HOCKEY_GAME';
+          break;
+        }
+        case "NBA":
+        case "WNBA":
+        case "NCAAM":
+        case "NCAAW": {
+          icon = 'system://images/BASKETBALL';
+          break;
+        }
+        case "EPL": {
+          icon = 'system://images/SOCCER_GAME';
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+
+      if (icon) {
+        pin["layout"]["tinyIcon"] = icon;
+        pin["layout"]["largeIcon"] = icon;
+      }
+
+      if (event.gameState != GAMESTATE.PREGAME) {
+        pin["layout"]["sportsGameState"] = "in-game";
+      }
+
+      Pebble.insertTimelinePin(pin);
+
+      console.log('pin inserted for id: ' + opts.id);
+    } catch (e) {
+      console.log('error requesting data for pin: ' + e);
+    }
+  };
+  xhr.send(null);
+}
+
 Sports.sendEvents = function(league, callback) {
   var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
   var xhr = new XMLHttpRequest();
@@ -239,10 +326,68 @@ Sports.sendFavs = function() {
   });
 };
 
+Sports.loadFavs = function(callback) {
+  // A wakeup starts a fresh JS instance. onReady loads teams, but do not rely
+  // on that ordering: with no teams, every event looks unsubscribed.
+  if (!Sports.teams || Sports.teams.length === 0) {
+    try {
+      Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+    } catch (e) {
+      Sports.teams = [];
+    }
+  }
+
+  // Collected locally and assigned once at the end. refreshAllLeagues fills
+  // Sports.favs too, so sharing the array mid-flight would interleave the two
+  // and push some games twice - duplicate rows in the TIMELINE list.
+  var collected = [];
+
+  async.eachSeries(Sports.supportedLeagues, function(league, next) {
+    var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+
+    // next() on every path, including the failures sendEvents drops on the
+    // floor: one dead league must not strand the series and leave favs partial.
+    xhr.onload = function() {
+      try {
+        var res = JSON.parse(xhr.responseText);
+        if (res instanceof Array) {
+          res.forEach(function(evnt) {
+            var msg = parseCardData(evnt);
+            if (msg.subscribedAway || msg.subscribedHome) {
+              collected.push(evnt);
+            }
+          });
+        }
+      } catch (e) {
+        console.log('error loading favs for league ' + league + ': ' + e);
+      }
+      next();
+    };
+    xhr.onerror = function() {
+      console.log('error loading favs for league ' + league + ': request failed');
+      next();
+    };
+    xhr.ontimeout = function() {
+      console.log('error loading favs for league ' + league + ': timed out');
+      next();
+    };
+
+    xhr.send();
+  }, function() {
+    Sports.favs = collected;
+    console.log('loaded ' + Sports.favs.length + ' favorite games');
+    if (typeof callback === 'function') {
+      callback();
+    }
+  });
+};
+
 Sports.refreshAllLeagues = function(callback) {
   Sports.favs = [];
   async.eachSeries(Sports.supportedLeagues, Sports.sendEvents, function() {
-    // Sports.sendFavs();
+    Sports.sendFavs();
     appMessageQueue.send({ type: TYPE.MARKDIRTY });
     if (typeof callback === 'function') {
       callback();
@@ -250,56 +395,90 @@ Sports.refreshAllLeagues = function(callback) {
   });
 };
 
-Sports.sendUserData = function(callback) {
-  var data = {};
-  data.timelineToken = Sports.timelineToken;
-  data.accountToken = Pebble.getAccountToken();
-  data.swid = localStorage.getItem('SWID');
-  var xhr = new XMLHttpRequest();
-  xhr.open('PUT', PEBBLE_SPORTS_API_ROOT + '/user', true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.onload = function() {
-    try {
-      var res = JSON.parse(xhr.responseText);
-      if (!(res instanceof Array)) {
-        return;
-      }
-
-      Sports.teams = res;
-      localStorage.setItem('teams', JSON.stringify(Sports.teams));
-
-      if (typeof callback === 'function') {
-        callback();
-      }
-    } catch (e) {
-      console.log('error sending user data: ' + e);
-    }
+Sports.refreshAllPins = function() {
+  var insertAll = function() {
+    Sports.favs.forEach(function(evnt) {
+      requestPin({ id: evnt.id });
+    });
   };
-  xhr.send(JSON.stringify(data));
+
+  if (Sports.favs.length === 0) {
+    Sports.loadFavs(insertAll);
+  } else {
+    insertAll();
+  }
 };
 
-function updateTimelineToken() {
-  Pebble.getTimelineToken(function(token) {
-    Sports.timelineToken = token;
-    localStorage.setItem('timelineToken', Sports.timelineToken);
-    Sports.sendUserData();
-  }, function(error) {
-    console.log('ERROR: failed to get timeline token.', error);
-  });
+// Sports.sendUserData = function(callback) {
+//   var data = {};
+//   data.timelineToken = Sports.timelineToken;
+//   data.accountToken = Pebble.getAccountToken();
+//   data.swid = localStorage.getItem('SWID');
+//   var xhr = new XMLHttpRequest();
+//   xhr.open('PUT', PEBBLE_SPORTS_API_ROOT + '/user', true);
+//   xhr.setRequestHeader('Content-Type', 'application/json');
+//   xhr.onload = function() {
+//     try {
+//       var res = JSON.parse(xhr.responseText);
+//       if (!(res instanceof Array)) {
+//         return;
+//       }
+
+//       Sports.teams = res;
+//       localStorage.setItem('teams', JSON.stringify(Sports.teams));
+
+//       if (typeof callback === 'function') {
+//         callback();
+//       }
+//     } catch (e) {
+//       console.log('error sending user data: ' + e);
+//     }
+//   };
+//   xhr.send(JSON.stringify(data));
+// };
+
+// function updateTimelineToken() {
+//   Pebble.getTimelineToken(function(token) {
+//     Sports.timelineToken = token;
+//     localStorage.setItem('timelineToken', Sports.timelineToken);
+//     Sports.sendUserData();
+//   }, function(error) {
+//     console.log('ERROR: failed to get timeline token.', error);
+//   });
+// }
+
+function addFavoriteTeam(team) {
+  try {
+    Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+  } catch (e) {
+    Sports.teams = [];
+  }
+  if (Sports.teams.indexOf(team) === -1) { Sports.teams.push(team); }
+  localStorage.setItem('teams', JSON.stringify(Sports.teams));
 }
 
-function updateTeamList() {
-  Sports.teams = []
+function removeFavoriteTeam(team) {
+  try {
+    Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+  } catch (e) {
+    Sports.teams = [];
+  }
+  Sports.teams = Sports.teams.filter(function(t) { return t !== team; });
   localStorage.setItem('teams', JSON.stringify(Sports.teams));
-  // Pebble.timelineSubscriptions(function(topics) {
-  //   console.log('subscribed to ' + topics.join(', '));
-  //   Sports.teams = topics;
-  //   localStorage.setItem('teams', JSON.stringify(Sports.teams));
-  // }, function(err) {
-  //   console.log('error getting subscriptions: ' + err);
-  //   appMessageQueue.send({ type: TYPE.NOCONNECTION });
-  // });
 }
+
+// function updateTeamList() {
+//   Sports.teams = []
+//   localStorage.setItem('teams', JSON.stringify(Sports.teams));
+//   Pebble.timelineSubscriptions(function(topics) {
+//     console.log('subscribed to ' + topics.join(', '));
+//     Sports.teams = topics;
+//     localStorage.setItem('teams', JSON.stringify(Sports.teams));
+//   }, function(err) {
+//     console.log('error getting subscriptions: ' + err);
+//     appMessageQueue.send({ type: TYPE.NOCONNECTION });
+//   });
+// }
 
 Sports.onReady = function() {
   appMessageQueue.send({ type: TYPE.READY });
@@ -314,7 +493,8 @@ Sports.onReady = function() {
     Sports.teams = [];
   }
 
-  updateTeamList();
+  Sports.refreshAllPins();
+  // updateTeamList();
 };
 
 // ANY CHANGES MUST BE UPDATED THE ANALYTICS H FILE
@@ -370,23 +550,19 @@ Sports.onAppMessage = function(e) {
       break;
 
     case METHOD.SUBSCRIBE:
-      Pebble.timelineSubscribe(e.payload.title, function() {
-        console.log('subscribed to ' + e.payload.title);
-        updateTeamList();
-        Sports.refreshAllLeagues();
-      }, function(err) {
-        console.log('error subscribing to topic: ' + err);
+      console.log('added ' + e.payload.title + ' to favorites');
+      addFavoriteTeam(e.payload.title);
+      Sports.refreshAllLeagues();
+      requestPin({
+        team: e.payload.title,
+        id: e.payload.id,
       });
       break;
 
     case METHOD.UNSUBSCRIBE:
-      Pebble.timelineUnsubscribe(e.payload.title, function() {
-        console.log('unsubscribed from ' + e.payload.title);
-        updateTeamList();
-        Sports.refreshAllLeagues();
-      }, function(err) {
-        console.log('error unsubscribing from topic: ' + err);
-      });
+      console.log('removed ' + e.payload.title + ' from favorites');
+      removeFavoriteTeam(e.payload.title);
+      Sports.refreshAllLeagues();
       break;
 
     case METHOD.SCREEN_CHANGE:

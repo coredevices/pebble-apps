@@ -17,6 +17,7 @@
     "REQUESTCARDS",
     "REQUESTCARD",
     "REQUESTGAME",
+    "REQUESTPINS",
     "SUBSCRIBE",
     "UNSUBSCRIBE",
     "TD",

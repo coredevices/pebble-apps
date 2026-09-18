@@ -329,11 +329,16 @@ Sports.sendEvents = function(league, callback) {
   var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
+
+  // callback() exactly once on every path, as loadFavs does: refreshAllLeagues
+  // runs the leagues in series, so one league that never calls back strands
+  // the rest and the TIMELINE list is never sent. A failed league keeps
+  // whatever the watch already had for it.
   xhr.onload = function() {
     try {
       var res = JSON.parse(xhr.responseText);
       if (!(res instanceof Array)) {
-        return;
+        throw new Error('not a list');
       }
       appMessageQueue.send({
         type: TYPE.LEAGUE,
@@ -362,13 +367,22 @@ Sports.sendEvents = function(league, callback) {
         method: METHOD.END,
         index: league
       });
-
-      callback();
-
     } catch (e) {
-      console.log('error requesting event: ' + e);
-      callback();
+      console.log('error requesting events for league ' + league + ': ' + e);
     }
+    // Outside the try, so a throw further down the series is not caught here
+    // and turned into a second callback.
+    callback();
+  };
+  xhr.onerror = function() {
+    console.log('error requesting events for league ' + league +
+                ': request failed');
+    callback();
+  };
+  xhr.ontimeout = function() {
+    console.log('error requesting events for league ' + league +
+                ': timed out');
+    callback();
   };
   xhr.send();
 };

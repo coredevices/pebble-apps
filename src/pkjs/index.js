@@ -325,7 +325,9 @@ function requestPin(opts) {
   xhr.send(null);
 }
 
-Sports.sendEvents = function(league, callback) {
+// Favourited games are pushed onto `favs`, the caller's own array, never
+// Sports.favs: see refreshAllLeagues.
+Sports.sendEvents = function(league, favs, callback) {
   var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
@@ -358,7 +360,7 @@ Sports.sendEvents = function(league, callback) {
         if (msg.subscribedAway || msg.subscribedHome) {
         // if (inArray(Sports.teams, evnt.uidHome) ||
         //     inArray(Sports.teams, evnt.uidAway)) {
-          Sports.favs.push(evnt);
+          favs.push(evnt);
         }
       });
 
@@ -437,8 +439,8 @@ Sports.loadFavs = function(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
 
-    // next() on every path, including the failures sendEvents drops on the
-    // floor: one dead league must not strand the series and leave favs partial.
+    // next() on every path, failures included: one dead league must not
+    // strand the series and leave favs partial.
     xhr.onload = function() {
       try {
         var res = JSON.parse(xhr.responseText);
@@ -474,11 +476,28 @@ Sports.loadFavs = function(callback) {
   });
 };
 
+/*
+ * Refreshes overlap: following a team starts one while the launch refresh is
+ * still walking the leagues. When both filled Sports.favs, the second reset it
+ * and then both pushed the leagues still ahead of the first, so a game showed
+ * twice in the TIMELINE list. Each refresh now collects its own favourites, and
+ * only the newest one publishes them; an older one finishing late would send a
+ * list that predates the latest follow or unfollow.
+ */
+var refreshGeneration = 0;
+
 Sports.refreshAllLeagues = function(callback) {
-  Sports.favs = [];
-  async.eachSeries(Sports.supportedLeagues, Sports.sendEvents, function() {
-    Sports.sendFavs();
-    appMessageQueue.send({ type: TYPE.MARKDIRTY });
+  var generation = ++refreshGeneration;
+  var collected = [];
+
+  async.eachSeries(Sports.supportedLeagues, function(league, next) {
+    Sports.sendEvents(league, collected, next);
+  }, function() {
+    if (generation === refreshGeneration) {
+      Sports.favs = collected;
+      Sports.sendFavs();
+      appMessageQueue.send({ type: TYPE.MARKDIRTY });
+    }
     if (typeof callback === 'function') {
       callback();
     }

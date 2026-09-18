@@ -4,6 +4,22 @@ Sports.timelineToken = localStorage.getItem('timelineToken') || '';
 Sports.teams = [];
 Sports.favs = [];
 
+/*
+ * Aplite holds one league's games at a time (see s_loaded_league in espn.c).
+ * Its REQUESTCARDS sets `lazy`: the launch refresh then sends each league's
+ * SIZE and END but no DATA, and the watch asks for a league's games with
+ * REQUESTLEAGUE when it is opened. Sports.events keeps each league's last
+ * fetch so that answer needs no network; loadedLeague is the league the watch
+ * holds, whose DATA a later refresh still sends.
+ */
+Sports.lazy = false;
+Sports.loadedLeague = -1;
+Sports.events = {};
+
+function sendsGames(league) {
+  return !Sports.lazy || league === Sports.loadedLeague;
+}
+
 var parseCardData = function(evnt) {
   var msg = {};
 
@@ -325,8 +341,40 @@ function requestPin(opts) {
   xhr.send(null);
 }
 
-// Favourited games are pushed onto `favs`, the caller's own array, never
-// Sports.favs: see refreshAllLeagues.
+// Sends one league's games. Favourited games are pushed onto `favs`, the
+// caller's own array, never Sports.favs: see refreshAllLeagues.
+Sports.sendLeague = function(league, events, favs) {
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.SIZE,
+    index: league,
+    count: events.length
+  });
+  var i = 0;
+  events.forEach(function(evnt) {
+    var msg = parseCardData(evnt);
+    msg.type = TYPE.LEAGUE;
+    msg.method = METHOD.DATA;
+    msg.leagueIndex = league;
+    msg.index = i++;
+    if (sendsGames(league)) {
+      appMessageQueue.send(msg);
+    }
+
+    if (msg.subscribedAway || msg.subscribedHome) {
+    // if (inArray(Sports.teams, evnt.uidHome) ||
+    //     inArray(Sports.teams, evnt.uidAway)) {
+      favs.push(evnt);
+    }
+  });
+
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.END,
+    index: league
+  });
+};
+
 Sports.sendEvents = function(league, favs, callback) {
   var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
   var xhr = new XMLHttpRequest();
@@ -342,33 +390,8 @@ Sports.sendEvents = function(league, favs, callback) {
       if (!(res instanceof Array)) {
         throw new Error('not a list');
       }
-      appMessageQueue.send({
-        type: TYPE.LEAGUE,
-        method: METHOD.SIZE,
-        index: league,
-        count: res.length
-      });
-      var i = 0;
-      res.forEach(function(evnt) {
-        var msg = parseCardData(evnt);
-        msg.type = TYPE.LEAGUE;
-        msg.method = METHOD.DATA;
-        msg.leagueIndex = league;
-        msg.index = i++;
-        appMessageQueue.send(msg);
-
-        if (msg.subscribedAway || msg.subscribedHome) {
-        // if (inArray(Sports.teams, evnt.uidHome) ||
-        //     inArray(Sports.teams, evnt.uidAway)) {
-          favs.push(evnt);
-        }
-      });
-
-      appMessageQueue.send({
-        type: TYPE.LEAGUE,
-        method: METHOD.END,
-        index: league
-      });
+      Sports.events[league] = res;
+      Sports.sendLeague(league, res, favs);
     } catch (e) {
       console.log('error requesting events for league ' + league + ': ' + e);
     }
@@ -387,6 +410,30 @@ Sports.sendEvents = function(league, favs, callback) {
     callback();
   };
   xhr.send();
+};
+
+// Answers a lazy watch opening a league. The phone's JS may have restarted
+// since launch and lost Sports.events; then fetch it, and if that fails send
+// END anyway so the watch stops showing LOADING.
+Sports.sendRequestedLeague = function(league) {
+  Sports.lazy = true;
+  Sports.loadedLeague = league;
+
+  if (league === LEAGUE.FAVS) {
+    Sports.sendFavs();
+  } else if (Sports.events[league]) {
+    Sports.sendLeague(league, Sports.events[league], []);
+  } else {
+    Sports.sendEvents(league, [], function() {
+      if (!Sports.events[league]) {
+        appMessageQueue.send({
+          type: TYPE.LEAGUE,
+          method: METHOD.END,
+          index: league
+        });
+      }
+    });
+  }
 };
 
 Sports.sendFavs = function() {
@@ -413,8 +460,17 @@ Sports.sendFavs = function() {
     count: favs.length
   });
 
-  favs.forEach(function(fav) {
-    appMessageQueue.send(fav);
+  if (sendsGames(LEAGUE.FAVS)) {
+    favs.forEach(function(fav) {
+      appMessageQueue.send(fav);
+    });
+  }
+
+  // A lazy watch waits on END to leave its LOADING state.
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.END,
+    index: LEAGUE.FAVS
   });
 };
 
@@ -635,9 +691,16 @@ Sports.onAppMessage = function(e) {
 
   switch (e.payload.method) {
     case METHOD.REQUESTCARDS:
+      // A relaunch starts over: the watch holds no league yet.
+      Sports.lazy = !!e.payload.lazy;
+      Sports.loadedLeague = -1;
       Sports.refreshAllLeagues(function() {
         appMessageQueue.send({ type: TYPE.LOADED });
       });
+      break;
+
+    case METHOD.REQUESTLEAGUE:
+      Sports.sendRequestedLeague(e.payload.index);
       break;
 
     case METHOD.REQUESTCARD:

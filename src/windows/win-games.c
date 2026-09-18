@@ -62,6 +62,9 @@ void win_games_set_selected_card(uint16_t row) {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - //
 
 static char* get_title_status() {
+  if (espn_is_loading()) {
+    return "LOADING";
+  }
   return ((espn_get_selected_league() == 0 && !espn_get_has_teams()) ?
       ("FOLLOW TEAMS\nFROM GAME\nCARDS") :
       "NO GAMES\nTODAY");

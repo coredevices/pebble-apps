@@ -6,7 +6,10 @@
 typedef struct {
   char title[16];
   CardData *cards;
+  // num_cards is what `cards` holds; num_games is the league's full count for
+  // the leagues list. They differ on aplite, which holds one league at a time.
   uint16_t num_cards;
+  uint16_t num_games;
   GBitmap *icon;
   GBitmap *card_icon;
 } LeagueData;
@@ -33,6 +36,7 @@ GBitmap* espn_get_league_icon(const uint16_t idx);
 
 CardData* espn_get_card_data(const uint16_t idx);
 uint16_t espn_get_num_cards();
+bool espn_is_loading();
 
 uint16_t espn_get_selected_card();
 void espn_set_selected_card(const uint16_t idx);

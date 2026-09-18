@@ -28,7 +28,25 @@ static LeagueData s_leagues[] = {
 static void in_received_handler(DictionaryIterator *iter, void *context);
 static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context);
 
+// Heap kept free after a league's games are allocated. On aplite that happens
+// with the games list already open, so this covers the game card and action
+// menu opened on top of it: about 1.6 KB, measured in the emulator.
+#define HEAP_RESERVE_BYTES 2048
+
 static uint16_t s_selected_league = 0;
+
+#ifdef LOW_MEM
+// Aplite cannot hold every league's games at once: a busy week overran its
+// heap and crashed the leagues window. The phone sends only each league's
+// count at launch, and a league's games are requested when it is opened and
+// freed when another one is. s_loaded_league is the one whose games are held,
+// NO_LEAGUE until the first is opened.
+#define NO_LEAGUE UINT16_MAX
+static uint16_t s_loaded_league = NO_LEAGUE;
+#define LEAGUE_REQUEST_RETRY_MS 100
+static void send_league_request(void *context);
+#endif
+static bool s_loading = false;
 static uint16_t s_selected_card = 0;
 
 static bool s_buzz_on = true;
@@ -159,10 +177,25 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           uint16_t idx = tuple->value->uint16;
           tuple = dict_find(iter, MESSAGE_KEY_count);
           if (!tuple) break;
-          s_leagues[idx].num_cards = tuple->value->uint16;
+          if (idx >= espn_get_num_leagues()) break;
           free_safe(s_leagues[idx].cards);
-          s_leagues[idx].cards = malloc(s_leagues[idx].num_cards * sizeof(CardData));
-          if (s_leagues[idx].cards == NULL) s_leagues[idx].num_cards = 0;
+          s_leagues[idx].num_cards = 0;
+          s_leagues[idx].num_games = tuple->value->uint16;
+#ifdef LOW_MEM
+          if (idx != s_loaded_league) break;
+#endif
+          // Backstop: keep only as many games as fit while leaving
+          // HEAP_RESERVE_BYTES for the windows, so no slate can exhaust the
+          // heap and fail a window's create. Games past that are dropped; DATA
+          // messages for them are ignored below. Zeroed so a row drawn before
+          // its DATA arrives shows blanks rather than garbage.
+          uint16_t count = tuple->value->uint16;
+          const size_t heap_free = heap_bytes_free();
+          const size_t fit = heap_free > HEAP_RESERVE_BYTES ?
+                             (heap_free - HEAP_RESERVE_BYTES) / sizeof(CardData) : 0;
+          if (count > fit) count = fit;
+          s_leagues[idx].cards = count ? calloc(count, sizeof(CardData)) : NULL;
+          s_leagues[idx].num_cards = s_leagues[idx].cards ? count : 0;
           break;
         }
         case KEY_METHOD_DATA: {
@@ -178,10 +211,11 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           if (!tuple) break;
           uint16_t idx = tuple->value->uint16;
 
-          CardData *data = &s_leagues[league].cards[idx];
-          if (!data) {
+          // Also covers a league whose SIZE was capped or failed to allocate.
+          if (league >= espn_get_num_leagues() || idx >= s_leagues[league].num_cards) {
             break;
           }
+          CardData *data = &s_leagues[league].cards[idx];
 
           tuple = dict_find(iter, MESSAGE_KEY_id);
           if (tuple) {
@@ -269,6 +303,11 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
         }
         case KEY_METHOD_END: {
           win_splash_increment_progress(80 / espn_get_num_leagues());
+          tuple = dict_find(iter, MESSAGE_KEY_index);
+          if (s_loading && tuple && tuple->value->uint16 == s_selected_league) {
+            s_loading = false;
+            win_games_mark_dirty();
+          }
           break;
         }
       }
@@ -279,15 +318,47 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
 
 static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context) {
   LOG("outbox_failed: %d", reason);
+#ifdef LOW_MEM
+  Tuple *method = dict_find(failed, MESSAGE_KEY_method);
+  if (method && method->value->uint8 == KEY_METHOD_REQUESTLEAGUE) {
+    app_timer_register(LEAGUE_REQUEST_RETRY_MS, send_league_request, NULL);
+  }
+#endif
 }
 
 void espn_request_cards() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTCARDS);
+#ifdef LOW_MEM
+  dict_write_uint8(iter, MESSAGE_KEY_lazy, 1);
+#endif
   dict_write_end(iter);
   app_message_outbox_send();
 }
+
+#ifdef LOW_MEM
+// Opening a league also sends a screen-change analytics message, so the outbox
+// is usually still busy when the request is made. Retry until it goes out, and
+// again if it fails to deliver (out_failed_handler); a dropped request would
+// leave the games list on LOADING.
+static void send_league_request(void *context) {
+  if (!s_loading) {
+    return;
+  }
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) {
+    app_timer_register(LEAGUE_REQUEST_RETRY_MS, send_league_request, NULL);
+    return;
+  }
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTLEAGUE);
+  dict_write_uint16(iter, MESSAGE_KEY_index, s_loaded_league);
+  dict_write_end(iter);
+  if (app_message_outbox_send() != APP_MSG_OK) {
+    app_timer_register(LEAGUE_REQUEST_RETRY_MS, send_league_request, NULL);
+  }
+}
+#endif
 
 void espn_request_card() {
   DictionaryIterator *iter;
@@ -354,6 +425,17 @@ uint16_t espn_get_selected_league() {
 void espn_set_selected_league(const uint16_t idx) {
   analytics_set_screen(idx, BUTTON_ID_SELECT);
   s_selected_league = idx;
+#ifdef LOW_MEM
+  if (idx != s_loaded_league && idx < espn_get_num_leagues()) {
+    if (s_loaded_league < espn_get_num_leagues()) {
+      free_safe(s_leagues[s_loaded_league].cards);
+      s_leagues[s_loaded_league].num_cards = 0;
+    }
+    s_loaded_league = idx;
+    s_loading = true;
+    send_league_request(NULL);
+  }
+#endif
 }
 
 const char* espn_get_league_title(const uint16_t idx) {
@@ -372,8 +454,8 @@ const char* espn_get_league_subtitle(const uint16_t idx) {
     return "";
   }
   static char subtitle[16];
-  snprintf(subtitle, sizeof(subtitle), "%d %s", s_leagues[idx].num_cards,
-      (s_leagues[idx].num_cards == 1 ? "Game" : "Games"));
+  snprintf(subtitle, sizeof(subtitle), "%d %s", s_leagues[idx].num_games,
+      (s_leagues[idx].num_games == 1 ? "Game" : "Games"));
   return subtitle;
 }
 
@@ -401,7 +483,14 @@ CardData* espn_get_card_data(const uint16_t idx) {
 }
 
 uint16_t espn_get_num_cards() {
-  return s_leagues[s_selected_league].num_cards;
+  // None until the league's END, so the games list never draws a row whose
+  // DATA has not arrived yet.
+  return s_loading ? 0 : s_leagues[s_selected_league].num_cards;
+}
+
+// True between opening a league on aplite and the phone finishing its games.
+bool espn_is_loading() {
+  return s_loading;
 }
 
 uint16_t espn_get_selected_card() {

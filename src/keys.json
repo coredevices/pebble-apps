@@ -23,7 +23,8 @@
     "TD",
     "READY",
     "SCREEN_CHANGE",
-    "BUZZ_CHANGE"
+    "BUZZ_CHANGE",
+    "REQUESTLEAGUE"
   ],
   "LEAGUE": [
     "FAVS",

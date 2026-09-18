@@ -3,10 +3,12 @@
   "author": "Pebble",
   "version": "2.13.0",
   "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
   "keywords": [
     "pebble-app"
   ],
-  "dependencies": {},
   "pebble": {
     "sdkVersion": "3",
     "targetPlatforms": [
@@ -332,5 +334,8 @@
       "subscribedHome": 151,
       "id": 999
     }
+  },
+  "devDependencies": {
+    "uglify-js": "^3.19.3"
   }
 }

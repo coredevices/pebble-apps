@@ -2,7 +2,7 @@ import os
 import os.path
 import json
 import shutil
-from sh import uglifyjs
+import subprocess
 
 top = '.'
 out = 'build'
@@ -140,4 +140,5 @@ def generate_keys_js(task):
 
 def concatenate_js(task):
     inputs = (input.abspath() for input in task.inputs)
-    uglifyjs(*inputs, o=task.outputs[0].abspath(), m=True)
+    uglifyjs = os.path.join(task.generator.bld.path.abspath(), 'node_modules', '.bin', 'uglifyjs')
+    subprocess.run([uglifyjs, *inputs, '-o', task.outputs[0].abspath(), '-m'], check=True)

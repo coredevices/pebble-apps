@@ -60,7 +60,9 @@ var parseCardData = function(evnt) {
  * the test depends only on the current score it stayed true and re-fired the
  * buzz on every single refresh.
  */
-var LEAD_SEEN_KEY = 'leadSeen';
+// Each backend has its own cache history. A newly seeded server's timestamps
+// must not look like a lead change when an existing installation changes hosts.
+var LEAD_SEEN_KEY = 'leadSeen:' + PEBBLE_SPORTS_API_ROOT;
 var LEAD_SEEN_MAX = 64;
 
 function loadLeadSeen() {

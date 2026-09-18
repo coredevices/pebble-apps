@@ -63,8 +63,7 @@ void win_games_set_selected_card(uint16_t row) {
 
 static char* get_title_status() {
   return ((espn_get_selected_league() == 0 && !espn_get_has_teams()) ?
-      (IN_APP_CONFIG ? "FOLLOW TEAMS\nFROM GAME\nCARDS"
-                     : "SET UP\nFAVORITES IN\nPEBBLE APP") :
+      ("FOLLOW TEAMS\nFROM GAME\nCARDS") :
       "NO GAMES\nTODAY");
 }
 

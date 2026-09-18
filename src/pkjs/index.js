@@ -164,6 +164,57 @@ function requestGame(opts) {
   xhr.send(null);
 }
 
+/*
+ * Pins inserted from this phone, as pin id -> { teams: [away, home], time }
+ * with teams in the `LEAGUE:ABBR` form Sports.teams uses and time the game's
+ * start. The timeline has no API to list local pins, so this is the only
+ * record of what there is to delete.
+ *
+ * An entry is forgotten 4 days after its game starts, by which point the pin
+ * has left the timeline. Pruning by age rather than by count: dropping the
+ * entry of a pin still on the timeline would strand it there for good.
+ */
+var PINS_KEY = 'pins';
+var PINS_MAX_AGE_MS = 4 * 24 * 60 * 60 * 1000;
+
+function loadPins() {
+  try {
+    return JSON.parse(localStorage.getItem(PINS_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePins(pins) {
+  var cutoff = Date.now() - PINS_MAX_AGE_MS;
+  Object.keys(pins).forEach(function(pinId) {
+    if (Date.parse(pins[pinId].time) < cutoff) {
+      delete pins[pinId];
+    }
+  });
+
+  try {
+    localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+  } catch (e) {}
+}
+
+// Deletes every pin whose teams are both unfollowed. A game with one team
+// still followed keeps its pin.
+function removeOrphanedPins() {
+  var pins = loadPins();
+  Object.keys(pins).forEach(function(pinId) {
+    var followed = pins[pinId].teams.some(function(team) {
+      return inArray(Sports.teams, team);
+    });
+    if (!followed) {
+      Pebble.deleteTimelinePin(pinId);
+      delete pins[pinId];
+      console.log('pin deleted: ' + pinId);
+    }
+  });
+  savePins(pins);
+}
+
 function requestPin(opts) {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
@@ -255,6 +306,16 @@ function requestPin(opts) {
       }
 
       Pebble.insertTimelinePin(pin);
+
+      // Remembered with the two teams that justify it, so unfollowing can
+      // find every pin a team owns without asking the API again.
+      var pins = loadPins();
+      pins[pin.id] = {
+        teams: [event.league + ':' + event.nameAway,
+                event.league + ':' + event.nameHome],
+        time: pin.time
+      };
+      savePins(pins);
 
       console.log('pin inserted for id: ' + opts.id);
     } catch (e) {
@@ -567,16 +628,15 @@ Sports.onAppMessage = function(e) {
     case METHOD.SUBSCRIBE:
       console.log('added ' + e.payload.title + ' to favorites');
       addFavoriteTeam(e.payload.title);
-      Sports.refreshAllLeagues();
-      requestPin({
-        team: e.payload.title,
-        id: e.payload.id,
-      });
+      // Pins every game of the new team, not just the card it was added from.
+      // refreshAllLeagues rebuilds Sports.favs first, so the pins see it.
+      Sports.refreshAllLeagues(Sports.refreshAllPins);
       break;
 
     case METHOD.UNSUBSCRIBE:
       console.log('removed ' + e.payload.title + ' from favorites');
       removeFavoriteTeam(e.payload.title);
+      removeOrphanedPins();
       Sports.refreshAllLeagues();
       break;
 

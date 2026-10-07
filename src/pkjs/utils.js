@@ -53,3 +53,5 @@ function isAplite() {
     return false;
   }
 }
+
+module.exports = { inArray: inArray, formatDate: formatDate };

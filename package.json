@@ -20,8 +20,8 @@
       "flint",
       "gabbro"
     ],
-    "enableMultiJS": false,
     "capabilities": [],
+    "enableMultiJS": true,
     "projectType": "native",
     "displayName": "Sports",
     "uuid": "1b356bed-dbbc-41d5-a0f3-ec60bd751b15",
@@ -336,7 +336,7 @@
       "id": 999
     }
   },
-  "devDependencies": {
-    "uglify-js": "^3.19.3"
+  "dependencies": {
+    "async": "^3.2.6"
   }
 }

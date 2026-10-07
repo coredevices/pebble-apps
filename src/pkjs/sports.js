@@ -1,5 +1,7 @@
 'use strict';
 
+var LEAGUE = require('./generated/keys').LEAGUE;
+
 var Sports = {};
 
 Sports.supportedLeagues = [
@@ -38,3 +40,5 @@ Sports.getLeagueName = function(league) {
       return '';
   }
 };
+
+module.exports = Sports;

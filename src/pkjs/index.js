@@ -1,5 +1,19 @@
 'use strict';
 
+const PEBBLE_SPORTS_API_ROOT = 'https://sports.cluster.repebble.com';
+
+var async = require('async');
+var Sports = require('./sports');
+var keys = require('./generated/keys');
+var inArray = require('./utils').inArray;
+var formatDate = require('./utils').formatDate;
+var appMessageQueue = require('./lib/appmessagequeue');
+
+var TYPE = keys.TYPE;
+var METHOD = keys.METHOD;
+var LEAGUE = keys.LEAGUE;
+var GAMESTATE = keys.GAMESTATE;
+
 Sports.timelineToken = localStorage.getItem('timelineToken') || '';
 Sports.teams = [];
 Sports.favs = [];

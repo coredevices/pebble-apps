@@ -40,3 +40,5 @@ var appMessageQueue = {
     }
   }
 };
+
+module.exports = appMessageQueue;

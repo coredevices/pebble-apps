@@ -1,23 +1,13 @@
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
-const path = require('node:path');
 const { test } = require('node:test');
-const vm = require('node:vm');
 
-const source = readFileSync(path.join(__dirname, '../src/pkjs/index.js'), 'utf8');
+const leadChange = require('../src/pkjs/lead-change');
 
 function client(root, stored) {
-  const context = vm.createContext({
-    PEBBLE_SPORTS_API_ROOT: root,
-    Sports: {},
-    Pebble: { addEventListener() {} },
-    localStorage: {
-      getItem: (key) => stored.get(key) ?? null,
-      setItem: (key, value) => stored.set(key, value),
-    },
+  return leadChange(root, {
+    getItem: (key) => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, value),
   });
-  vm.runInContext(source, context);
-  return context.computeLeadChange;
 }
 
 test('changing servers silently seeds lead history and preserves favorites', () => {

@@ -548,7 +548,6 @@ function removeFavoriteTeam(team) {
 Sports.onReady = function() {
   appMessageQueue.send({ type: TYPE.READY });
 
-  TD.timeStart = getTimeInSeconds();
 
   // updateTimelineToken();
 
@@ -636,19 +635,10 @@ Sports.onAppMessage = function(e) {
       break;
 
     case METHOD.SCREEN_CHANGE:
-      TD.addEvent('screen_change',
-                  { current_screen: SCREENS[e.payload.currentScreen],
-                    previous_screen: SCREENS[e.payload.previousScreen],
-                    previous_screen_time_sec: timeSince(TD.timeStart),
-                    button_pressed: BUTTONS[e.payload.eventButton],
-                    previous_screen_up_clicks: e.payload.screenUpClicks,
-                    previous_screen_down_clicks: e.payload.screenDownClicks });
-      TD.timeStart = getTimeInSeconds();
       break;
 
     case METHOD.BUZZ_CHANGE:
       var buzz = (e.payload.buzzChange) ? 'true' : 'false';
-      TD.addEvent('buzz_change', { buzz_enabled: buzz });
       break;
   }
 };

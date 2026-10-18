@@ -374,6 +374,8 @@ LocationSharingController.prototype.handleConfig = async function(message) {
       case "setGoogleCredentials":
         this.googleClient.setCredentials(message);
         return configReply(this);
+      case "googleWebLoginUrl":
+        return Object.assign(configReply(this), { url: await this.googleClient.webLoginUrl() });
       case "testGoogleConnection":
       case "refreshGoogle":
         await this.googleClient.refresh(null);

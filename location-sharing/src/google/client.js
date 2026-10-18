@@ -22,7 +22,7 @@ var STORE_EMAIL = "location-sharing-google-email";
 var STORE_COOKIES = "location-sharing-google-cookies";
 var STORE_CACHE = "location-sharing-google-people-v1";
 var STORE_DIAGNOSTICS = "location-sharing-google-diagnostics-v1";
-var PLUGIN_VERSION = "0.10.0";
+var PLUGIN_VERSION = "0.12.0";
 var MAX_DIAGNOSTIC_EVENTS = 40;
 var MAPS_RPC_ID = "Qt4aBe";
 var MAPS_RPC_METHOD = "/MapsLocationSharingService.GetState";
@@ -388,6 +388,18 @@ GoogleMapsClient.prototype.credentials = async function() {
     if (email) this.storage.set(STORE_EMAIL, email);
   }
   return { masterToken, androidId, email };
+};
+// The plugin's fetch has no cookie jar, so the MergeSession link is loaded in a web sign-in, whose
+// cookies are the session the Maps requests then carry.
+GoogleMapsClient.prototype.webLoginUrl = async function() {
+  var account = await this.credentials();
+  var authToken = await issueWebLoginToken(this.effects, account);
+  var oauthLogin = await request(this.effects, "GET", OAUTH_LOGIN_URL + "?source=ChromiumBrowser&issueuberauth=1", { Authorization: "Bearer " + authToken });
+  this.recordDiagnostic("oauth-login", { httpStatus: oauthLogin.status, responseCharacters: oauthLogin.text.length });
+  if (oauthLogin.status < 200 || oauthLogin.status >= 300 || !text(oauthLogin.text)) {
+    throw googleError("AUTH_REQUIRED", "Google could not start a Maps web session. Sign in again.", ERROR_KINDS.TRANSPORT, { httpStatus: oauthLogin.status, stage: "oauth-login" });
+  }
+  return MERGE_SESSION_URL + "?service=mail&continue=" + encodeURIComponent("https://www.google.com/") + "&uberauth=" + encodeURIComponent(text(oauthLogin.text));
 };
 GoogleMapsClient.prototype.refresh = async function() {
   var stage = "credentials";

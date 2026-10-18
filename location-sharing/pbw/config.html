@@ -317,11 +317,19 @@
     say('Opening Google sign-in…');
     try {
       if (typeof Pebble.webSignIn !== 'function') { say('Google sign-in is unavailable in this app version.'); return; }
-      var captured = await Pebble.webSignIn({
+      // EmbeddedSetup ends at its consent page with an oauth_token; it never sets the web session.
+      var embedded = await Pebble.webSignIn({
         url: 'https://accounts.google.com/EmbeddedSetup',
-        cookies: GOOGLE_SESSION_COOKIES,
-        domain: 'google.com',
+        cookies: ['oauth_token'],
+        domain: 'accounts.google.com',
       });
+      if (!embedded) { say('Google sign-in cancelled.'); return; }
+      var exchanged = await send({ type: 'setGoogleCredentials', oauthToken: embedded.oauth_token });
+      if (exchanged.ok === false) { render(exchanged); return; }
+      say('Opening a Google Maps session…');
+      var link = await send({ type: 'googleWebLoginUrl' });
+      if (link.ok === false || !link.url) { render(link); return; }
+      var captured = await Pebble.webSignIn({ url: link.url, cookies: GOOGLE_SESSION_COOKIES, domain: 'google.com' });
       if (!captured) { say('Google sign-in cancelled.'); return; }
       var saved = await send({ type: 'setGoogleCredentials', cookies: captured });
       if (saved.ok === false) { render(saved); return; }

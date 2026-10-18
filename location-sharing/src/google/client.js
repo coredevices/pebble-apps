@@ -1,7 +1,7 @@
 'use strict';
-var bytes = require('../../../imessage/src/runtime/bytes');
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 var AUTH_URL = "https://android.clients.google.com/auth";
 var OAUTH_LOGIN_URL = "https://accounts.google.com/OAuthLogin";
 var MERGE_SESSION_URL = "https://accounts.google.com/MergeSession";

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const pluginDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const publicDirectory = path.resolve(pluginDirectory, '../..');
+const publicDirectory = path.resolve(pluginDirectory, '../../..');
 const roots = [
   'libpebble3/HOST_CRYPTO_BRIDGE.md',
   'libpebble3/src/commonMain/kotlin/io/rebble/libpebblecommon/plugin/BundledPlugins.kt',

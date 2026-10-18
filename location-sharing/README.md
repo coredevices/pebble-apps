@@ -9,7 +9,7 @@ commented out in `src/plugin-entry.js` and its settings section is hidden; the n
 it for when it comes back. The Google half runs on stock CoreApp: plain `fetch` with text bodies,
 `Pebble.secureStorage`, and no timers (request deadlines defer to the host's action limit).
 
-Apple sign-in reuses the iMessage plugin's JavaScript implementation in `../imessage/src`: Apple
+Apple sign-in reuses the iMessage plugin's JavaScript implementation in `../chat/imessage/src`: Apple
 account login, Anisette, APNs activation and NAC validation. NAC x86 execution runs inline in the
 bundled Blink WebAssembly interpreter, so the plugin needs no native x86 executor, `CpuEmulation`
 or `JavaScriptWorker` permission.
@@ -23,7 +23,7 @@ replaces the iMessage XHR transport.
 Find My needs the `com.apple.mobileme` delegate and its `mmeFMFAppToken`, which iMessage login does
 not request, so `src/apple-account`, `src/configuration/coordinator.js` and `src/state` are forks
 of the iMessage modules with the Find My artifact added. All other shared authentication and runtime
-modules are required from `../imessage/src` directly.
+modules are required from `../chat/imessage/src` directly.
 
 ```sh
 npm --prefix imessage ci

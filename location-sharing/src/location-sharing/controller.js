@@ -1,6 +1,6 @@
 'use strict';
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 var FindMyController = require('../findmy/controller').FindMyController;
 var maps = require('./maps');
 var PROVIDERS = Object.freeze({

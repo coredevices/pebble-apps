@@ -1,7 +1,7 @@
 'use strict';
-var bytes = require('../../../imessage/src/runtime/bytes');
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 var STATE_KEY = "find-my-fmf-runtime-v1";
 var SERVER_MIN = 101;
 var SERVER_COUNT = 82;

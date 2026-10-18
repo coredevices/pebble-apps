@@ -1,11 +1,11 @@
 'use strict';
 
-var bytes = require('../../../imessage/src/runtime/bytes');
-var plist = require('../../../imessage/src/codecs/xml-plist');
-var binaryPlist = require('../../../imessage/src/codecs/binary-plist');
-var gzipCodec = require('../../../imessage/src/codecs/gzip');
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
+var plist = require('../../../chat/imessage/src/codecs/xml-plist');
+var binaryPlist = require('../../../chat/imessage/src/codecs/binary-plist');
+var gzipCodec = require('../../../chat/imessage/src/codecs/gzip');
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 
 var DELEGATE_ENDPOINT = 'https://setup.icloud.com/setup/signin/v2/login';
 var IDS_DELEGATE = 'com.apple.private.ids';

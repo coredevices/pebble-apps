@@ -1,6 +1,6 @@
 'use strict';
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 function pageStatus(status) {
   if (status && status.ready === true && status.phase === "ready") return "ready";
   if (status && status.phase === "needs-two-factor") return "needsTwoFactor";

@@ -2,10 +2,10 @@
 
 const ChatController = require('./controller').ChatController;
 const IMessageAdapter = require('./imessage-adapter').IMessageAdapter;
-const createProductionController = require('../../imessage/src/production-controller').createProductionController;
-const CryptoCompositions = require('../../imessage/src/crypto/compositions').CryptoCompositions;
-const NativeHostCryptoProvider = require('../../imessage/src/runtime/host-crypto-provider').NativeHostCryptoProvider;
-const bytes = require('../../imessage/src/runtime/bytes');
+const createProductionController = require('../imessage/src/production-controller').createProductionController;
+const CryptoCompositions = require('../imessage/src/crypto/compositions').CryptoCompositions;
+const NativeHostCryptoProvider = require('../imessage/src/runtime/host-crypto-provider').NativeHostCryptoProvider;
+const bytes = require('../imessage/src/runtime/bytes');
 
 const crypto = new CryptoCompositions(new NativeHostCryptoProvider(globalThis._HostCrypto));
 const fingerprint = value => bytes.bytesToHex(crypto.digest('sha256', bytes.utf8ToBytes(value)));

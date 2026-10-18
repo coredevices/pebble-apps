@@ -1,16 +1,16 @@
 'use strict';
 
-var anisetteRemote = require('../../../imessage/src/anisette/remote-v3');
+var anisetteRemote = require('../../../chat/imessage/src/anisette/remote-v3');
 var accountLogin = require('../apple-account/login');
-var activatePushIdentity = require('../../../imessage/src/aps/activation').activatePushIdentity;
-var ApsClientRunner = require('../../../imessage/src/aps/client-runner').ApsClientRunner;
-var pushBootstrap = require('../../../imessage/src/aps/push-bootstrap');
-var authentication = require('../../../imessage/src/ids/authentication');
-var identities = require('../../../imessage/src/ids/identities');
-var registration = require('../../../imessage/src/ids/registration');
-var macAuthorization = require('../../../imessage/src/configuration/mac-auth-token');
-var bytes = require('../../../imessage/src/runtime/bytes');
-var errors = require('../../../imessage/src/runtime/errors');
+var activatePushIdentity = require('../../../chat/imessage/src/aps/activation').activatePushIdentity;
+var ApsClientRunner = require('../../../chat/imessage/src/aps/client-runner').ApsClientRunner;
+var pushBootstrap = require('../../../chat/imessage/src/aps/push-bootstrap');
+var authentication = require('../../../chat/imessage/src/ids/authentication');
+var identities = require('../../../chat/imessage/src/ids/identities');
+var registration = require('../../../chat/imessage/src/ids/registration');
+var macAuthorization = require('../../../chat/imessage/src/configuration/mac-auth-token');
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
+var errors = require('../../../chat/imessage/src/runtime/errors');
 var RuntimeError = errors.RuntimeError;
 var ERROR_KINDS = errors.ERROR_KINDS;
 var INITIAL_COURIER_CONNECT_TIMEOUT_MILLIS = 30000;

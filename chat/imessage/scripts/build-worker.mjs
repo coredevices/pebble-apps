@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 
 // The Wasm sources are only checked out alongside the interpreter; elsewhere skip the hash check.
-if (existsSync(new URL('../../../x86executor-interpreter', import.meta.url))) await import('../wasm/verify.mjs');
+if (existsSync(new URL('../../../../x86executor-interpreter', import.meta.url))) await import('../wasm/verify.mjs');
 import { build } from 'esbuild';
 import { writeFile } from 'node:fs/promises';
 const result = await build({

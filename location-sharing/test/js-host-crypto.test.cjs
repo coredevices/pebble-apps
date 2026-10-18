@@ -265,8 +265,8 @@ test('malformed requests report the Kotlin bridge error shape', () => {
 });
 
 test('works behind NativeHostCryptoProvider and CryptoCompositions', () => {
-  const { NativeHostCryptoProvider } = require('../../imessage/src/runtime/host-crypto-provider');
-  const { CryptoCompositions } = require('../../imessage/src/crypto/compositions');
+  const { NativeHostCryptoProvider } = require('../../chat/imessage/src/runtime/host-crypto-provider');
+  const { CryptoCompositions } = require('../../chat/imessage/src/crypto/compositions');
   const crypto = new CryptoCompositions(new NativeHostCryptoProvider(new JsHostCrypto(hostRandom, memoryStorage())));
   const keyId = crypto.generateKey({ algorithm: 'ec', namedCurve: 'p-256', usages: ['sign'], persistence: 'session' });
   const spec = { algorithm: 'ecdsa', hash: 'sha256', signatureFormat: 'raw' };

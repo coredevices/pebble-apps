@@ -2,7 +2,7 @@
 
 const { node, button, input, activityLabel, chatIdentity } = require('./settings/dom');
 const { renderConnection } = require('./settings/connections');
-const { normalizeRecipient } = require('../../imessage/src/imessage/recipient');
+const { normalizeRecipient } = require('../imessage/src/imessage/recipient');
 const { chatId } = require('./chat-reference');
 const el = id => document.getElementById(id);
 let overview = { connections: [], approved: [] };

@@ -7,7 +7,7 @@ var trust = require('../../src/aps/courier-trust');
 var serverTrust = require('../../src/apple/server-trust');
 var bagTrust = require('../../src/ids/bag-trust');
 var manifest = require('../../appinfo.json');
-var chatManifest = require('../../../chat/appinfo.json');
+var chatManifest = require('../../../appinfo.json');
 
 test('Apple services and courier share the full chain required by iOS', function () {
   var anchors = trust.courierTrustAnchors();

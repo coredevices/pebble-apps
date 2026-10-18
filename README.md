@@ -17,12 +17,12 @@ in `pbw/`. Build the bundle, then pack `pbw/`:
 | Plugin | Build | Test |
 |---|---|---|
 | `chatgpt` | `npm ci && npm run build` | `npm test` |
-| `location-sharing` | `npm ci --prefix ../imessage && npm ci && node scripts/build-plugin.mjs` | `node --test plugin.test.cjs test/*.test.cjs` |
-| `chat` | `npm ci --prefix ../imessage && python3 build.py` | `node --test *.test.cjs` |
+| `location-sharing` | `npm ci --prefix ../chat/imessage && npm ci && node scripts/build-plugin.mjs` | `node --test plugin.test.cjs test/*.test.cjs` |
+| `chat` | `npm ci --prefix imessage && python3 build.py` | `node --test *.test.cjs` |
 | `local-music`, `apple-home` | `python3 build.py` (packs to `build/`) | `node --test plugin.test.cjs` |
 
-`imessage` isn't a plugin on its own: `chat` and `location-sharing` reuse its Apple account,
-APNs and crypto code through `../imessage/src`.
+`chat/imessage` is Chat's iMessage engine (Apple account, APNs, crypto); `location-sharing` reuses
+its Apple account and crypto code through `../chat/imessage/src`.
 
 `hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
 are also bundled into the app, which still builds them from its own `test-apps/` copies.

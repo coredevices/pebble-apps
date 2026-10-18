@@ -28,7 +28,7 @@ also lets users remove an approval whose room is no longer available.
   protected Application Support directory.
 - **iMessage · direct:** incorporates the working JavaScript implementation from
   `codex/imessage-js-port-implementation` (including its contacts and sender
-  selection). It shares `../imessage/src/production-controller.js` with the
+  selection). It shares `./imessage/src/production-controller.js` with the
   standalone plugin. Authentication, APNs/IDS and encryption remain in that
   existing JavaScript implementation; the generic host APIs provide crypto,
   networking and timers. NAC x86 execution uses the bundled Blink WebAssembly interpreter

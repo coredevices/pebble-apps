@@ -8,8 +8,8 @@ var pbkdf2 = require('@noble/hashes/pbkdf2.js').pbkdf2;
 var hkdf = require('@noble/hashes/hkdf.js').hkdf;
 var aes = require('@noble/ciphers/aes.js');
 var p256 = require('@noble/curves/nist.js').p256;
-var asn1 = require('../../../imessage/src/codecs/asn1');
-var bytes = require('../../../imessage/src/runtime/bytes');
+var asn1 = require('../../../chat/imessage/src/codecs/asn1');
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
 
 var HASHES = { 'SHA-1': sha1, 'SHA-256': sha2.sha256, 'SHA-384': sha2.sha384, 'SHA-512': sha2.sha512 };
 var SIGNATURE_HASHES = { SHA1: 'SHA-1', SHA256: 'SHA-256', SHA384: 'SHA-384', SHA512: 'SHA-512' };

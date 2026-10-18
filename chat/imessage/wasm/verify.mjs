@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 const root = path.dirname(fileURLToPath(import.meta.url));
-const publicRoot = path.resolve(root, '../../..');
+const publicRoot = path.resolve(root, '../../../..');
 const manifest = JSON.parse(readFileSync(path.join(root, 'manifest.json')));
 const hash = p => createHash('sha256').update(readFileSync(p)).digest('hex');
 for (const [file, expected] of Object.entries(manifest.inputs)) {

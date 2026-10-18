@@ -2,7 +2,7 @@
 
 var schema = require('./state-schema');
 var migrateState = require('./state-migrations').migrateState;
-var errors = require('../../../imessage/src/runtime/errors');
+var errors = require('../../../chat/imessage/src/runtime/errors');
 var RuntimeError = errors.RuntimeError;
 var ERROR_KINDS = errors.ERROR_KINDS;
 

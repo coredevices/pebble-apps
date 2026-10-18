@@ -23,7 +23,7 @@ const MAX_ORACLE_LINE_BYTES = 4 * 1024 * 1024;
 const MAX_RANDOM_WORDS = 4096;
 const HTTP_TIMEOUT_MS = 30_000;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../..');
 
 function fail(code, message) {
   const error = new Error(message);

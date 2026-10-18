@@ -2,7 +2,7 @@
 // Travel times and address lookups from Google Maps' own web endpoints, which answer without a
 // signed-in session. Routes are asked for directly with the request Maps' directions page sends;
 // if Google stops accepting that, the page is loaded and the request it embeds is followed instead.
-var bytes = require('../../../imessage/src/runtime/bytes');
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
 
 var MAPS_ORIGIN = 'https://www.google.com';
 var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';

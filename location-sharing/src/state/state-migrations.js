@@ -1,8 +1,8 @@
 'use strict';
 
 var schema = require('./state-schema');
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
 
 /**
  * Migrate a decoded persisted value into the current schema. The empty storage value and the

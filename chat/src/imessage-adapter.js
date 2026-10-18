@@ -1,6 +1,6 @@
 'use strict';
 
-const normalizeRecipient = require('../../imessage/src/imessage/recipient').normalizeRecipient;
+const normalizeRecipient = require('../imessage/src/imessage/recipient').normalizeRecipient;
 const APPROVALS = 'chat.imessage.approvals.v1';
 const CREDENTIALS = 'chat.imessage.credentials.v1';
 const MAC_KEY = 'chat.imessage.mac-key.v1';

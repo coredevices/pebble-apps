@@ -1,7 +1,7 @@
 'use strict';
 // Same request/response contract as imessage XhrHttpProvider, over the host's fetch().
-var errors = require('../../../imessage/src/runtime/errors');
-var bytes = require('../../../imessage/src/runtime/bytes');
+var errors = require('../../../chat/imessage/src/runtime/errors');
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
 
 var TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 

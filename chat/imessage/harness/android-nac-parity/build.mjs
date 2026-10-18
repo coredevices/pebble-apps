@@ -5,7 +5,7 @@ import path from 'node:path';
 const harnessDirectory = path.dirname(fileURLToPath(import.meta.url));
 const output = path.resolve(
   harnessDirectory,
-  '../../../../libpebble3/src/androidDeviceTest/assets/nac-parity/harness.js',
+  '../../../../../libpebble3/src/androidDeviceTest/assets/nac-parity/harness.js',
 );
 
 await build({

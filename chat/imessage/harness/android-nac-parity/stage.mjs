@@ -10,12 +10,12 @@ const imageModule = require('../../src/nac/image');
 const vectorModule = require('./vector');
 
 const harnessDirectory = path.dirname(fileURLToPath(import.meta.url));
-const repositoryRoot = path.resolve(harnessDirectory, '../../../../..');
+const repositoryRoot = path.resolve(harnessDirectory, '../../../../../..');
 const stagedInput = path.resolve(
   harnessDirectory,
-  '../../../../libpebble3/src/androidDeviceTest/assets/nac-parity/local-input.json',
+  '../../../../../libpebble3/src/androidDeviceTest/assets/nac-parity/local-input.json',
 );
-const libpebbleBuildDirectory = path.resolve(harnessDirectory, '../../../../libpebble3/build');
+const libpebbleBuildDirectory = path.resolve(harnessDirectory, '../../../../../libpebble3/build');
 const ANDROID_TEST_PACKAGE = 'io.rebble.libpebblecommon.test';
 const MAX_VECTOR_FILE_BYTES = 8 * 1024 * 1024;
 

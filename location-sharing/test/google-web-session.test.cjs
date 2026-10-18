@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const bytes = require('../../imessage/src/runtime/bytes');
+const bytes = require('../../chat/imessage/src/runtime/bytes');
 const { GoogleMapsClient } = require('../src/google/client');
 
 test('web-session cookies go straight to Maps with a Cookie header', async () => {

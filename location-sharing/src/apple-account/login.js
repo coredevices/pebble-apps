@@ -1,14 +1,14 @@
 'use strict';
 
-var bytes = require('../../../imessage/src/runtime/bytes');
-var plist = require('../../../imessage/src/codecs/xml-plist');
-var binaryPlist = require('../../../imessage/src/codecs/binary-plist');
-var RuntimeError = require('../../../imessage/src/runtime/errors').RuntimeError;
-var ERROR_KINDS = require('../../../imessage/src/runtime/errors').ERROR_KINDS;
-var srp = require('../../../imessage/src/apple-account/srp');
-var twoFactor = require('../../../imessage/src/apple-account/two-factor');
+var bytes = require('../../../chat/imessage/src/runtime/bytes');
+var plist = require('../../../chat/imessage/src/codecs/xml-plist');
+var binaryPlist = require('../../../chat/imessage/src/codecs/binary-plist');
+var RuntimeError = require('../../../chat/imessage/src/runtime/errors').RuntimeError;
+var ERROR_KINDS = require('../../../chat/imessage/src/runtime/errors').ERROR_KINDS;
+var srp = require('../../../chat/imessage/src/apple-account/srp');
+var twoFactor = require('../../../chat/imessage/src/apple-account/two-factor');
 var delegates = require('./delegates');
-var appleTrust = require('../../../imessage/src/apple/server-trust');
+var appleTrust = require('../../../chat/imessage/src/apple/server-trust');
 
 var GSA_ENDPOINT = 'https://gsa.apple.com/grandslam/GsService2';
 var GSA_VERSION = '1.0.1';

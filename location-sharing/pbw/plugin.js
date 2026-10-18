@@ -24,9 +24,9 @@ PERFORMANCE OF THIS SOFTWARE.
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   };
 
-  // ../imessage/src/runtime/errors.js
+  // ../chat/imessage/src/runtime/errors.js
   var require_errors = __commonJS({
-    "../imessage/src/runtime/errors.js"(exports, module) {
+    "../chat/imessage/src/runtime/errors.js"(exports, module) {
       "use strict";
       var ERROR_KINDS = Object.freeze({
         INVALID_INPUT: "invalid-input",
@@ -126,9 +126,9 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   });
 
-  // ../imessage/src/runtime/bytes.js
+  // ../chat/imessage/src/runtime/bytes.js
   var require_bytes = __commonJS({
-    "../imessage/src/runtime/bytes.js"(exports, module) {
+    "../chat/imessage/src/runtime/bytes.js"(exports, module) {
       "use strict";
       var RuntimeError = require_errors().RuntimeError;
       var ERROR_KINDS = require_errors().ERROR_KINDS;
@@ -1732,9 +1732,9 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   });
 
-  // ../imessage/src/runtime/effects.js
+  // ../chat/imessage/src/runtime/effects.js
   var require_effects = __commonJS({
-    "../imessage/src/runtime/effects.js"(exports, module) {
+    "../chat/imessage/src/runtime/effects.js"(exports, module) {
       "use strict";
       var RuntimeError = require_errors().RuntimeError;
       var ERROR_KINDS = require_errors().ERROR_KINDS;
@@ -1834,9 +1834,9 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   });
 
-  // ../imessage/src/runtime/host-environment.js
+  // ../chat/imessage/src/runtime/host-environment.js
   var require_host_environment = __commonJS({
-    "../imessage/src/runtime/host-environment.js"(exports, module) {
+    "../chat/imessage/src/runtime/host-environment.js"(exports, module) {
       "use strict";
       var bytes = require_bytes();
       var RuntimeError = require_errors().RuntimeError;

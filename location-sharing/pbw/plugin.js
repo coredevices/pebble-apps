@@ -1462,7 +1462,7 @@ PERFORMANCE OF THIS SOFTWARE.
         });
         return Object.assign({
           ok: true,
-          pluginVersion: "0.11.0",
+          pluginVersion: "0.12.0",
           settings: controller.settings(),
           apple: status.apple,
           google: status.google,

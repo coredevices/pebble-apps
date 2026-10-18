@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Android Music</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    p { line-height: 1.45; }
+    label { display: block; margin: 18px 0 6px; font-size: 14px; font-weight: 650; }
+    select, input { box-sizing: border-box; width: 100%; padding: 11px 12px; border: 1px solid
+      rgba(128,128,128,.45); border-radius: 8px; background: transparent; color: inherit;
+      font-size: 16px; }
+    button { padding: 11px 16px; margin: 12px 8px 0 0; border: 0; border-radius: 8px;
+      background: #4285f4; color: white; font-size: 15px; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled { opacity: .5; }
+    #status { margin-top: 16px; padding: 11px 12px; border-radius: 8px;
+      background: rgba(128,128,128,.15); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Android Music</h1>
+  <p>Choose the phone player Index should use when a request does not name one.</p>
+
+  <label for="player">Default player</label>
+  <select id="player"><option>Finding music players…</option></select>
+  <button id="save" type="button">Save</button>
+
+  <label for="query">Test a request</label>
+  <input id="query" value="Ratatat" autocomplete="off">
+  <button id="test" class="secondary" type="button">Play test</button>
+  <div id="status">Starting Android Music…</div>
+
+  <script>
+    var player = document.getElementById('player');
+    var query = document.getElementById('query');
+    var statusElement = document.getElementById('status');
+    var save = document.getElementById('save');
+    var test = document.getElementById('test');
+
+    function send(message) { return Pebble.sendMessage('plugin', message); }
+    function say(message) { statusElement.textContent = message; }
+
+    function showStatus(result) {
+      player.textContent = '';
+      (result.players || []).forEach(function (item) {
+        var option = document.createElement('option');
+        option.value = item.packageId;
+        option.textContent = item.name;
+        player.appendChild(option);
+      });
+      if (!player.options.length) {
+        var empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'No compatible player found';
+        player.appendChild(empty);
+      }
+      player.value = result.packageId || '';
+      save.disabled = !player.value;
+      test.disabled = !player.value;
+      say(player.value ? 'Default: ' + result.playerName : 'Install a compatible Android music player.');
+    }
+
+    save.onclick = async function () {
+      var result = await send({ type: 'save', packageId: player.value });
+      say(result.error || 'Saved ' + result.playerName + ' as the default.');
+    };
+
+    test.onclick = async function () {
+      say('Sending the request…');
+      var result = await send({ type: 'test', query: query.value, packageId: player.value });
+      say(result.error || 'Sent to ' + result.playerName + ' through ' + result.route + '.');
+    };
+
+    Pebble.addEventListener('ready', async function (event) {
+      if (event.target !== 'plugin') return;
+      showStatus(await send({ type: 'status' }));
+    });
+  </script>
+</body>
+</html>

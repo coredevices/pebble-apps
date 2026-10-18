@@ -1,0 +1,152 @@
+{
+  "name": "chatgpt",
+  "author": "Core Devices",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix .. run build",
+    "test": "npm --prefix .. test"
+  },
+  "pebble": {
+    "displayName": "ChatGPT",
+    "uuid": "3f97d5c5-bc28-48ba-b4af-e7ad7f6000f0",
+    "sdkVersion": "3",
+    "capabilities": [
+      "web_sign_in"
+    ],
+    "usesPermissions": [
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "chatgpt.com",
+            "auth.openai.com"
+          ]
+        }
+      }
+    ],
+    "plugin": {
+      "description": "Send messages to your ChatGPT Dot, to Codex sessions running on your computers, and to Codex Cloud tasks. Sign in in settings.",
+      "script": "plugin.js",
+      "sources": [
+        {
+          "category": "messaging",
+          "items": [
+            "dot"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 3600
+        }
+      ],
+      "actions": [
+        {
+          "name": "send_to_dot",
+          "description": "Send a message to the user's ChatGPT Dot (their existing primary Dot in ChatGPT). Do not use unless the user explicitly addresses their Dot or asks to send something to it, as \"Dot\" or \"my Dot\" or by the Dot's own name, e.g. \"message my Dot \u2026\", \"tell Dot \u2026\", \"ask my Dot \u2026\" or \"tell Taz \u2026\" when the Dot is named Taz. The Dot's name is in the 'ChatGPT: messaging/dot' source; when the user messages a name that is not clearly one of their contacts, read that source to check whether it is their Dot. Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not the Dot's answer. Do not automatically retry an uncertain delivery.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "The text to deliver to the Dot, without the \"send to my Dot\" instruction itself.",
+                "minLength": 1,
+                "maxLength": 16000
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "send_to_codex",
+          "description": "Send a message to one of the user's Codex chats: a Codex session running on their computer, or a Codex Cloud task. Use when the user says \"send \u2026 to Codex\", \"tell Codex \u2026\", or names one of their Codex chats or its nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat the user picked in settings. Returns a receipt, not Codex's answer. Do not automatically retry an uncertain delivery.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000,
+                "description": "What to tell Codex, without the \"tell Codex\" instruction itself."
+              },
+              "chat": {
+                "type": "string",
+                "description": "The chat's nickname, its id from list_codex_chats, or part of its title. Omit to use the default chat."
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "list_codex_chats",
+          "description": "List the user's Codex chats, most recent first: sessions on their online computers and their Codex Cloud tasks, with nicknames, which is the default, and chat ids. Use when the user asks what Codex chats they have, or when it is unclear which chat they mean; then pass the nickname or chat id to send_to_codex.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "computer": {
+                "type": "string",
+                "description": "Only this computer's sessions. Omit for every online computer and Codex Cloud."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "start_codex_cloud_task",
+          "description": "Start a new Codex Cloud task (chatgpt.com/codex), which works in a cloud copy of one of the user's GitHub repositories. Use when the user asks for coding work in the cloud or on a repo rather than in a session on their computer. Returns a receipt; the task takes minutes to run.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16000,
+                "description": "The task for Codex, without the \"ask Codex Cloud\" instruction itself."
+              },
+              "environment": {
+                "type": "string",
+                "description": "The Codex Cloud environment's name (usually the repository). Omit for the user's pinned or first environment."
+              }
+            },
+            "required": [
+              "prompt"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

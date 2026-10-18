@@ -1,0 +1,101 @@
+{
+  "name": "chat",
+  "author": "Core Devices",
+  "version": "0.4.0",
+  "pebble": {
+    "displayName": "Chat",
+    "uuid": "8197c57a-59c8-493e-9db1-eaab2988d010",
+    "sdkVersion": "3",
+    "plugin": {
+      "description": "Send messages to approved chats using Beeper, iMessage, WhatsApp, Telegram, or Android SMS.",
+      "script": "plugin.js",
+      "sources": [],
+      "actions": [
+        {
+          "name": "send_message",
+          "description": "Send plain text to an allowed chat on an enabled connection. Only send when the user explicitly asks. Use list_chats to find exact chat_id values. When a name matches multiple chats or connections, ask the user which one; never guess or fall back to another connection. Direct iMessage and Android SMS support individuals only.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "recipient": {
+                "type": "string",
+                "description": "The approved contact, group name, nickname, or exact chat ID/address."
+              },
+              "text": {
+                "type": "string",
+                "description": "The exact message requested by the user."
+              },
+              "operation_id": {
+                "type": "string",
+                "description": "Optional unique operation ID. Reuse it when retrying the same send."
+              },
+              "chat_id": {
+                "type": "string",
+                "description": "Exact account-and-connection-bound ID returned by list_chats; use it to disambiguate the destination."
+              },
+              "connection": {
+                "type": "string",
+                "description": "Optional connection ID to limit name resolution."
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "list_chats",
+          "description": "List only the chats the user has allowed on enabled connections, including names, nicknames, network badges, and exact chat_id values for send_message. Ask the user to choose when multiple chats match. This does not search the address book or expose unapproved chats.",
+          "parameters": {
+            "type": "object",
+            "properties": {}
+          },
+          "targets": [],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": [],
+          "timeoutSec": 30
+        }
+      ],
+      "usesPermissions": [
+        "Chat",
+        "Crypto",
+        "JavaScriptWorker",
+        "Internet",
+        {
+          "name": "NetworkSockets",
+          "parameters": {
+            "websocketUrls": [
+              "wss://ani.sidestore.io/v3/provisioning_session"
+            ],
+            "tlsHosts": [
+              "gsa.apple.com",
+              "profile.ess.apple.com",
+              "identity.ess.apple.com",
+              "static.ess.apple.com",
+              "init.ess.apple.com",
+              "courier.push.apple.com",
+              "*-courier.push.apple.com"
+            ],
+            "tlsPorts": [
+              "443",
+              "5223"
+            ],
+            "tlsTrustAnchorSha256": [
+              "2d9b64d8ec50d5d3e5a6659194ce52d607b2ad3c026fdd3d7fab724183c232d5",
+              "efd0c3352e8f5cc6c7678a5cb48370c341db58d39fc0569d5e106f02c4fcaceb",
+              "b0b1730ecbc7ff4505142c49f1295e6eda6bcaed7e2c68c5be91b5a11001f024",
+              "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179"
+            ]
+          }
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

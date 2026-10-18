@@ -1,0 +1,103 @@
+diff --git a/src/ids/user.rs b/src/ids/user.rs
+--- a/src/ids/user.rs
++++ b/src/ids/user.rs
+@@ -388,6 +388,83 @@ fn derive_hkdf_key_iv(secret: &[u8]) -> Result<([u8; 32], [u8; 16]), PushError
+     Ok((key[..32].try_into().unwrap(), key[32..].try_into().unwrap()))
+ }
+-
++
++#[cfg(feature = "port-oracle")]
++#[derive(Clone, Debug, PartialEq)]
++pub struct PortOracleNGMPairEc {
++    pub outer: Vec<u8>,
++    pub inner: Vec<u8>,
++    pub cleartext: Vec<u8>,
++    pub ciphertext: Vec<u8>,
++    pub signature_data: Vec<u8>,
++    pub validator: Vec<u8>,
++}
++
++#[cfg(feature = "port-oracle")]
++pub fn port_oracle_compose_ngm_pair_ec(
++    body: &[u8],
++    counter: u32,
++    padding: &[u8],
++    secret: &[u8],
++    sender_device: &[u8],
++    target_device: &[u8],
++    target_prekey: &[u8],
++    ephemeral: &[u8],
++    signature: &[u8],
++) -> Result<PortOracleNGMPairEc, PushError> {
++    if secret.len() != 32
++        || sender_device.len() != 32
++        || target_device.len() != 32
++        || target_prekey.len() != 32
++        || ephemeral.len() != 32
++        || signature.len() != 64
++    {
++        return Err(PushError::BadMsg);
++    }
++
++    let inner = idsp::InnerMessage {
++        message: body.to_vec(),
++        counter: Some(counter),
++        kt_gossip_data: vec![],
++        debug_info: vec![],
++    }.encode_to_vec();
++    let padding_len = inner.len().wrapping_neg() % 16;
++    if padding.len() != padding_len {
++        return Err(PushError::BadMsg);
++    }
++    let mut cleartext = inner.clone();
++    cleartext.extend_from_slice(padding);
++    cleartext.extend_from_slice(&(padding_len as u32).to_le_bytes());
++
++    let (key, iv) = derive_hkdf_key_iv(secret)?;
++    let mut ciphertext = cleartext.clone();
++    let mut cipher = ctr::Ctr64BE::<aes::Aes256>::new(&key.into(), &iv.into());
++    cipher.apply_keystream(&mut ciphertext);
++
++    let signature_data = [
++        secret.to_vec(),
++        target_prekey.to_vec(),
++        ephemeral.to_vec(),
++        target_device.to_vec(),
++        ciphertext.clone(),
++    ].concat();
++    let validator = [
++        sender_device[..2].to_vec(),
++        target_device[..2].to_vec(),
++        target_prekey[..2].to_vec(),
++        vec![0x0c],
++    ].concat();
++    let outer = idsp::OuterMessage {
++        payload: ciphertext.clone(),
++        key: ephemeral.to_vec(),
++        signature: signature.to_vec(),
++        validator: validator.clone(),
++    }.encode_to_vec();
++
++    Ok(PortOracleNGMPairEc {
++        outer, inner, cleartext, ciphertext, signature_data, validator,
++    })
++}
++
+ #[derive(Serialize, Deserialize, Clone)]
+ pub struct IDSNGMIdentity {
+     legacy: IDSUserIdentity,
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -59,5 +59,10 @@ use util::encode_hex;
+ pub use util::{NSArrayClass, EntitlementsResponse, EntitlementAuthState, ResourceState, NSDictionaryClass, NSURL, NSArray, ResourceFailure, NSAttributedString, NSString, NSDictionaryTypedCoder, NSNumber, coder_encode_flattened, coder_decode_flattened, StCollapsedValue};
+-pub use ids::user::{IDSUser, register, IDSUserIdentity, IDSNGMIdentity, PrivateDeviceInfo, SupportAlert, SupportAction, ReportMessage};
++pub use ids::user::{IDSUser, register, IDSUserIdentity, IDSNGMIdentity, PrivateDeviceInfo, SupportAlert, SupportAction, ReportMessage};
++#[cfg(feature = "port-oracle")]
++pub use ids::user::{
++    port_oracle_compose_ngm_pair_ec,
++    PortOracleNGMPairEc,
++};
+ pub use ids::identity_manager::{SendJob, MessageTarget, IdentityManager, KeyCache};
+ pub use ids::CertifiedContext;
+ pub use auth::{authenticate_apple, login_apple_delegates, authenticate_phone, authenticate_smsless, AuthPhone, LoginDelegate, CircleClientSession, TokenProvider};

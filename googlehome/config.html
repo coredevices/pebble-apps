@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Google Home</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 24px 0 8px; }
+    p { line-height: 1.4; }
+    .hint { font-size: 13px; opacity: .72; margin-top: 0; }
+    input { box-sizing: border-box; width: 100%; padding: 10px 12px; margin-bottom: 8px;
+            font-size: 15px; border-radius: 8px; border: 1px solid rgba(128,128,128,.4);
+            background: transparent; color: inherit; }
+    button { padding: 10px 16px; margin: 4px 6px 4px 0; font-size: 15px; border-radius: 8px;
+             border: 0; background: #ff6b00; color: #fff; }
+    button.secondary { background: rgba(128,128,128,.22); color: inherit; }
+    #status { margin: 12px 0; padding: 10px 12px; border-radius: 8px;
+              background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Google Home</h1>
+
+  <div id="signedOut" class="hidden">
+    <p class="hint">Connect the Google account that owns your Google Home devices.</p>
+    <button id="googleSignIn">Sign in with Google</button>
+  </div>
+
+  <div id="signedIn" class="hidden">
+    <h2>Smart-lock PIN</h2>
+    <p class="hint">Optional. Unlock uses this PIN only after Google Home returns its pinNeeded challenge.</p>
+    <input id="pin" type="password" inputmode="numeric" placeholder="At least 4 digits" autocomplete="off">
+    <button id="savePin">Save PIN</button>
+    <button id="clearPin" class="secondary">Clear PIN</button>
+  </div>
+
+  <div id="status">Starting the Google Home plugin…</div>
+  <button id="disconnect" class="secondary hidden">Disconnect</button>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var googleSignInPending = false;
+  function send(message) { return Pebble.sendMessage('plugin', message); }
+  function say(text) { $('status').textContent = text; }
+
+  function connectedAs(email) {
+    return email ? 'Signed in as ' + email + '.' : 'Connected to Google Home.';
+  }
+
+  function showSignedIn(signedIn) {
+    $('signedOut').classList.toggle('hidden', signedIn);
+    $('signedIn').classList.toggle('hidden', !signedIn);
+    $('disconnect').classList.toggle('hidden', !signedIn);
+  }
+
+  async function refresh() {
+    var result = await send({ type: 'status' });
+    if (result.error) { say(result.error); return; }
+    showSignedIn(!!result.configured);
+    say(result.configured
+      ? connectedAs(result.email) + (result.pinConfigured ? ' Lock PIN saved.' : '')
+      : 'Not connected.');
+    $('pin').value = '';
+  }
+
+  $('googleSignIn').onclick = async function () {
+    if (googleSignInPending) return;
+    googleSignInPending = true;
+    $('googleSignIn').disabled = true;
+    try {
+      if (typeof Pebble.webSignIn !== 'function') {
+        say('Google sign-in is unavailable in this app version.');
+        return;
+      }
+      say('Opening Google sign-in…');
+      var cookies;
+      try {
+        cookies = await Pebble.webSignIn({
+          url: 'https://accounts.google.com/EmbeddedSetup',
+          cookies: ['oauth_token'],
+          domain: 'accounts.google.com',
+        });
+      } catch (e) { say(e.message || 'Google sign-in failed.'); return; }
+      if (!cookies) { say('Google sign-in cancelled.'); return; }
+
+      say('Verifying Google Home connection…');
+      var connected = await send({
+        type: 'connectWithOAuthToken',
+        oauthToken: cookies.oauth_token,
+      });
+      if (connected.error) {
+        say('Google sign-in failed: ' + connected.error);
+        return;
+      }
+      showSignedIn(true);
+      say(connectedAs(connected.email) + ' ' + connected.homes + ' home(s), ' + connected.devices + ' device(s).');
+    } catch (error) {
+      say(error && error.message ? error.message : String(error));
+    } finally {
+      googleSignInPending = false;
+      $('googleSignIn').disabled = false;
+    }
+  };
+
+  $('savePin').onclick = async function () {
+    var pin = $('pin').value;
+    if (!pin) return;
+    var result = await send({ type: 'setPin', pin: pin });
+    if (result.error) { say(result.error); return; }
+    say('Lock PIN saved.');
+    $('pin').value = '';
+  };
+
+  $('clearPin').onclick = async function () {
+    await send({ type: 'clearPin' });
+    say('Lock PIN cleared.');
+    $('pin').value = '';
+  };
+
+  $('disconnect').onclick = async function () {
+    await send({ type: 'disconnect' });
+    await refresh();
+  };
+
+  Pebble.addEventListener('ready', function (event) {
+    if (event.target !== 'plugin') return;
+    refresh();
+  });
+</script>
+</body>
+</html>

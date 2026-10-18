@@ -1,0 +1,17 @@
+{
+  "name": "coreapp-imessage-plugin",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-plugin.mjs",
+    "build:pbw": "npm run build && zip -X -FS -j ../../libpebble3/src/androidMain/assets/plugins/imessage.pbw appinfo.json plugin.js config.html",
+    "check:boundary": "node scripts/check-host-boundary.mjs",
+    "check:bundle": "npm run build && git diff --exit-code -- plugin.js",
+    "test": "npm run check:wasm && npm run check:boundary && npm run build && node --test test/**/*.test.js test/plugin.test.js",
+    "test:oracle": "harness/oracle-support/prepare-rustpush.sh && node --test test/oracle/*.oracle.js",
+    "build:wasm": "python3 wasm/build.py",
+    "check:wasm": "node wasm/verify.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

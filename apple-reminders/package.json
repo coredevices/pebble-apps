@@ -1,0 +1,87 @@
+{
+  "name": "apple-reminders",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "pebble": {
+    "displayName": "Apple Reminders",
+    "uuid": "38f5a15b-20c8-4458-aab7-3a3c1749fcc7",
+    "sdkVersion": "3",
+    "plugin": {
+      "description": "Creates reminders in the native Apple Reminders app using an optionally selected default list.",
+      "script": "plugin.js",
+      "sources": [
+        {
+          "category": "reminders",
+          "items": [
+            "list"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "destination": [
+              "shortText"
+            ],
+            "url": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 300
+        }
+      ],
+      "actions": [
+        {
+          "name": "create_reminder",
+          "description": "Create a reminder in Apple Reminders. Use instanceId from the reminders/list source to choose a list; otherwise the configured list or the system default is used. due_iso is an absolute RFC3339 instant. notify_before_ms adds an early notification when a due time is supplied.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Reminder title."
+              },
+              "due_iso": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional absolute RFC3339 due time with Z or a numeric UTC offset."
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional IANA time-zone name supplied by Index for context."
+              },
+              "notify_before_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "description": "Optional early-notification lead in milliseconds; used only with due_iso."
+              },
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional Apple Reminders list identifier from the reminders/list source."
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "reminders/list"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ],
+      "usesPermissions": [
+        "AppleReminders"
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

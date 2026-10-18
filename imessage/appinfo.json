@@ -1,0 +1,86 @@
+{
+  "uuid": "7f6296e7-4f00-4146-a710-3a52995e9ba6",
+  "shortName": "iMessage",
+  "longName": "iMessage Sender",
+  "companyName": "Core Devices",
+  "versionCode": 2,
+  "versionLabel": "0.2.0",
+  "capabilities": ["configurable"],
+  "resources": { "media": [] },
+  "targetPlatforms": [],
+  "watchapp": { "watchface": false },
+  "plugin": {
+    "uuid": "7f6296e7-4f00-4146-a710-3a52995e9ba6",
+    "name": "iMessage",
+    "description": "Sends a plain-text iMessage to one individual email address, phone number, or contact saved in the plugin settings.",
+    "script": "plugin.js",
+    "configPage": "config.html",
+    "sources": [],
+    "actions": [
+      {
+        "name": "send_message",
+        "description": "Send a plain-text iMessage to one individual. A configured contact name such as Danny is accepted as the recipient. For ‘send Danny hey whats up over iMessage’, pass recipient ‘Danny’ and text ‘hey whats up’; ‘over iMessage’ selects this action and is not message text. Use only when the user explicitly asks to send an iMessage and supplies or clearly identifies the recipient.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "recipient": {
+              "type": "string",
+              "description": "The recipient's configured contact name, iMessage email address, or E.164 phone number, such as Danny, person@example.com, or +14155550123. Pass a spoken contact name through unchanged so the plugin can resolve it."
+            },
+            "text": {
+              "type": "string",
+              "description": "The exact plain-text message to send."
+            }
+          },
+          "required": ["recipient", "text"]
+        },
+        "targets": [],
+        "destructive": false,
+        "requiresConfirmation": false,
+        "usesPermissions": [
+          "Crypto",
+          "JavaScriptWorker",
+          {
+            "name": "Internet",
+            "parameters": {
+              "origins": [
+                "https://ani.sidestore.io",
+                "https://gsa.apple.com",
+                "https://setup.icloud.com",
+                "https://raw.githubusercontent.com",
+                "http://init-p01st.push.apple.com",
+                "https://init.ess.apple.com",
+                "https://apple.com",
+                "https://*.apple.com"
+              ]
+            }
+          },
+          {
+            "name": "NetworkSockets",
+            "parameters": {
+              "websocketUrls": ["wss://ani.sidestore.io/v3/provisioning_session"],
+              "tlsHosts": [
+                "gsa.apple.com",
+                "profile.ess.apple.com",
+                "identity.ess.apple.com",
+                "static.ess.apple.com",
+                "init.ess.apple.com",
+                "courier.push.apple.com",
+                "*-courier.push.apple.com"
+              ],
+              "tlsPorts": ["443", "5223"],
+              "tlsTrustAnchorSha256": [
+                "2d9b64d8ec50d5d3e5a6659194ce52d607b2ad3c026fdd3d7fab724183c232d5",
+                "efd0c3352e8f5cc6c7678a5cb48370c341db58d39fc0569d5e106f02c4fcaceb",
+                "b0b1730ecbc7ff4505142c49f1295e6eda6bcaed7e2c68c5be91b5a11001f024",
+                "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179"
+              ]
+            }
+          }
+        ],
+        "callerPermissions": [],
+        "timeoutSec": 120
+      }
+    ]
+  }
+}

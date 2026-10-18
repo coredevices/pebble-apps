@@ -1,0 +1,289 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apple Notes</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 24px 0 8px; }
+    p, li { line-height: 1.42; }
+    .hint { font-size: 13px; opacity: .75; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { padding: 10px 16px; font-size: 15px; border-radius: 8px; border: 0;
+             background: #ff6b00; color: #fff; }
+    button.secondary { background: rgba(128,128,128,.22); color: inherit; }
+    button:disabled { cursor: wait; opacity: .55; }
+    fieldset { border: 0; margin: 0; padding: 0; }
+    label.option { display: block; padding: 7px 0; }
+    select { box-sizing: border-box; width: 100%; padding: 10px 12px; border-radius: 8px;
+             border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; }
+    #append-options { margin: 8px 0 14px 24px; }
+    #status { margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+              background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Apple Notes</h1>
+  <p class="hint">Sign into your Apple account to connect with Apple Notes. This plugin is open
+    source and connects directly to iCloud servers.</p>
+
+  <h2>Account</h2>
+  <p id="account" class="hidden"></p>
+  <div id="connectRow" class="row">
+    <button id="apple-sign-in">Sign in with Apple/iCloud</button>
+  </div>
+
+  <section id="destination" class="hidden">
+    <h2>How incoming notes save</h2>
+    <fieldset>
+      <label class="option"><input type="radio" name="destination-mode" value="create" checked>
+        Create a new Apple Note each time</label>
+      <label class="option"><input type="radio" name="destination-mode" value="append">
+        Append to one existing Apple Note</label>
+    </fieldset>
+    <div id="append-options" class="hidden">
+      <p class="hint">Choose from your 10 most recently modified notes.</p>
+      <select id="target-note"><option value="">Loading recent notes…</option></select>
+      <p><strong>Place incoming text</strong></p>
+      <label class="option"><input type="radio" name="placement" value="bottom" checked>
+        At the bottom</label>
+      <label class="option"><input type="radio" name="placement" value="top">
+        At the top</label>
+    </div>
+    <div class="row"><button id="save-destination" class="secondary">Save destination</button></div>
+  </section>
+
+  <div id="status">Starting the Apple Notes plugin…</div>
+  <button id="disconnect" class="secondary hidden">Disconnect</button>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var signInPending = false;
+  var notesPending = false;
+  var destinationState = { mode: 'create', recordName: null, title: null, placement: 'bottom' };
+  function send(message) { return Pebble.sendMessage('plugin', message); }
+  function say(text) { $('status').textContent = text; }
+  function setSignInPending(pending) {
+    signInPending = pending;
+    $('apple-sign-in').disabled = pending;
+  }
+  function showConfigured(configured, result) {
+    $('account').textContent = configured && result ? 'Connected as ' + accountLabel(result) + '.' : '';
+    $('account').className = configured && result ? '' : 'hidden';
+    $('connectRow').className = configured ? 'row hidden' : 'row';
+    $('disconnect').className = configured ? 'secondary' : 'secondary hidden';
+    $('destination').className = configured ? '' : 'hidden';
+  }
+  function accountLabel(result) {
+    return result.fullName ? result.fullName + ' (' + result.appleId + ')' : result.appleId;
+  }
+
+  function checkedValue(name) {
+    var selected = document.querySelector('input[name="' + name + '"]:checked');
+    return selected ? selected.value : '';
+  }
+
+  function setChecked(name, value) {
+    var inputs = document.querySelectorAll('input[name="' + name + '"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].checked = inputs[i].value === value;
+  }
+
+  function usesNote(mode) { return mode === 'append'; }
+  function showNoteOptions(mode) {
+    $('append-options').className = usesNote(mode) ? '' : 'hidden';
+  }
+
+  function showDestination(destination) {
+    destinationState = destination || destinationState;
+    setChecked('destination-mode', destinationState.mode);
+    setChecked('placement', destinationState.placement === 'top' ? 'top' : 'bottom');
+    showNoteOptions(destinationState.mode);
+  }
+
+  function renderNotes(notes, destination) {
+    var select = $('target-note');
+    select.textContent = '';
+    var foundSelected = false;
+    (notes || []).forEach(function (note) {
+      var option = document.createElement('option');
+      option.value = note.recordName;
+      option.textContent = note.title;
+      option.dataset.title = note.title;
+      if (destination && note.recordName === destination.recordName) foundSelected = true;
+      select.appendChild(option);
+    });
+    if (destination && usesNote(destination.mode) && destination.recordName && !foundSelected) {
+      var selected = document.createElement('option');
+      selected.value = destination.recordName;
+      selected.textContent = destination.title + ' (currently selected)';
+      selected.dataset.title = destination.title;
+      select.insertBefore(selected, select.firstChild);
+    }
+    if (!select.options.length) {
+      var empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = 'No editable notes found';
+      select.appendChild(empty);
+    }
+    if (destination && destination.recordName) select.value = destination.recordName;
+  }
+
+  async function refreshNotes() {
+    if (notesPending) return;
+    notesPending = true;
+    $('target-note').disabled = true;
+    try {
+      say('Loading your 10 most recent Apple Notes…');
+      var result = await send({ type: 'listNotes' });
+      if (result.error) {
+        say(result.error);
+        return;
+      }
+      destinationState = result.destination || destinationState;
+      renderNotes(result.notes, destinationState);
+      say('Choose a destination note and whether new text goes at the top or bottom.');
+    } finally {
+      notesPending = false;
+      $('target-note').disabled = false;
+    }
+  }
+
+  async function refresh() {
+    var result = await send({ type: 'status' });
+    showConfigured(result.configured, result);
+    if (!result.configured) {
+      say('Sign in with Apple/iCloud to connect.');
+      return;
+    }
+    showDestination(result.destination);
+    if (result.destination && usesNote(result.destination.mode)) await refreshNotes();
+    say(result.ready ? 'Connected as ' + accountLabel(result) + '.' : 'Session saved but Apple Notes is not ready.');
+  }
+
+  async function saveSession(sessionJson) {
+    say('Verifying the iCloud session with Apple…');
+    var result = await send({ type: 'setSession', sessionJson: sessionJson });
+    if (result.error) {
+      say(result.error);
+      return false;
+    }
+    showConfigured(true, result);
+    showDestination(result.destination);
+    if (result.destination && usesNote(result.destination.mode)) await refreshNotes();
+    say('Connected as ' + accountLabel(result) + '. New notes will go to Apple Notes.');
+    return true;
+  }
+
+  // The settings page isn't a secure context, so crypto.randomUUID is missing.
+  function randomUuid() {
+    var b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) { return (x + 0x100).toString(16).slice(1); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+
+  // The cookies iCloud's Notes web app holds once Notes has loaded, minus per-account-named ones.
+  var ICLOUD_AUTH_COOKIES = [
+    'X-APPLE-WEBAUTH-USER', 'X-APPLE-WEBAUTH-TOKEN', 'X-APPLE-DS-WEB-SESSION-TOKEN',
+    'X-APPLE-WEBAUTH-PCS-Notes', 'X-APPLE-WEBAUTH-PCS-Cloudkit',
+    'X-APPLE-WEBAUTH-LOGIN', 'X-APPLE-WEBAUTH-VALIDATE', 'X-APPLE-WEB-ID',
+  ];
+
+  $('apple-sign-in').onclick = async function () {
+    if (signInPending) return;
+    if (typeof Pebble.webSignIn !== 'function') {
+      say('Apple/iCloud sign-in is unavailable in this CoreApp build.');
+      return;
+    }
+    setSignInPending(true);
+    try {
+      say('Opening Apple/iCloud sign-in…');
+      var cookies;
+      try {
+        cookies = await Pebble.webSignIn({
+          url: 'https://www.icloud.com/notes/',
+          cookies: ICLOUD_AUTH_COOKIES,
+          domain: 'icloud.com',
+        });
+      } catch (error) {
+        say('Apple/iCloud sign-in could not start: ' + (error && error.message ? error.message : String(error)));
+        return;
+      }
+      if (!cookies) {
+        say('Apple/iCloud sign-in was cancelled.');
+        return;
+      }
+      var captured = {
+        session: {
+          cookie: ICLOUD_AUTH_COOKIES.map(function (name) { return name + '=' + cookies[name]; }).join('; '),
+          clientId: randomUuid().toUpperCase(),
+          capturedAt: new Date().toISOString(),
+        },
+      };
+      var sessionJson;
+      try {
+        sessionJson = JSON.stringify(captured.session);
+      } catch (error) {
+        say('Apple/iCloud returned a session that could not be saved.');
+        return;
+      }
+      await saveSession(sessionJson);
+    } catch (error) {
+      say('Apple/iCloud sign-in failed: ' + (error && error.message ? error.message : String(error)));
+    } finally {
+      setSignInPending(false);
+    }
+  };
+
+  var destinationModes = document.querySelectorAll('input[name="destination-mode"]');
+  for (var i = 0; i < destinationModes.length; i++) {
+    destinationModes[i].onchange = function () {
+      var mode = checkedValue('destination-mode');
+      showNoteOptions(mode);
+      if (usesNote(mode)) refreshNotes();
+    };
+  }
+
+  $('save-destination').onclick = async function () {
+    var mode = checkedValue('destination-mode');
+    var message = { type: 'setDestination', mode: mode };
+    if (usesNote(mode)) {
+      var selected = $('target-note').options[$('target-note').selectedIndex];
+      if (!selected || !selected.value) {
+        say('Choose an existing Apple Note first.');
+        return;
+      }
+      message.recordName = selected.value;
+      message.title = selected.dataset.title || selected.textContent;
+      message.placement = checkedValue('placement');
+    }
+    var result = await send(message);
+    if (result.error) {
+      say(result.error);
+      return;
+    }
+    showDestination(result.destination);
+    say(result.destination.mode === 'append' ?
+      'Incoming notes will be added to the ' + result.destination.placement + ' of “' + result.destination.title + '”.' :
+      'Each incoming item will create a new Apple Note.');
+  };
+
+  $('disconnect').onclick = async function () {
+    await send({ type: 'disconnect' });
+    showConfigured(false);
+    showDestination({ mode: 'create', recordName: null, title: null, placement: 'bottom' });
+    say('Disconnected and removed the stored iCloud session.');
+  };
+
+  Pebble.addEventListener('ready', function (event) {
+    if (event.target !== 'plugin') return;
+    refresh();
+  });
+</script>
+</body>
+</html>

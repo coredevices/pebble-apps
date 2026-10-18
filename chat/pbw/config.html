@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chat</title>
+<style>
+:root{color-scheme:light dark;font:16px -apple-system,system-ui,sans-serif;--bg:#f6f6f8;--card:#fff;--text:#202124;--muted:#676872;--line:#e3e3e9;--accent:#155cbe;--soft:#edf2fa;--danger:#b3261e;--avatar:#e7edf6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);padding:20px 18px 40px}main{max-width:680px;margin:auto}
+h1{font-size:29px;letter-spacing:-.6px;margin:10px 0}h2{font-size:20px;margin:0 0 14px}h3{font-size:17px;margin:0 0 8px}p{line-height:1.5;margin:10px 0}.subtle{color:var(--muted);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);padding:18px;border-radius:16px;margin:18px 0}.row{border-bottom:1px solid var(--line);padding:16px 0}.row:last-child{border-bottom:0}.row strong{overflow-wrap:anywhere}
+input,textarea,select,button{font:inherit}input:not([type=checkbox]),textarea,select{display:block;width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:inherit;margin:6px 0 14px}textarea{min-height:90px;resize:vertical}label{display:block;font-size:14px;font-weight:600}
+button{cursor:pointer;border:0;border-radius:10px;padding:12px 16px;background:var(--accent);color:#fff;font-weight:600;min-height:44px;margin:6px 6px 0 0}.secondary{background:var(--soft);color:var(--accent)}.danger{background:#ffedeb;color:var(--danger)}.link{padding:8px 0;background:none;color:var(--accent)}button:disabled{opacity:.5;cursor:default}.wide{width:100%}
+#notice{padding:14px;background:var(--soft);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere}#notice:empty{display:none}.empty{padding:12px 0;color:var(--muted)}
+.connection-actions{margin-top:12px}.search-summary{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.search-summary button{font-size:13px;flex-shrink:0;margin:0}
+.emoji{font-size:29px;line-height:1.8;letter-spacing:6px}
+details{margin:12px 0}summary{cursor:pointer;color:var(--accent);min-height:34px}fieldset{border:0;padding:0;margin:10px 0}legend{font-size:14px;font-weight:600;margin-bottom:8px}hr{border:0;border-top:1px solid var(--line);margin:22px 0 10px}
+[hidden]{display:none!important}:focus-visible{outline:3px solid #448fea;outline-offset:3px}
+.account-row{display:flex;align-items:center;justify-content:space-between;width:100%;margin:0;padding:14px 0;background:none;color:var(--text);text-align:left;border-radius:0;border-bottom:1px solid var(--line);font-weight:400}.account-row:last-child{border-bottom:0}.account-row strong{display:block}.account-row .subtle{display:block;margin-top:5px}.chevron{font-size:25px;color:var(--muted)}
+.chat-identity{display:flex;gap:12px;align-items:flex-start;min-width:0;flex:1}.avatar{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:42px;height:42px;border-radius:50%;background:var(--avatar);color:var(--accent);font-size:15px;font-weight:600;letter-spacing:.2px;user-select:none}.chat-copy{display:block;min-width:0;flex:1;overflow-wrap:anywhere}.chat-name{display:block;line-height:1.35;overflow-wrap:anywhere;font-size:16px}.chat-original-name{display:block;font-size:14px;color:var(--muted);line-height:1.45;margin-top:2px}.chat-address{display:block;font-size:14px;color:var(--muted);line-height:1.45;margin-top:3px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.badges{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 0}.badge{font-size:12px;font-weight:500;border-radius:5px;padding:3px 7px;background:var(--soft);color:var(--muted)}
+.chat-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 0}.chat-row .avatar{width:36px;height:36px;font-size:13px}.chat-row .link{flex-shrink:0;min-width:44px;font-size:14px;margin:0}#approved:empty{display:none}#chat-content>.chat-identity{margin:0 0 24px}#chat-content .chat-name{font-size:20px}
+.picker-hint{font-size:14px;color:var(--muted);margin:4px 0 16px}.picker-tools{position:sticky;top:0;z-index:2;padding:10px 0 12px;background:var(--bg)}#search-form label{margin:0 0 8px;font-size:13px;color:var(--muted)}.search-control{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:0 4px 0 14px;box-shadow:0 1px 2px #00000004}.search-control:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--soft)}.search-control>svg{width:20px;height:20px;flex-shrink:0;color:var(--muted)}#query{border:0;background:none;margin:0;padding:14px 0;min-width:0;border-radius:0;flex:1;outline:0}#query::-webkit-search-cancel-button{display:none}.search-clear{flex-shrink:0;min-width:44px;margin:0;padding:6px;background:none;color:var(--muted);font-size:24px;font-weight:400}
+#connection-filters{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}#connection-filters legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.filter-chip{display:flex;align-items:center;gap:7px;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:22px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;background:var(--card)}.filter-chip:has(input:checked){border-color:var(--accent);color:var(--accent);background:var(--soft)}.filter-chip input{accent-color:var(--accent);width:16px;height:16px;margin:0;flex-shrink:0}
+#search-status{font-size:13px;margin:4px 2px 12px;white-space:pre-line}#results{display:grid;gap:10px}.result-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}.result-card.is-approved{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}.result-activity,.result-reason{font-size:12px;color:var(--muted);margin:7px 0 0 54px}.result-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin:10px 0 0 54px}.result-actions button{margin:0;font-size:14px;min-height:40px;padding:9px 14px}.result-actions .remove-approval{padding:9px 0}.approval-status{font-size:13px;color:var(--accent);margin-right:auto;font-weight:600}#more{margin-top:14px}#contact-access{margin:10px 0;font-size:14px}#contact-access:empty{display:none}#manual-recipient{margin-top:24px}#manual-recipient summary{font-size:15px;font-weight:600}#manual-recipient details{margin:0}#manual-recipient form{margin-top:10px}
+.pairing-code{display:block;font-size:28px;letter-spacing:3px;text-align:center;padding:16px;background:var(--soft);border-radius:10px}.card img{max-width:100%;height:auto;border-radius:8px}
+@media(prefers-color-scheme:dark){:root{--bg:#161618;--card:#232326;--text:#f3f3f6;--muted:#b5b5be;--line:#3c3c43;--accent:#9dc4ff;--soft:#2d3748;--danger:#ffb4ab;--avatar:#303c50}button{background:#155cbe;color:#fff}.secondary{background:var(--soft);color:var(--accent)}.danger{background:#462827}.link{background:none;color:var(--accent)}.account-row{background:none;color:var(--text)}.search-clear{background:none;color:var(--muted)}}
+.setup-progress{display:flex;align-items:center;gap:12px;margin-top:18px;padding:16px;background:var(--soft);border-radius:12px}.setup-progress p{margin:4px 0 0;font-size:14px}.setup-spinner{width:22px;height:22px;flex-shrink:0;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:setup-spin 1s linear infinite}@keyframes setup-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.setup-spinner{animation:none}}
+</style></head><body><main>
+<div id="notice" role="status" aria-live="polite"></div>
+<section id="home"><h1>Chat</h1>
+<section class="card"><h2>Accounts</h2><div id="connections"><p class="subtle">Loading…</p></div></section>
+<section class="card"><h2>Approved Chats</h2><p class="subtle">Only these chats can be messaged</p><button id="add-chats" class="wide">Add chats</button><p id="approved-count" hidden></p><div id="approved"></div></section></section>
+<section id="connection-page" hidden><button id="connection-back" class="link">← Chat</button><h1 id="connection-title"></h1><div id="connection-content"></div></section>
+<section id="picker-page" hidden><button id="picker-back" class="link">Done</button><h1>Add chats</h1><p class="picker-hint">Choose who Pebble can message.</p>
+<div class="picker-tools"><form id="search-form"><label for="query">Search chats</label><div class="search-control"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="query" type="search" placeholder="Name or phone number" autocomplete="off" enterkeyhint="search"><button id="clear-search" class="search-clear" type="button" aria-label="Clear search" hidden>×</button></div><button type="submit" hidden>Search</button></form><fieldset id="connection-filters"><legend>Search in</legend></fieldset></div>
+<div class="search-summary"><p id="search-status" class="subtle" role="status"></p><button id="refresh-chats" class="link" hidden>Refresh chats</button></div><div id="results"></div><button id="more" class="secondary wide" hidden>Load more</button><div id="contact-access"></div>
+<section class="card" id="manual-recipient" hidden><details open><summary>Add Manually</summary><form id="manual-form"><label for="manual-account">Account</label><select id="manual-account"></select><label for="manual-name">Name</label><input id="manual-name" maxlength="64" required><label id="manual-address-label" for="manual-address">Phone number or email</label><input id="manual-address" placeholder="+14155550123 or name@example.com" required><button type="submit">Add chat</button></form></details></section></section>
+<section id="chat-page" hidden><button id="chat-back" class="link">← Chat</button><h1 id="chat-title"></h1><div id="chat-content" class="card"></div></section></main><script>"use strict";
+(() => {
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __commonJS = (cb, mod) => function __require() {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  };
+
+  // src/settings/chat-display.js
+  var require_chat_display = __commonJS({
+    "src/settings/chat-display.js"(exports, module) {
+      "use strict";
+      function chatAddress(chat) {
+        if (chat.is_group || chat.isGroup) return "";
+        const room = chat.room_id || chat.roomId || "";
+        const recipient = (chat.members || []).find((member) => member.user_id === chat.recipient);
+        const candidates = [
+          chat.phone,
+          room.startsWith("tel:") ? room : "",
+          /^\d+@s\.whatsapp\.net$/.test(room) ? "+" + room.split("@")[0] : "",
+          ...chat.aliases || [],
+          ...recipient?.identifiers || []
+        ];
+        for (const value of candidates) {
+          const number = String(value || "").replace(/^tel:/, "").replace(/[\s().-]/g, "");
+          if (/^\+[1-9]\d{6,14}$/.test(number)) return number;
+        }
+        return room.startsWith("mailto:") ? room.slice(7) : "";
+      }
+      function displayAddress(address) {
+        return /^\+1\d{10}$/.test(address) ? address.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3") : address;
+      }
+      function chatPresentation(chat) {
+        const address = chatAddress(chat);
+        const name = String(chat.name || "").trim();
+        const nickname = String(chat.nickname || "").trim();
+        const title = nickname || name || displayAddress(address) || "Unnamed chat";
+        const originalName = nickname && name && nickname !== name ? name : "";
+        const initials = (name || nickname).split(/\s+/).filter(Boolean).slice(0, 2).map((word) => Array.from(word)[0]).join("").toLocaleUpperCase();
+        return { title, originalName, address: displayAddress(address), initials: /\p{L}/u.test(initials) ? initials : "", group: !!(chat.is_group || chat.isGroup) };
+      }
+      module.exports = { chatAddress, displayAddress, chatPresentation };
+    }
+  });
+
+  // src/settings/dom.js
+  var require_dom = __commonJS({
+    "src/settings/dom.js"(exports, module) {
+      "use strict";
+      var { chatPresentation } = require_chat_display();
+      function node2(tag, text, className) {
+        const element = document.createElement(tag);
+        if (text != null) element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      }
+      function button2(text, action, kind = "secondary") {
+        const element = node2("button", text, kind);
+        element.type = "button";
+        element.onclick = () => action(element);
+        return element;
+      }
+      function input2(parent, label, options = {}) {
+        const id = options.id || label.toLowerCase().replace(/\W+/g, "-");
+        const caption = node2("label", label);
+        caption.htmlFor = id;
+        const { multiline = false, type = "text", ...attributes } = options;
+        const element = node2(multiline ? "textarea" : "input");
+        Object.assign(element, { id, autocomplete: "off", ...attributes });
+        if (!multiline) element.type = type;
+        parent.append(caption, element);
+        return element;
+      }
+      function activityLabel2(value) {
+        if (!value) return "";
+        const date = new Date(Number(value) < 1e12 ? Number(value) * 1e3 : Number(value));
+        if (!Number.isFinite(date.getTime())) return "";
+        const today = /* @__PURE__ */ new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        if (date.toDateString() === today.toDateString()) return "Today, " + time;
+        if (date.toDateString() === yesterday.toDateString()) return "Yesterday, " + time;
+        return date.toLocaleDateString([], { month: "short", day: "numeric", ...date.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {} }) + ", " + time;
+      }
+      function badges(connection, network, group = false) {
+        const row = node2("div", null, "badges");
+        row.append(node2("span", [...new Set([group ? "Group" : "", network, connection].filter(Boolean))].join(" · "), "badge"));
+        return row;
+      }
+      function chatIdentity2(chat) {
+        const display = chatPresentation(chat);
+        const identity = node2("div", null, "chat-identity");
+        const avatar = node2("span", display.initials || (display.group ? "#" : "•"), "avatar");
+        avatar.setAttribute("aria-hidden", "true");
+        const details = node2("div", null, "chat-copy");
+        details.append(node2("strong", display.title, "chat-name"));
+        if (display.originalName) details.append(node2("span", display.originalName, "chat-original-name"));
+        if (display.address) details.append(node2("span", display.address, "chat-address"));
+        details.append(badges(chat.connection_name, chat.network || chat.bridge_id, display.group));
+        identity.append(avatar, details);
+        return identity;
+      }
+      module.exports = { node: node2, button: button2, input: input2, activityLabel: activityLabel2, badges, chatIdentity: chatIdentity2 };
+    }
+  });
+
+  // src/settings/direct.js
+  var require_direct = __commonJS({
+    "src/settings/direct.js"(exports, module) {
+      "use strict";
+      var { node: node2, input: input2 } = require_dom();
+      function renderDirectSetup(connection, state, { card, act: act2, invoke, reload, notice: notice2, actions }) {
+        if (state.ready) return;
+        const setup = card();
+        const phase = state.login_phase;
+        if (state.needs_reconnect && !phase) {
+          setup.append(node2("p", "WhatsApp disconnected Pebble. Link it again to send messages.", "subtle"));
+          setup.append(act2("Reconnect WhatsApp", async () => {
+            setup.replaceChildren();
+            renderDirectSetup(
+              connection,
+              { ...state, needs_reconnect: false, login_error: "" },
+              { card: () => setup, act: act2, invoke, reload, notice: notice2, actions }
+            );
+          }, "wide"));
+          return;
+        }
+        if (state.login_error) setup.append(node2("p", state.login_error, "subtle"));
+        if (connection.id === "whatsapp" && phase === "pairing") {
+          const view = node2("div");
+          setup.append(view);
+          actions.showLogin = (value) => {
+            view.replaceChildren();
+            if (value.pairing_code) {
+              view.append(node2("p", "In WhatsApp, open Settings → Linked devices → Link a device → Link with phone number. Enter this code:", "subtle"));
+              view.append(node2("strong", value.pairing_code, "pairing-code"));
+            } else if (value.qr_image) {
+              view.append(node2("p", "In WhatsApp, open Settings → Linked devices → Link a device, then scan this code.", "subtle"));
+              const image = node2("img");
+              image.src = value.qr_image;
+              image.alt = "WhatsApp linking code";
+              image.width = 256;
+              image.height = 256;
+              view.append(image);
+            }
+          };
+          actions.showLogin(state);
+          setup.append(act2("Cancel", async () => {
+            await invoke("login.cancel");
+            await reload();
+          }));
+          return;
+        }
+        if (connection.id === "telegram" && ["code", "password"].includes(phase)) {
+          const password = phase === "password";
+          setup.append(node2("p", password ? "Enter your Telegram two-step verification password." : "Enter the code Telegram sent to you.", "subtle"));
+          const value = input2(setup, password ? "Password" : "Sign-in code", { type: password ? "password" : "text", autocomplete: password ? "current-password" : "one-time-code", inputMode: password ? "text" : "numeric" });
+          setup.append(act2("Continue", async () => {
+            let result;
+            try {
+              result = await invoke("login.finish", { [password ? "password" : "code"]: value.value });
+            } finally {
+              value.value = "";
+            }
+            if (result.ready) {
+              notice2("Updating your chat list…");
+              try {
+                await invoke("directory.start");
+              } finally {
+                await reload({ startDirectory: false });
+              }
+              notice2("Connected. Your chat list is up to date.");
+            } else await reload();
+          }), act2("Cancel", async () => {
+            await invoke("login.cancel");
+            await reload();
+          }));
+          return;
+        }
+        const phone = input2(setup, "Your phone number", { type: "tel", autocomplete: "tel", placeholder: "+1 415 555 0123" });
+        const start = async (useQR) => {
+          await invoke("login.start", { phone: useQR ? "" : phone.value.trim() });
+          await reload();
+        };
+        setup.append(act2(connection.id === "whatsapp" ? "Get linking code" : "Send sign-in code", () => start(false), "wide"));
+        if (connection.id === "whatsapp") setup.append(act2("Use a QR code instead", () => start(true), "link"));
+      }
+      module.exports = { renderDirectSetup };
+    }
+  });
+
+  // src/settings/mac-key.js
+  var require_mac_key = __commonJS({
+    "src/settings/mac-key.js"(exports, module) {
+      "use strict";
+      var { node: node2, input: input2 } = require_dom();
+      function renderMacKeyPicker(parent, state, { invoke }) {
+        const status = node2("p", "Looking for your saved Mac…", "subtle");
+        const choices = node2("div");
+        const advanced = node2("details");
+        advanced.append(node2("summary", "Advanced"));
+        const manual = input2(advanced, "Mac setup key", { multiline: true, spellcheck: false, placeholder: "Paste a different setup key" });
+        parent.append(status, choices, advanced);
+        let selected = null, error = "", pending;
+        const select = async (account, key) => {
+          selected = null;
+          status.textContent = "Loading your Mac key…";
+          const result = await invoke("imessage.selectActivationKey", { pebble_account: account, key_id: key.id });
+          if (!result.loaded) throw Error("Your Mac key could not be loaded. Try again.");
+          selected = { pebble_account: account, key_id: key.id };
+          const date = new Date(key.created_at);
+          status.textContent = "✓ " + key.computer_name + " · Key ready" + (Number.isFinite(date.getTime()) ? " · Saved " + date.toLocaleDateString([], { month: "short", day: "numeric" }) : "");
+        };
+        const attempt = (operation) => {
+          pending = operation().catch((failure) => {
+            selected = null;
+            error = String(failure.message || failure);
+            status.textContent = error;
+          });
+          return pending;
+        };
+        const refresh = () => attempt(async () => {
+          error = "";
+          selected = null;
+          choices.replaceChildren();
+          status.textContent = "Looking for your saved Mac…";
+          const result = await invoke("imessage.activationKeys");
+          if (!result.signed_in) {
+            status.textContent = "Sign in to your Pebble account in app Settings to find your saved Mac.";
+            return;
+          }
+          if (!result.keys.length) {
+            status.textContent = "Open Pebble on your Mac, sign in with the same Pebble account, and turn on “Set up iMessage” in Settings. Then reopen iMessage setup here.";
+            if (state.saved_sign_in) status.textContent += " You can also reuse the key already saved on this phone.";
+            return;
+          }
+          if (result.keys.length === 1) {
+            await select(result.account, result.keys[0]);
+            return;
+          }
+          status.textContent = "Choose a Mac for iMessage.";
+          const label = node2("label", "Saved Mac");
+          label.htmlFor = "saved-mac";
+          const picker = node2("select");
+          picker.id = "saved-mac";
+          const prompt = node2("option", "Choose a Mac");
+          prompt.value = "";
+          picker.append(prompt);
+          for (const key of result.keys) {
+            const date = new Date(key.created_at);
+            const option = node2("option", key.computer_name + (Number.isFinite(date.getTime()) ? " · " + date.toLocaleDateString() : ""));
+            option.value = key.id;
+            picker.append(option);
+          }
+          picker.onchange = () => attempt(async () => {
+            error = "";
+            selected = null;
+            const key = result.keys.find((key2) => key2.id === picker.value);
+            if (key) await select(result.account, key);
+          });
+          choices.append(label, picker);
+        });
+        refresh();
+        return {
+          async args() {
+            await pending;
+            if (manual.value.trim()) return { macValidationData: manual.value.trim() };
+            if (selected) return selected;
+            if (state.saved_sign_in) return {};
+            throw Error(error || "Choose a saved Mac or enter a setup key in Advanced.");
+          },
+          clear() {
+            manual.value = "";
+          }
+        };
+      }
+      module.exports = { renderMacKeyPicker };
+    }
+  });
+
+  // src/settings/connections.js
+  var require_connections = __commonJS({
+    "src/settings/connections.js"(exports, module) {
+      "use strict";
+      var { node: node2, button: button2, input: input2 } = require_dom();
+      var { renderDirectSetup } = require_direct();
+      var { renderMacKeyPicker } = require_mac_key();
+      async function withSetupProgress(parent, message, operation) {
+        const controls = Array.from(parent.querySelectorAll("button, input, select"));
+        const disabled = controls.map((control) => control.disabled);
+        controls.forEach((control) => {
+          control.disabled = true;
+        });
+        const progress = node2("div", null, "setup-progress");
+        progress.setAttribute("role", "status");
+        progress.setAttribute("aria-live", "polite");
+        const spinner = node2("span", null, "setup-spinner");
+        spinner.setAttribute("aria-hidden", "true");
+        const text = node2("div");
+        text.append(node2("strong", message), node2("p", "This may take a minute. Keep Pebble open.", "subtle"));
+        progress.append(spinner, text);
+        parent.append(progress);
+        parent.setAttribute("aria-busy", "true");
+        try {
+          return await operation();
+        } finally {
+          progress.remove();
+          parent.setAttribute("aria-busy", "false");
+          controls.forEach((control, index) => {
+            control.disabled = disabled[index];
+          });
+        }
+      }
+      function renderConnection2(parent, connection, state, actions) {
+        parent.replaceChildren();
+        const { run: run2, call: call2, reload, permission: permission2, notice: notice2 } = actions;
+        const invoke = (method, args) => call2(method, { ...args, connection: connection.id });
+        const act2 = (label, fn, kind) => button2(label, (target) => run2(target, fn), kind);
+        const card = (title) => {
+          const element = node2("section", null, "card");
+          if (title) element.append(node2("h2", title));
+          parent.append(element);
+          return element;
+        };
+        if (!connection.enabled && !state.connected) {
+          parent.append(act2("Connect " + connection.name, async () => {
+            await call2("connections.enable", { connection: connection.id });
+            await reload();
+          }, "wide"));
+          return;
+        }
+        if (connection.id === "sms-android" && !state.ready && connection.enabled) {
+          parent.append(act2("Connect SMS", async () => {
+            await permission2("sms");
+            await reload();
+          }, "wide"));
+          return;
+        }
+        if (["whatsapp", "telegram"].includes(connection.id) && !state.connected) {
+          renderDirectSetup(connection, state, { card, act: act2, reload, notice: notice2, actions, invoke: async (method, args) => {
+            if (!connection.enabled) await call2("connections.enable", { connection: connection.id });
+            return invoke(method, args);
+          } });
+          return;
+        }
+        const summary = card();
+        summary.append(node2("strong", !connection.enabled ? "Paused" : state.ready ? "Connected" : state.connected ? "Finish setup" : "Not connected"));
+        const account = state.account_label || state.saved_sign_in?.apple_id || state.account;
+        if (connection.id !== "sms-android" && account && account !== "beeper-android") summary.append(node2("p", account, "subtle"));
+        if (state.connection_warning) summary.append(node2("p", state.connection_warning, "subtle"));
+        if (state.sync_progress?.error) summary.append(node2("p", state.sync_progress.error, "subtle"));
+        if (state.connected && !state.directory_complete && connection.id === "beeper-ios") summary.append(node2("p", "Updating your chat list…", "subtle"));
+        if (connection.enabled && connection.id === "beeper-android") {
+          if (!state.ready) {
+            const setup = card("Connect Beeper");
+            setup.append(node2("p", state.installed ? "Allow Pebble to read your Beeper chat list and send messages to the chats you choose." : "Install the Beeper Android app and sign in, then return here.", "subtle"));
+            if (state.installed) setup.append(act2("Allow Beeper access", async () => {
+              await permission2("beeper");
+              await reload();
+            }));
+            const help = node2("details");
+            help.append(node2("summary", "Permission help"));
+            help.append(node2("p", "On your home screen, press and hold Pebble, tap ⓘ App info, then Permissions → Additional permissions. Allow access to Beeper. If access is still unavailable, open Beeper and sign in. You can also check Beeper’s App info → Permissions.", "subtle"));
+            setup.append(help, act2("Check again", reload));
+          }
+        } else if (connection.enabled && connection.id === "beeper-ios") {
+          if (!state.connected) {
+            const setup = card("Sign in to Beeper");
+            const email = input2(setup, "Beeper email", { type: "email", autocomplete: "email" });
+            const codeForm = node2("div");
+            codeForm.hidden = true;
+            const code = input2(codeForm, "Code from your email", { autocomplete: "one-time-code" });
+            let flow = "";
+            setup.append(act2("Send sign-in code", async () => {
+              const result = await invoke("login.start", { email: email.value.trim() });
+              flow = result.flow;
+              codeForm.hidden = false;
+              code.focus();
+              notice2(result.status || "Check your email.");
+            }));
+            codeForm.append(act2("Sign in", async () => {
+              try {
+                await invoke("login.finish", { flow, code: code.value.trim() });
+              } finally {
+                code.value = "";
+              }
+              await invoke("directory.start");
+              await reload();
+            }), act2("Cancel sign-in", async () => {
+              await invoke("login.cancel");
+              code.value = "";
+              codeForm.hidden = true;
+            }));
+            setup.append(codeForm);
+          } else if (!state.verified) {
+            const verify = card("Verify this device");
+            verify.append(node2("p", "Open Beeper on another device and compare the emojis.", "subtle"));
+            const view = node2("div");
+            verify.append(view);
+            actions.verificationView = view;
+            actions.showVerification = (value) => renderVerification(view, value, { invoke, act: act2, reload });
+            verify.append(act2("Verify with emojis", async () => actions.showVerification(await invoke("verification.start", { method: "sas" }))));
+          }
+        } else if (connection.enabled && connection.id === "imessage") {
+          if (state.imessage_phase === "needsTwoFactor") {
+            const verify = card("Apple verification");
+            const code = input2(verify, "Six-digit verification code", { inputMode: "numeric", autocomplete: "one-time-code", maxLength: 6 });
+            const submit = act2("Verify code", async () => {
+              try {
+                await withSetupProgress(verify, "Finishing iMessage setup…", () => invoke("imessage.submitTwoFactorCode", { code: code.value.trim() }));
+              } finally {
+                code.value = "";
+                await reload();
+              }
+            });
+            submit.disabled = !state.can_submit_two_factor;
+            verify.append(submit);
+            if (!state.can_submit_two_factor) verify.append(node2("p", "This sign-in expired. Start again.", "subtle"));
+            verify.append(act2(state.can_submit_two_factor ? "Cancel sign-in" : "Start again", async () => {
+              await invoke("imessage.disconnect", { account: state.account });
+              await reload();
+            }));
+          } else if (!state.ready) {
+            const setup = card("Sign in to iMessage");
+            const macKey = renderMacKeyPicker(setup, state, { invoke, act: act2 });
+            const email = input2(setup, "Apple Account email", { type: "email", autocomplete: "username", value: state.saved_sign_in?.apple_id || "" });
+            const password = input2(setup, "Apple Account password", { type: "password", autocomplete: "current-password", placeholder: state.saved_sign_in ? "Saved securely · leave blank to reuse" : "" });
+            setup.append(act2("Sign in", async () => {
+              notice2("Signing in to Apple…");
+              try {
+                await withSetupProgress(setup, "Signing in to iMessage…", async () => invoke("imessage.configure", { ...await macKey.args(), appleId: email.value.trim(), password: password.value }));
+              } finally {
+                macKey.clear();
+                password.value = "";
+                await reload();
+              }
+            }));
+          } else {
+            renderMacKeyPicker(card("Mac setup key"), state, { invoke, act: act2 });
+            const settings = card("Send messages");
+            const label = node2("label", "Send from");
+            label.htmlFor = "sender";
+            const sender = node2("select");
+            sender.id = "sender";
+            (state.handles || []).forEach((handle) => {
+              const option = node2("option", handle.replace(/^(tel:|mailto:)/, ""));
+              option.value = handle;
+              sender.append(option);
+            });
+            sender.value = state.selected_sender || "";
+            settings.append(label, sender, act2("Save", async () => {
+              await invoke("imessage.selectSender", { sender: sender.value });
+              await reload();
+              notice2("Sending address saved.");
+            }));
+          }
+        }
+        if (connection.enabled && ["whatsapp", "telegram"].includes(connection.id)) renderDirectSetup(connection, state, { card, act: act2, invoke, reload, notice: notice2, actions });
+        if (!state.connected) return;
+        const manage = state.ready || !connection.enabled ? node2("div", null, "connection-actions") : card();
+        if (state.ready || !connection.enabled) summary.append(manage);
+        manage.append(act2(connection.enabled ? "Pause" : "Resume", async () => {
+          await call2(connection.enabled ? "connections.disable" : "connections.enable", { connection: connection.id });
+          await reload();
+        }));
+        const confirm = node2("div");
+        confirm.hidden = true;
+        confirm.append(node2("p", connection.id === "sms-android" ? "Disconnect SMS? Its approved chats will be removed from Pebble." : "Disconnect this account? Its chats and saved sign-in will be removed from Pebble."));
+        confirm.append(act2("Disconnect", async () => {
+          await call2("connections.delete", { connection: connection.id, account: state.account });
+          await actions.home();
+          notice2("Account disconnected.");
+        }, "danger"), act2("Cancel", async () => {
+          confirm.hidden = true;
+        }));
+        manage.append(act2("Disconnect…", async () => {
+          confirm.hidden = false;
+        }, "danger"), confirm);
+      }
+      function renderVerification(parent, value, { invoke, act: act2, reload }) {
+        parent.replaceChildren();
+        const messages = {
+          connecting: "Open Beeper on another device and accept the verification request.",
+          requested: "Accept the verification request in Beeper.",
+          ready: "Preparing emojis…",
+          sas: "Do these emojis match the ones in Beeper?",
+          waiting_other_device: "Confirm the match in Beeper too.",
+          secrets: "Finishing setup…",
+          complete: "Device verified.",
+          cancelled: "Verification cancelled.",
+          expired: "Verification expired. Start again."
+        };
+        parent.append(node2("p", value.error || messages[value.phase] || "Follow the verification prompt in Beeper."));
+        const args = { flow_id: value.flow_id || "", transaction_id: value.transaction_id || "" };
+        const next = (method) => async () => {
+          const result = await invoke(method, args);
+          renderVerification(parent, result, { invoke, act: act2, reload });
+          if (result.phase === "complete") await reload();
+        };
+        if (value.emojis?.length) parent.append(node2("p", value.emojis.join(" "), "emoji"), node2("p", (value.descriptions || []).join(" · "), "subtle"));
+        if (value.phase === "sas") parent.append(act2("They match", next("verification.confirm_sas")), act2("They don’t match", next("verification.mismatch"), "danger"));
+        if (value.phase === "secrets_error") parent.append(act2("Retry verification", next("verification.retry_secrets")));
+        if (!["idle", "complete", "cancelled", "expired", "error"].includes(value.phase)) parent.append(act2("Cancel verification", next("verification.cancel")));
+      }
+      module.exports = { withSetupProgress, renderConnection: renderConnection2 };
+    }
+  });
+
+  // ../imessage/src/imessage/recipient.js
+  var require_recipient = __commonJS({
+    "../imessage/src/imessage/recipient.js"(exports, module) {
+      "use strict";
+      function normalizeRecipient2(value) {
+        var original = typeof value === "string" ? value.trim() : "";
+        if (!original || original.length > 320 || /[,;]/.test(original)) return null;
+        var email = original.replace(/^mailto:/i, "").trim();
+        if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return "mailto:" + email;
+        var phone = original.replace(/^tel:/i, "").replace(/[\s().-]/g, "");
+        if (/^\+[1-9][0-9]{6,14}$/.test(phone)) return "tel:" + phone;
+        return null;
+      }
+      function preferredSender(handles) {
+        if (!Array.isArray(handles)) return null;
+        for (var index = 0; index < handles.length; index += 1) {
+          if (typeof handles[index] === "string" && handles[index].indexOf("tel:") === 0) {
+            return handles[index];
+          }
+        }
+        return handles.length > 0 && typeof handles[0] === "string" ? handles[0] : null;
+      }
+      module.exports = {
+        normalizeRecipient: normalizeRecipient2,
+        preferredSender
+      };
+    }
+  });
+
+  // src/chat-reference.js
+  var require_chat_reference = __commonJS({
+    "src/chat-reference.js"(exports, module) {
+      "use strict";
+      function chatId2(connection, account, room) {
+        return "chat:" + [connection, account, room].map(encodeURIComponent).join(":");
+      }
+      function parseChatId(value) {
+        if (typeof value !== "string" || !value.startsWith("chat:")) return null;
+        try {
+          const parts = value.slice(5).split(":").map(decodeURIComponent);
+          if (parts.length !== 3 || parts.some((part) => !part)) throw Error();
+          return { connection: parts[0], account: parts[1], room: parts[2] };
+        } catch (_) {
+          throw Error("Invalid chat reference. Choose the chat again.");
+        }
+      }
+      function compareChats(a, b) {
+        return Number(!!a.is_group) - Number(!!b.is_group) || (Number(b.last_activity) || 0) - (Number(a.last_activity) || 0) || String(a.name || "").localeCompare(String(b.name || "")) || a.chat_id.localeCompare(b.chat_id);
+      }
+      function approvedChat(connection, state, entry) {
+        return {
+          ...entry,
+          connection: connection.id,
+          connection_name: connection.name,
+          chat_id: chatId2(connection.id, state.account, entry.roomId)
+        };
+      }
+      function resolveChat(chats, recipient, exactId) {
+        if (exactId) {
+          const selected = chats.find((chat) => chat.chat_id === exactId);
+          if (!selected) throw Error("This chat is no longer allowed. Choose an allowed chat in Chat settings.");
+          if (recipient && recipient !== exactId) {
+            try {
+              resolveChat([selected], recipient);
+            } catch (_) {
+              throw Error("The recipient and chat reference do not match. Choose the chat again.");
+            }
+          }
+          return selected;
+        }
+        const query = String(recipient || "").trim().toLowerCase();
+        if (!query) throw Error("Choose an allowed chat.");
+        const values = (chat) => [chat.roomId, chat.name, chat.nickname, ...chat.aliases || []].filter(Boolean).map((value) => value.toLowerCase());
+        const phone = (value) => value.replace(/^tel:/, "").replace(/[\s().-]/g, "");
+        const exact = chats.filter((chat) => values(chat).some((value) => value === query || query.match(/^\+?[\d\s().-]+$/) && phone(value) === phone(query)));
+        const matches = exact.length ? exact : chats.filter((chat) => values(chat).some((value) => value.includes(query)));
+        if (!matches.length) throw Error("No allowed chat matches. Add it in Chat settings first.");
+        if (matches.length !== 1) throw Error("Several allowed chats match. Ask which chat to use: " + matches.map((chat) => (chat.nickname || chat.name) + " (" + chat.connection_name + ", " + chat.network + "; " + chat.chat_id + ")").join("; "));
+        return matches[0];
+      }
+      module.exports = { chatId: chatId2, parseChatId, compareChats, approvedChat, resolveChat };
+    }
+  });
+
+  // src/settings.js
+  var { node, button, input, activityLabel, chatIdentity } = require_dom();
+  var { renderConnection } = require_connections();
+  var { normalizeRecipient } = require_recipient();
+  var { chatId } = require_chat_reference();
+  var el = (id) => document.getElementById(id);
+  var overview = { connections: [], approved: [] };
+  var page = "home";
+  var selectedConnection = "";
+  var connectionState = {};
+  var connectionActions = null;
+  var nextCursor = "";
+  var searchEpoch = 0;
+  var searchBinding = "";
+  var rows = [];
+  var polling = false;
+  var busy = 0;
+  var started = false;
+  var directories = /* @__PURE__ */ new Set();
+  var searchTimer;
+  var refreshingBeeper = false;
+  var searchQueue = Promise.resolve();
+  function notice(text) {
+    el("notice").textContent = text || "";
+  }
+  async function call(operation, args = {}) {
+    const result = await Pebble.sendMessage("plugin", { operation, args });
+    if (result.error) throw Error(result.error);
+    if (["connections.disable", "connections.delete", "directory.stop"].includes(operation)) directories.delete(args.connection);
+    return result;
+  }
+  async function run(target, operation) {
+    if (target?.disabled) return;
+    if (target) target.disabled = true;
+    busy++;
+    notice("");
+    try {
+      await operation();
+    } catch (error) {
+      notice(String(error.message || error));
+    } finally {
+      if (target) target.disabled = false;
+      busy--;
+    }
+  }
+  function act(label, operation, kind) {
+    return button(label, (target) => run(target, operation), kind);
+  }
+  function navigate(destination) {
+    if (refreshingBeeper && destination !== "picker-page") {
+      refreshingBeeper = false;
+      notice("");
+    }
+    clearTimeout(searchTimer);
+    page = destination;
+    for (const id of ["home", "connection-page", "picker-page", "chat-page"]) el(id).hidden = id !== destination;
+    searchEpoch++;
+    window.scrollTo(0, 0);
+  }
+  async function permission(kind) {
+    const result = await Pebble.chatPermissions.request(kind);
+    if (result.error) throw Error(result.error);
+    if (!result.granted) notice(result.open_settings ? "Allow access in Settings, then return to Chat." : "Access was not granted. You can try again from Chat settings.");
+  }
+  async function startDirectories() {
+    for (const connection of overview.connections) {
+      if (connection.id !== "imessage" && connection.enabled && connection.state?.connected && !directories.has(connection.id) && (connection.id.startsWith("beeper-") || !connection.state.directory_complete)) {
+        await call("directory.start", { connection: connection.id });
+        directories.add(connection.id);
+      }
+    }
+  }
+  async function refreshOverview() {
+    overview = await call("status");
+    renderHome();
+  }
+  function renderHome() {
+    el("connections").replaceChildren();
+    for (const connection of overview.connections.filter((connection2) => connection2.available)) {
+      const row = act("", async () => {
+        if (!connection.enabled && !connection.configured) await call("connections.enable", { connection: connection.id });
+        selectedConnection = connection.id;
+        navigate("connection-page");
+        await refreshConnection();
+      }, "account-row");
+      const label = node("span");
+      const status = !connection.enabled ? connection.configured ? "Paused" : "Tap to connect" : connection.error || connection.state?.needs_reconnect ? "Needs attention" : connection.state?.ready ? "Connected" : "Finish setup";
+      label.append(node("strong", connection.name), node("span", status, "subtle"));
+      if (connection.enabled && connection.state?.connection_warning && !connection.state.needs_reconnect) label.append(node("span", connection.state.connection_warning, "subtle"));
+      row.append(label, node("span", "›", "chevron"));
+      row.setAttribute("aria-label", connection.name + ", " + status);
+      el("connections").append(row);
+    }
+    const approved = overview.approved;
+    el("approved-count").textContent = approved.length + (approved.length === 1 ? " chat allowed" : " chats allowed");
+    el("approved").replaceChildren();
+    for (const chat of approved) {
+      const row = node("div", null, "row chat-row");
+      const label = chatIdentity(chat);
+      const edit = act("Edit", async () => editChat(chat), "link");
+      edit.setAttribute("aria-label", "Edit " + (chat.nickname || chat.name) + " on " + chat.connection_name);
+      row.append(label, edit);
+      el("approved").append(row);
+    }
+    if (!approved.length) el("approved").append(node("p", "No chats added yet.", "empty"));
+    el("add-chats").disabled = !overview.connections.some((connection) => connection.enabled && connection.state?.connected);
+  }
+  function editChat(chat) {
+    navigate("chat-page");
+    el("chat-title").textContent = "Edit chat";
+    const parent = el("chat-content");
+    parent.replaceChildren(chatIdentity(chat));
+    const nick = input(parent, "Nickname", { value: chat.nickname || "", maxLength: 64, placeholder: "Optional, e.g. Mom" });
+    parent.append(act("Save", async () => {
+      await call("approve", { chat_id: chat.chat_id, nickname: nick.value.trim() });
+      await home();
+      notice("Saved.");
+    }, "wide"));
+    parent.append(node("hr"));
+    parent.append(act("Remove chat", async () => {
+      await call("remove", { chat_id: chat.chat_id });
+      await home();
+    }, "danger"));
+  }
+  async function renderContactAccess() {
+    const result = await call("contacts.status");
+    const target = el("contact-access");
+    target.replaceChildren();
+    if (!result.granted) {
+      target.append(act("Search phone contacts too", async () => {
+        await permission("contacts");
+        await renderContactAccess();
+        await search(false);
+      }, "link"));
+    }
+  }
+  async function home() {
+    navigate("home");
+    await refreshOverview();
+    await renderContactAccess();
+    await startDirectories();
+  }
+  async function refreshConnection({ startDirectory = true } = {}) {
+    const id = selectedConnection;
+    const info = await call("connections");
+    const connection = info.connections.find((item) => item.id === id);
+    const state = await call("status", { connection: id });
+    if (selectedConnection !== id || page !== "connection-page") return;
+    connectionState = state;
+    el("connection-title").textContent = connection.name;
+    connectionActions = { call, run, notice, home, permission, reload: refreshConnection };
+    renderConnection(el("connection-content"), connection, state, connectionActions);
+    if (startDirectory && connection.enabled && state.connected && id !== "imessage" && !directories.has(id) && (id.startsWith("beeper-") || !state.directory_complete)) {
+      await call("directory.start", { connection: id });
+      directories.add(id);
+    }
+  }
+  function refreshableConnections() {
+    return overview.connections.filter((item) => selectedFilters().includes(item.id) && item.enabled && item.state?.connected && ["beeper-android", "beeper-ios", "whatsapp", "telegram"].includes(item.id));
+  }
+  function selectedFilters() {
+    return [...el("connection-filters").querySelectorAll("input:checked")].map((input2) => input2.value);
+  }
+  async function openPicker() {
+    await refreshOverview();
+    navigate("picker-page");
+    const filters = el("connection-filters");
+    filters.replaceChildren(node("legend", "Search in"));
+    for (const connection of overview.connections.filter((item) => item.enabled && item.state?.connected)) {
+      const label = node("label", null, "filter-chip");
+      const check = node("input");
+      check.type = "checkbox";
+      check.value = connection.id;
+      check.checked = true;
+      check.onchange = () => {
+        clearTimeout(searchTimer);
+        run(null, () => search(false));
+      };
+      label.append(check, node("span", connection.name));
+      filters.append(label);
+    }
+    const manual = overview.connections.filter((item) => ["imessage", "whatsapp", "telegram", "sms-android"].includes(item.id) && item.enabled && item.state?.ready);
+    el("manual-recipient").hidden = !manual.length;
+    el("manual-account").replaceChildren();
+    for (const connection of manual) {
+      const option = node("option", connection.name);
+      option.value = connection.id;
+      el("manual-account").append(option);
+    }
+    manualAccountChanged();
+    await renderContactAccess();
+    await search(false);
+  }
+  async function search(more) {
+    const filters = selectedFilters();
+    el("refresh-chats").hidden = !refreshableConnections().length;
+    const query = el("query").value.trim();
+    const binding = JSON.stringify([query, filters]);
+    if (more && binding !== searchBinding) more = false;
+    const epoch = ++searchEpoch;
+    if (!filters.length) {
+      rows = [];
+      el("results").replaceChildren();
+      el("search-status").textContent = "Choose an account above.";
+      el("more").hidden = true;
+      return;
+    }
+    el("search-status").textContent = "Searching…";
+    const args = { query, connections: filters, cursor: more ? nextCursor : "" };
+    searchQueue = searchQueue.catch(() => {
+    }).then(() => epoch === searchEpoch ? call("chats.search", args) : null);
+    const result = await searchQueue.catch((error) => {
+      if (epoch !== searchEpoch) return null;
+      throw error;
+    });
+    if (!result || epoch !== searchEpoch || page !== "picker-page" || document.hidden) return;
+    searchBinding = binding;
+    nextCursor = result.next_cursor;
+    if (!more) rows = [];
+    const seen = new Set(rows.map((row) => row.chat_id));
+    rows.push(...result.chats.filter((row) => !seen.has(row.chat_id) && seen.add(row.chat_id)));
+    renderResults();
+    el("more").hidden = !nextCursor;
+    el("search-status").textContent = rows.length + (rows.length === 1 ? " result" : " results") + (nextCursor ? " · more available" : "") + (result.errors?.length ? "\n" + result.errors.map((error) => error.name + ": " + error.error).join("\n") : "") + (!rows.length && !nextCursor ? ". Try another name, number, or email." : "");
+  }
+  function renderResults() {
+    el("results").replaceChildren();
+    for (const chat of rows) {
+      const row = node("div", null, "result-card");
+      const approved = overview.approved.find((entry) => entry.chat_id === chat.chat_id);
+      const text = chatIdentity({ ...chat, nickname: approved?.nickname || chat.nickname });
+      row.append(text);
+      const activity = activityLabel(chat.last_activity);
+      if (activity) row.append(node("p", activity, "result-activity"));
+      if (chat.reason) row.append(node("p", chat.reason, "result-reason"));
+      const controls = node("div", null, "result-actions");
+      if (approved) {
+        row.classList.add("is-approved");
+        controls.append(node("span", "✓ Approved", "approval-status"));
+      }
+      const change = act(approved ? "Remove" : "Add chat", async () => {
+        try {
+          await call(approved ? "remove" : "approve", { chat_id: chat.chat_id, contact_key: chat.contact_key, display_name: chat.name });
+          await refreshOverview();
+        } finally {
+          renderResults();
+        }
+      }, approved ? "link remove-approval" : "secondary add-approval");
+      change.disabled = !approved && !chat.can_send;
+      change.setAttribute("aria-label", (approved ? "Remove " : "Add ") + (chat.name || chat.room_id) + " on " + chat.connection_name + (approved ? " from" : " to") + " Approved Chats");
+      controls.append(change);
+      row.append(controls);
+      el("results").append(row);
+    }
+  }
+  el("add-chats").onclick = (target) => run(target.currentTarget, openPicker);
+  el("chat-back").onclick = (target) => run(target.currentTarget, home);
+  el("connection-back").onclick = (target) => run(target.currentTarget, home);
+  el("picker-back").onclick = (target) => run(target.currentTarget, home);
+  el("search-form").onsubmit = (event) => {
+    event.preventDefault();
+    run(event.submitter, () => search(false));
+  };
+  el("query").oninput = () => {
+    el("clear-search").hidden = !el("query").value;
+    searchEpoch++;
+    el("more").hidden = true;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => run(null, () => search(false)), 250);
+  };
+  el("clear-search").onclick = () => {
+    el("query").value = "";
+    el("query").focus();
+    el("query").oninput();
+  };
+  el("refresh-chats").onclick = (event) => run(event.currentTarget, async () => {
+    notice("Refreshing chats…");
+    for (const connection of refreshableConnections()) {
+      const state = await call("directory.start", { connection: connection.id, refresh: "true" });
+      directories.add(connection.id);
+      if (connection.id === "beeper-ios") refreshingBeeper = !state.directory_complete;
+    }
+    await search(false);
+    notice(refreshingBeeper ? "Refreshing chats…" : "Chats refreshed.");
+  });
+  el("more").onclick = (event) => run(event.currentTarget, () => search(true));
+  el("manual-form").onsubmit = (event) => {
+    event.preventDefault();
+    run(event.submitter, async () => {
+      const connection = el("manual-account").value;
+      const state = await call("status", { connection });
+      const address = connection === "imessage" ? normalizeRecipient(el("manual-address").value) : el("manual-address").value.trim();
+      if (!address) throw Error("Enter an international phone number or email address.");
+      const name = el("manual-name").value.trim();
+      let room = address;
+      if (connection === "imessage") {
+        const contacts = (state.contacts || []).filter((contact) => contact.address !== address).concat({ name, address });
+        await call("imessage.saveContacts", { connection, account: state.account, contacts });
+      } else {
+        const result = await call("chats.resolve", { connection, account: state.account, address, name });
+        room = result.room_id;
+      }
+      await call("approve", { chat_id: chatId(connection, state.account, room), display_name: name });
+      el("manual-name").value = "";
+      el("manual-address").value = "";
+      await refreshOverview();
+      await search(false);
+      notice("Chat added.");
+    });
+  };
+  function manualAccountChanged() {
+    const connection = el("manual-account").value;
+    el("manual-address-label").textContent = connection === "telegram" ? "Phone number or username" : ["whatsapp", "sms-android"].includes(connection) ? "Phone number" : "Phone number or email";
+    el("manual-address").placeholder = connection === "telegram" ? "+14155550123 or @username" : ["whatsapp", "sms-android"].includes(connection) ? "+14155550123" : "+14155550123 or name@example.com";
+  }
+  el("manual-account").onchange = manualAccountChanged;
+  async function poll() {
+    if (polling || busy || document.hidden) return;
+    polling = true;
+    try {
+      if (page === "picker-page" && refreshingBeeper) {
+        const state = await call("status", { connection: "beeper-ios" });
+        if (state.directory_complete || state.sync_progress?.error) {
+          refreshingBeeper = false;
+          await search(false);
+          notice(state.sync_progress?.error || "Chats refreshed.");
+        }
+      } else if (page === "connection-page" && ["whatsapp", "telegram"].includes(selectedConnection) && connectionState.login_phase === "pairing") {
+        const id = selectedConnection;
+        const state = await call("status", { connection: id });
+        if (page !== "connection-page" || selectedConnection !== id) return;
+        if (state.ready) {
+          notice("Updating your chat list…");
+          connectionState = state;
+          try {
+            await call("directory.start", { connection: id });
+            directories.add(id);
+          } finally {
+            await refreshConnection({ startDirectory: false });
+          }
+          notice("Connected. Your chat list is up to date.");
+        } else if (state.login_phase !== connectionState.login_phase) await refreshConnection();
+        else connectionActions?.showLogin?.(state);
+      } else if (page === "connection-page" && selectedConnection === "beeper-ios" && connectionState.connected && !connectionState.verified) {
+        const value = await call("verification.status", { connection: selectedConnection });
+        if (page === "connection-page" && selectedConnection === "beeper-ios") {
+          connectionActions?.showVerification?.(value);
+          if (value.phase === "complete") await refreshConnection();
+        }
+      } else if (page === "connection-page" && selectedConnection === "beeper-ios" && connectionState.connected && !connectionState.directory_complete) {
+        await refreshConnection();
+      }
+    } catch (error) {
+      refreshingBeeper = false;
+      notice(String(error.message || error));
+    } finally {
+      polling = false;
+    }
+  }
+  async function maintainConnections() {
+    try {
+      await call("connections.maintain");
+    } catch (_) {
+    }
+  }
+  async function releaseDirectories() {
+    for (const connection of directories) {
+      try {
+        await call("directory.stop", { connection });
+      } catch (_) {
+      }
+    }
+    directories.clear();
+  }
+  document.addEventListener("visibilitychange", () => {
+    searchEpoch++;
+    if (document.hidden) releaseDirectories();
+    else run(null, async () => {
+      await maintainConnections();
+      if (page === "connection-page") await refreshConnection();
+      else {
+        await refreshOverview();
+        await renderContactAccess();
+        await startDirectories();
+        if (page === "picker-page") await search(false);
+      }
+    });
+  });
+  window.addEventListener("pagehide", releaseDirectories);
+  Pebble.addEventListener("ready", (event) => {
+    if (event.target === "plugin" && !started) {
+      started = true;
+      run(null, async () => {
+        await home();
+        await maintainConnections();
+        if (page === "home") await refreshOverview();
+      });
+    }
+  });
+  setInterval(poll, 2500);
+})();
+</script></body></html>

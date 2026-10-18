@@ -1,0 +1,34 @@
+[package]
+name = "imessage-rust-oracle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-only"
+
+[package.metadata.rustpush]
+repository = "https://github.com/OpenBubbles/rustpush"
+commit = "a7fab473e7a33325a760635285db2860de8e1cb0"
+source = "src/aps.rs"
+
+[features]
+default = []
+live-aps-activation = ["dep:keystore", "dep:libc", "dep:tokio", "rustpush/macos-validation-data"]
+
+[dependencies]
+base64 = "0.22.1"
+hmac = "0.12.1"
+pbkdf2 = "0.11.0"
+plist = "1.7.0"
+rustpush = { path = "../oracle-support/generated/rustpush", default-features = false, features = ["port-oracle"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.143"
+sha2 = "0.10.6"
+srp = { path = "../oracle-support/generated/rustpush/apple-private-apis/icloud-auth/rustcrypto-srp" }
+keystore = { path = "../oracle-support/generated/rustpush/keystore", optional = true }
+libc = { version = "0.2", optional = true }
+tokio = { version = "1", features = ["macros", "rt", "time"], optional = true }
+
+[[bin]]
+name = "imessage-rust-live-aps-oracle"
+path = "src/bin/live_aps_activation.rs"
+required-features = ["live-aps-activation"]

@@ -1,0 +1,15 @@
+{
+  "name": "coreapp-chatgpt-plugin",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-plugin.mjs",
+    "test": "node --test test/*.test.cjs"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

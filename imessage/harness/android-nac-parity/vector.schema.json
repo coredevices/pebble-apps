@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://coredevices.example/schemas/android-nac-parity-vector-v1.json",
+  "title": "Local Android NAC parity vector",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "oracle",
+    "hardware",
+    "arc4randomWords",
+    "certificateChainBase64",
+    "sessionInfoBase64",
+    "expected"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "oracle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cortenCommit", "nacBinarySha1", "nacBinarySha256", "nacX86_64SliceSha256"],
+      "properties": {
+        "cortenCommit": { "const": "501403fcbe8802cc427e9ccab3573c5367508fdf" },
+        "nacBinarySha1": { "const": "e1181ccad82e6629d52c6a006645ad87ee59bd13" },
+        "nacBinarySha256": { "const": "74c2a8fe826a478f14f6e17b3709a8b315e8c0e0e34e3fba6b9c4eee2f4516e9" },
+        "nacX86_64SliceSha256": { "const": "7f225430438171b2d460cd953fe1110a2d6699e6d0d944780471ef58fd075d9f" }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productName", "ioMacAddress", "platformSerialNumber", "platformUuid",
+        "rootDiskUuid", "boardId", "osBuildNum", "platformSerialNumberEnc",
+        "platformUuidEnc", "rootDiskUuidEnc", "rom", "romEnc", "mlb", "mlbEnc"
+      ],
+      "properties": {
+        "productName": { "$ref": "#/$defs/hardwareString" },
+        "ioMacAddress": { "$ref": "#/$defs/bytes6" },
+        "platformSerialNumber": { "$ref": "#/$defs/hardwareString" },
+        "platformUuid": { "$ref": "#/$defs/uuid" },
+        "rootDiskUuid": { "$ref": "#/$defs/uuid" },
+        "boardId": { "$ref": "#/$defs/hardwareString" },
+        "osBuildNum": { "$ref": "#/$defs/hardwareString" },
+        "platformSerialNumberEnc": { "$ref": "#/$defs/bytes17" },
+        "platformUuidEnc": { "$ref": "#/$defs/bytes17" },
+        "rootDiskUuidEnc": { "$ref": "#/$defs/bytes17" },
+        "rom": { "$ref": "#/$defs/bytes6" },
+        "romEnc": { "$ref": "#/$defs/bytes17" },
+        "mlb": { "$ref": "#/$defs/hardwareString" },
+        "mlbEnc": { "$ref": "#/$defs/bytes17" }
+      }
+    },
+    "arc4randomWords": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+    },
+    "certificateChainBase64": { "$ref": "#/$defs/protocolBase64" },
+    "sessionInfoBase64": { "$ref": "#/$defs/protocolBase64" },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionInfoRequest", "validationData"],
+      "properties": {
+        "sessionInfoRequest": { "$ref": "#/$defs/expectedBytes" },
+        "validationData": { "$ref": "#/$defs/expectedBytes" }
+      }
+    }
+  },
+  "$defs": {
+    "byte": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "bytes6": { "type": "array", "minItems": 6, "maxItems": 6, "items": { "$ref": "#/$defs/byte" } },
+    "bytes17": { "type": "array", "minItems": 17, "maxItems": 17, "items": { "$ref": "#/$defs/byte" } },
+    "hardwareString": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    },
+    "protocolBase64": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 1398104,
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
+    "expectedBytes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base64", "length", "sha256"],
+      "properties": {
+        "base64": { "$ref": "#/$defs/protocolBase64" },
+        "length": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

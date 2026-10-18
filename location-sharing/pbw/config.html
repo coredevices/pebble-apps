@@ -1,0 +1,377 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Location Sharing</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    h2 { font-size: 19px; margin: 0 0 8px; }
+    h3 { font-size: 16px; margin: 20px 0 8px; }
+    p { line-height: 1.45; }
+    section { margin-top: 18px; padding: 16px; border: 1px solid rgba(128,128,128,.28);
+      border-radius: 12px; }
+    .hint { font-size: 13px; opacity: .72; }
+    .provider-status { font-size: 14px; margin: 8px 0 14px; font-weight: 600; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+    input, textarea, select { box-sizing: border-box; width: 100%; padding: 11px 12px; font: inherit;
+      border-radius: 8px; border: 1px solid rgba(128,128,128,.4);
+      background: transparent; color: inherit; }
+    textarea { min-height: 92px; resize: vertical; font: 12px ui-monospace, monospace; }
+    button { width: 100%; margin-top: 12px; padding: 11px 16px; font: inherit; font-weight: 600;
+      border-radius: 8px; border: 0; background: #0a84ff; color: #fff; }
+    button.secondary { background: rgba(128,128,128,.22); color: inherit; }
+    button:disabled { opacity: .5; }
+    #status { margin-top: 18px; padding: 12px; border-radius: 8px;
+      background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
+    .person { padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,.22); }
+    .person:last-child { border-bottom: 0; }
+    .person-name { font-weight: 600; }
+    .person-address { font-size: 13px; opacity: .72; overflow-wrap: anywhere; }
+    .version { margin: 0 0 16px; font-size: 13px; opacity: .72; }
+    label.check { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; }
+    label.check input { width: auto; margin: 0; }
+    .row { display: flex; align-items: center; gap: 10px; }
+    .row button { width: auto; margin-top: 0; padding: 8px 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Location Sharing</h1>
+  <p id="pluginVersion" class="version">Plugin v0.11.0</p>
+  <p class="hint">See people who already share their location with you through
+    Google Maps and Apple Find My (coming soon).</p>
+
+  <!-- Apple Find My needs host features stock CoreApp doesn't give plugins; hidden until it does. -->
+  <section hidden>
+    <h2>Apple Find My</h2>
+    <div id="appleStatus" class="provider-status">Not connected</div>
+
+    <div id="appleLogin">
+      <div id="savedMac" class="hidden">
+        <label for="savedMacSelect">Mac</label>
+        <select id="savedMacSelect"></select>
+      </div>
+      <div id="manualMac">
+        <label for="macToken">Mac + RustPush activation token</label>
+        <textarea id="macToken" spellcheck="false" autocomplete="off"
+          placeholder="Paste the JSON or base64 hardware activation token"></textarea>
+        <p class="hint" id="macTokenHint">Use the same hardware token format as the iMessage JS plugin.</p>
+      </div>
+      <label for="appleId">Apple ID</label>
+      <input id="appleId" type="email" inputmode="email" autocomplete="username"
+        placeholder="name@example.com">
+      <label for="password">Apple ID password</label>
+      <input id="password" type="password" autocomplete="current-password">
+      <p class="hint">The password and hardware token are used only for this sign-in attempt.</p>
+      <button id="connectApple">Connect Apple Find My</button>
+    </div>
+
+    <div id="appleTwoFactor" class="hidden">
+      <h3>Two-factor authentication</h3>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"
+        pattern="[0-9]{6}" placeholder="123456">
+      <button id="verifyApple">Verify code</button>
+      <button id="resetApple" class="secondary">Start over</button>
+    </div>
+
+    <div id="appleConnected" class="hidden">
+      <button id="refreshApple">Refresh Apple locations</button>
+      <button id="disconnectApple" class="secondary">Disconnect Apple Find My</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Google Maps</h2>
+    <div id="googleStatus" class="provider-status">Not connected</div>
+    <p class="hint">Signs in to Google in an isolated browser and keeps that web session to read Google Maps
+      location sharing.</p>
+    <div id="googleLogin">
+      <button id="googleSignIn">Sign in with Google</button>
+    </div>
+    <div id="googleConnected" class="hidden">
+      <button id="refreshGoogle">Refresh Google Maps locations</button>
+      <button id="disconnectGoogle" class="secondary">Disconnect Google Maps</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Answers to “Where is…”</h2>
+    <p class="hint">For Google Maps and Apple Find My. Show results to questions like “Where is my
+      wife” with:</p>
+    <label class="check"><input type="checkbox" id="showDrive"> Driving distance from you</label>
+    <label class="check"><input type="checkbox" id="showBike"> Biking distance</label>
+    <label class="check"><input type="checkbox" id="showWalk"> Walking distance</label>
+    <p class="hint">Travel times start from your phone's location and come from Google Maps.</p>
+    <button id="saveAnswers" class="secondary">Save</button>
+  </section>
+
+  <section>
+    <h2>People sharing with you</h2>
+    <p class="hint">Add a nickname such as “my wife” to ask for someone by it.</p>
+    <div id="people"></div>
+    <p id="peopleEmpty" class="hint">Connect a provider and refresh to see people.</p>
+    <button id="saveNicknames" class="secondary hidden">Save nicknames</button>
+  </section>
+
+  <section>
+    <h2>Places</h2>
+    <p class="hint">Name a place so answers say “at Home” instead of an address.</p>
+    <div id="places"></div>
+    <label for="placeLabel">Name</label>
+    <input id="placeLabel" maxlength="40" placeholder="Home">
+    <label for="placeAddress">Address</label>
+    <input id="placeAddress" maxlength="200" autocomplete="street-address">
+    <label for="placeRadius">Radius (meters)</label>
+    <input id="placeRadius" type="number" inputmode="numeric" min="25" max="5000" value="150">
+    <button id="addPlace" class="secondary">Add place</button>
+  </section>
+
+  <div id="status">Loading Location Sharing…</div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var pageBusy = false;
+  var current = null;
+  function send(message) { return Pebble.sendMessage('plugin', message); }
+  function say(message) { $('status').textContent = message; }
+  function busy(value) {
+    pageBusy = value;
+    ['connectApple', 'verifyApple', 'resetApple', 'refreshApple', 'disconnectApple',
+      'googleSignIn', 'refreshGoogle', 'disconnectGoogle',
+      'saveAnswers', 'saveNicknames', 'addPlace'].forEach(function (id) {
+      $(id).disabled = value;
+    });
+    $('code').disabled = value;
+  }
+  function clearSecrets() {
+    $('macToken').value = '';
+    $('password').value = '';
+    $('code').value = '';
+  }
+  function renderPeople(result) {
+    var people = Array.isArray(result.people) ? result.people : [];
+    var list = $('people');
+    while (list.firstChild) list.removeChild(list.firstChild);
+    people.forEach(function (person) {
+      var row = document.createElement('div');
+      row.className = 'person';
+      var name = document.createElement('div');
+      name.className = 'person-name';
+      name.textContent = String(person.name || 'Shared person') + ' · ' + String(person.provider || '');
+      var address = document.createElement('div');
+      address.className = 'person-address';
+      address.textContent = String(person.address || 'Location unavailable');
+      var nickname = document.createElement('input');
+      nickname.className = 'nickname';
+      nickname.dataset.id = person.id;
+      nickname.maxLength = 40;
+      nickname.placeholder = 'Nickname, e.g. my wife';
+      nickname.value = person.nickname || '';
+      row.appendChild(name);
+      row.appendChild(address);
+      row.appendChild(nickname);
+      list.appendChild(row);
+    });
+    $('peopleEmpty').className = people.length ? 'hidden' : 'hint';
+    $('saveNicknames').className = people.length ? 'secondary' : 'secondary hidden';
+  }
+  function renderSettings(settings) {
+    if (!settings) return;
+    $('showDrive').checked = !!settings.show.drive;
+    $('showBike').checked = !!settings.show.bike;
+    $('showWalk').checked = !!settings.show.walk;
+    var list = $('places');
+    while (list.firstChild) list.removeChild(list.firstChild);
+    settings.places.forEach(function (place, index) {
+      var row = document.createElement('div');
+      row.className = 'person row';
+      var text = document.createElement('div');
+      text.style.flex = '1';
+      text.textContent = place.label + ' · ' + place.address + ' (' + place.radiusMeters + ' m)';
+      var remove = document.createElement('button');
+      remove.className = 'secondary';
+      remove.textContent = 'Remove';
+      remove.onclick = function () { run({ type: 'removePlace', index: index }, 'Removing ' + place.label + '…'); };
+      row.appendChild(text);
+      row.appendChild(remove);
+      list.appendChild(row);
+    });
+  }
+  function render(result) {
+    current = result;
+    if (result.pluginVersion) $('pluginVersion').textContent = 'Plugin v' + result.pluginVersion;
+    var apple = result.apple || { status: 'disconnected' };
+    var google = result.google || {};
+    $('appleStatus').textContent = apple.status === 'ready' ? 'Connected'
+      : apple.status === 'needsTwoFactor' ? 'Waiting for verification code' : 'Not connected';
+    $('appleLogin').className = apple.status === 'disconnected' ? '' : 'hidden';
+    $('appleTwoFactor').className = apple.status === 'needsTwoFactor' ? '' : 'hidden';
+    $('appleConnected').className = apple.status === 'ready' ? '' : 'hidden';
+    $('verifyApple').disabled = pageBusy || apple.canSubmitTwoFactor !== true;
+    $('googleStatus').textContent = google.ready
+      ? 'Connected' + (google.email ? ' as ' + google.email : '')
+      : google.exchangePending ? 'Account captured; verification required' : 'Not connected';
+    $('googleLogin').className = google.ready ? 'hidden' : '';
+    $('googleConnected').className = google.ready ? '' : 'hidden';
+    renderPeople(result);
+    renderSettings(result.settings);
+    if (result.ok === false && result.message) say(result.message);
+    else say('Location Sharing is ready. Connect either provider or both.');
+  }
+  async function run(message, pendingText) {
+    busy(true);
+    say(pendingText);
+    try {
+      var result = await send(message);
+      render(result);
+      return result;
+    } catch (error) {
+      say(error.message || 'The Location Sharing request did not complete.');
+      return null;
+    } finally {
+      clearSecrets();
+      busy(false);
+      if (current) render(current);
+    }
+  }
+  async function refreshStatus() {
+    try { render(await send({ type: 'status' })); }
+    catch (_) { say('Location Sharing settings could not be loaded.'); }
+  }
+
+  // Mac setup keys saved to the Pebble account from the Pebble Mac app, as Chat uses for iMessage.
+  var macKeyAccount = null;
+  function showManualMac(show) { $('manualMac').classList.toggle('hidden', !show); }
+  async function loadSavedMacs() {
+    if (!Pebble.macKeys) return;
+    var result;
+    try { result = await Pebble.macKeys.list(); } catch (error) { result = { error: error.message || 'unknown error' }; }
+    var keys = result && !result.error && result.signed_in ? result.keys || [] : [];
+    if (!keys.length) {
+      $('macTokenHint').textContent = result && result.error
+        ? 'Could not load saved Macs (' + result.error + '). Paste a token instead.'
+        : result && result.signed_in === false
+        ? 'Sign in to your Pebble account to use a Mac saved from the Pebble Mac app, or paste a token.'
+        : 'No saved Mac found. Save one from the Pebble Mac app, or paste a token.';
+      return;
+    }
+    macKeyAccount = result.account;
+    var select = $('savedMacSelect');
+    select.textContent = '';
+    keys.forEach(function (key) {
+      var option = document.createElement('option');
+      option.value = key.id;
+      option.textContent = key.computer_name;
+      select.appendChild(option);
+    });
+    var manual = document.createElement('option');
+    manual.value = '';
+    manual.textContent = 'Paste a token instead…';
+    select.appendChild(manual);
+    select.onchange = function () { showManualMac(!select.value); };
+    $('savedMac').classList.remove('hidden');
+    showManualMac(false);
+  }
+  async function activationToken() {
+    var keyId = $('savedMac').classList.contains('hidden') ? '' : $('savedMacSelect').value;
+    if (!keyId) return $('macToken').value.trim();
+    var result = await Pebble.macKeys.read(macKeyAccount, keyId);
+    if (result.error) throw new Error(result.error);
+    return String(result.macValidationData || '').trim();
+  }
+
+  $('connectApple').onclick = async function () {
+    var appleId = $('appleId').value.trim();
+    var password = $('password').value;
+    var token;
+    try { token = await activationToken(); }
+    catch (error) { say(error.message || 'Could not load the saved Mac.'); return; }
+    if (!token || !appleId || !password) {
+      say('A Mac activation token, Apple ID, and password are required.');
+      return;
+    }
+    run({ type: 'configureApple', macValidationData: token, appleId: appleId, password: password },
+      'Signing in to Apple Find My…');
+  };
+  $('verifyApple').onclick = function () {
+    var code = $('code').value.trim();
+    if (!/^[0-9]{6}$/.test(code)) { say('Enter the six-digit verification code.'); return; }
+    run({ type: 'submitAppleTwoFactorCode', code: code }, 'Verifying with Apple…');
+  };
+  $('refreshApple').onclick = function () {
+    run({ type: 'refreshApple' }, 'Refreshing Apple Find My…');
+  };
+  async function disconnectApple() {
+    if (!window.confirm('Erase this plugin\'s Apple Find My sign-in state?')) return;
+    await run({ type: 'disconnectApple' }, 'Disconnecting Apple Find My…');
+  }
+  $('resetApple').onclick = disconnectApple;
+  $('disconnectApple').onclick = disconnectApple;
+
+  var GOOGLE_SESSION_COOKIES = ['SID', 'HSID', 'SSID', 'APISID', 'SAPISID', '__Secure-1PSID', '__Secure-3PSID'];
+  $('googleSignIn').onclick = async function () {
+    busy(true);
+    say('Opening Google sign-in…');
+    try {
+      if (typeof Pebble.webSignIn !== 'function') { say('Google sign-in is unavailable in this app version.'); return; }
+      var captured = await Pebble.webSignIn({
+        url: 'https://accounts.google.com/EmbeddedSetup',
+        cookies: GOOGLE_SESSION_COOKIES,
+        domain: 'google.com',
+      });
+      if (!captured) { say('Google sign-in cancelled.'); return; }
+      var saved = await send({ type: 'setGoogleCredentials', cookies: captured });
+      if (saved.ok === false) { render(saved); return; }
+      render(await send({ type: 'testGoogleConnection' }));
+    } catch (error) {
+      say(error.message || 'Google sign-in could not be completed.');
+    } finally {
+      clearSecrets();
+      busy(false);
+      if (current) render(current);
+    }
+  };
+  $('refreshGoogle').onclick = function () {
+    run({ type: 'refreshGoogle' }, 'Refreshing Google Maps location sharing…');
+  };
+  $('disconnectGoogle').onclick = function () {
+    if (!window.confirm('Erase this plugin\'s Google Maps sign-in state?')) return;
+    run({ type: 'disconnectGoogle' }, 'Disconnecting Google Maps…');
+  };
+
+  function saveAnswers() {
+    var nicknames = {};
+    Array.prototype.forEach.call(document.querySelectorAll('input.nickname'), function (input) {
+      if (input.value.trim()) nicknames[input.dataset.id] = input.value.trim();
+    });
+    run({
+      type: 'saveAnswerSettings',
+      show: { drive: $('showDrive').checked, bike: $('showBike').checked, walk: $('showWalk').checked },
+      nicknames: nicknames,
+    }, 'Saving…').then(function (result) { if (result && result.ok !== false) say('Saved.'); });
+  }
+  $('saveAnswers').onclick = saveAnswers;
+  $('saveNicknames').onclick = saveAnswers;
+  $('addPlace').onclick = function () {
+    var label = $('placeLabel').value.trim();
+    var address = $('placeAddress').value.trim();
+    if (!label || !address) { say('Enter a name and an address for the place.'); return; }
+    run({ type: 'addPlace', label: label, address: address, radiusMeters: Number($('placeRadius').value) },
+      'Looking up ' + address + ' on Google Maps…').then(function (result) {
+      if (result && result.ok !== false) {
+        $('placeLabel').value = '';
+        $('placeAddress').value = '';
+        say('Added ' + label + '.');
+      }
+    });
+  };
+
+  Pebble.addEventListener('ready', function (event) {
+    if (event.target === 'plugin') { refreshStatus(); loadSavedMacs(); }
+  });
+</script>
+</body>
+</html>

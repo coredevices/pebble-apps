@@ -1,0 +1,208 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 8a23d04..79475d2 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -10,0 +11 @@ default = ["macos-validation-data"]
++port-oracle = []
+diff --git a/src/aps.rs b/src/aps.rs
+index 0d0d6cc..89e66f0 100644
+--- a/src/aps.rs
++++ b/src/aps.rs
+@@ -551,0 +552,24 @@ impl APSRawMessage {
++
++#[cfg(feature = "port-oracle")]
++pub fn port_oracle_encode_raw(
++    command: u8,
++    fields: &[(u8, Vec<u8>)],
++) -> Result<Vec<u8>, PushError> {
++    let mut raw = APSRawMessage {
++        command,
++        length: 0,
++        body: fields
++            .iter()
++            .map(|(id, value)| APSRawField {
++                id: *id,
++                length: 0,
++                value: value.clone(),
++            })
++            .collect(),
++    };
++    for field in &mut raw.body {
++        field.update()?;
++    }
++    raw.update()?;
++    Ok(raw.to_bytes()?)
++}
+diff --git a/src/lib.rs b/src/lib.rs
+index ca3304c..f61ca69 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -35,6 +35,8 @@ pub use icloud_auth::{DefaultAnisetteProvider, GenerateVerificationTokenRequest,
+ pub use util::{DebugRwLock, DebugMutex};
+ use activation::ActivationInfo;
+ pub use aps::{APSConnectionResource, APSConnection, APSMessage, APSState};
++#[cfg(feature = "port-oracle")]
++pub use aps::port_oracle_encode_raw;
+ use async_trait::async_trait;
+ pub use auth::{request_update_account, UpdateAccountFinish};
+ pub use mmcs::{FileContainer, prepare_put};
+diff --git a/src/aps.rs b/src/aps.rs
+--- a/src/aps.rs
++++ b/src/aps.rs
+@@ -572,8 +572,136 @@
+     }
+     raw.update()?;
+     Ok(raw.to_bytes()?)
++}
++
++#[cfg(feature = "port-oracle")]
++#[derive(Clone, Debug, PartialEq)]
++pub enum PortOraclePackedValue {
++    Data(Vec<u8>),
++    String(String),
++    Int(i64),
++    Dict(Vec<PortOraclePackedAttribute>),
++    Array(Vec<PortOraclePackedValue>),
++    Bool(bool),
++}
++
++#[cfg(feature = "port-oracle")]
++#[derive(Clone, Debug, PartialEq)]
++pub struct PortOraclePackedAttribute {
++    pub id: Vec<u8>,
++    pub value: PortOraclePackedValue,
++    pub cached: bool,
++}
++
++#[cfg(feature = "port-oracle")]
++#[derive(Clone, Debug, PartialEq)]
++pub struct PortOraclePackedMessage {
++    pub command: u8,
++    pub attributes: Vec<PortOraclePackedAttribute>,
++}
++
++#[cfg(feature = "port-oracle")]
++impl From<PortOraclePackedValue> for APSPackedValue {
++    fn from(value: PortOraclePackedValue) -> Self {
++        match value {
++            PortOraclePackedValue::Data(value) => Self::Data(value),
++            PortOraclePackedValue::String(value) => Self::String(value),
++            PortOraclePackedValue::Int(value) => Self::Int(value),
++            PortOraclePackedValue::Dict(value) => Self::Dict(
++                value.into_iter().map(APSPackedAttribute::from).collect()
++            ),
++            PortOraclePackedValue::Array(value) => Self::Array(
++                value.into_iter().map(APSPackedValue::from).collect()
++            ),
++            PortOraclePackedValue::Bool(value) => Self::Bool(value),
++        }
++    }
++}
++
++#[cfg(feature = "port-oracle")]
++impl From<APSPackedValue> for PortOraclePackedValue {
++    fn from(value: APSPackedValue) -> Self {
++        match value {
++            APSPackedValue::Data(value) => Self::Data(value),
++            APSPackedValue::String(value) => Self::String(value),
++            APSPackedValue::Int(value) => Self::Int(value),
++            APSPackedValue::Dict(value) => Self::Dict(
++                value.into_iter().map(PortOraclePackedAttribute::from).collect()
++            ),
++            APSPackedValue::Array(value) => Self::Array(
++                value.into_iter().map(PortOraclePackedValue::from).collect()
++            ),
++            APSPackedValue::Bool(value) => Self::Bool(value),
++        }
++    }
++}
++
++#[cfg(feature = "port-oracle")]
++impl From<PortOraclePackedAttribute> for APSPackedAttribute {
++    fn from(value: PortOraclePackedAttribute) -> Self {
++        Self {
++            id: value.id,
++            value: value.value.into(),
++            cached: value.cached,
++        }
++    }
+ }
+-
++
++#[cfg(feature = "port-oracle")]
++impl From<APSPackedAttribute> for PortOraclePackedAttribute {
++    fn from(value: APSPackedAttribute) -> Self {
++        Self {
++            id: value.id,
++            value: value.value.into(),
++            cached: value.cached,
++        }
++    }
++}
++
++#[cfg(feature = "port-oracle")]
++impl From<PortOraclePackedMessage> for APSPackedMessage {
++    fn from(value: PortOraclePackedMessage) -> Self {
++        Self {
++            command: value.command,
++            attributes: value.attributes.into_iter().map(APSPackedAttribute::from).collect(),
++        }
++    }
++}
++
++#[cfg(feature = "port-oracle")]
++impl From<APSPackedMessage> for PortOraclePackedMessage {
++    fn from(value: APSPackedMessage) -> Self {
++        Self {
++            command: value.command,
++            attributes: value.attributes.into_iter().map(PortOraclePackedAttribute::from).collect(),
++        }
++    }
++}
++
++#[cfg(feature = "port-oracle")]
++pub fn port_oracle_encode_packed(
++    messages: &[PortOraclePackedMessage],
++    value_cache_size: usize,
++) -> Result<Vec<Vec<u8>>, PushError> {
++    let mut encoder = APSPackedEncoder::new_with_cache_size(value_cache_size);
++    messages.iter().cloned().map(|message| {
++        let mut frame = Vec::new();
++        encoder.encode_message(message.into(), Cursor::new(&mut frame))?;
++        Ok(frame)
++    }).collect()
++}
++
++#[cfg(feature = "port-oracle")]
++pub fn port_oracle_decode_packed(
++    frames: &[Vec<u8>],
++    value_cache_size: usize,
++) -> Result<Vec<PortOraclePackedMessage>, PushError> {
++    let mut decoder = APSPackedDecoder::new_with_cache_size(value_cache_size);
++    frames.iter().map(|frame| {
++        decoder.decode_message(Cursor::new(frame)).map(PortOraclePackedMessage::from)
++    }).collect()
++}
++
+ pub fn get_message<'t, F, T>(mut pred: F, topics: &'t [&str]) -> impl FnMut(APSMessage) -> Option<T> + 't
+     where F: FnMut(Value) -> Option<T> + 't {
+     move |msg| {
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -41,7 +41,14 @@
+ use activation::ActivationInfo;
+ pub use aps::{APSConnectionResource, APSConnection, APSMessage, APSState};
+ #[cfg(feature = "port-oracle")]
+-pub use aps::port_oracle_encode_raw;
++pub use aps::{
++    port_oracle_decode_packed,
++    port_oracle_encode_packed,
++    port_oracle_encode_raw,
++    PortOraclePackedAttribute,
++    PortOraclePackedMessage,
++    PortOraclePackedValue,
++};
+ use async_trait::async_trait;
+ pub use auth::{request_update_account, UpdateAccountFinish};
+ pub use mmcs::{FileContainer, prepare_put};

@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Obsidian/Markdown Notes settings</title>
+<style>
+  body{font:16px system-ui,sans-serif;background:#151413;color:#f6f2ee;margin:0;padding:24px}main{max-width:680px;margin:auto}
+  h1{margin-top:0}section{border:1px solid #494542;border-radius:14px;padding:18px;margin:16px 0;background:#201e1c}
+  label{display:block;margin:14px 0 6px;color:#ddd5cf}input,select,button{font:inherit;box-sizing:border-box;border-radius:8px;border:1px solid #625d58;padding:11px;background:#2b2927;color:#fff;width:100%}
+  input[type=radio],input[type=checkbox]{width:auto;margin-right:8px}button{background:#ff4033;border:0;font-weight:650;margin-top:10px}button.secondary{background:#45413e}button:disabled{opacity:.55}
+  small,#status,#noteStatus{color:#aaa29c}.row{display:flex;gap:10px}.row button{width:auto;flex:1}.choice{padding:8px 0}.hidden{display:none}.error{color:#ff8b83!important}
+</style></head><body><main>
+<h1>Obsidian/Markdown Notes</h1><p>Choose a folder containing Markdown files. It can be an Obsidian vault or another synced directory.</p>
+<section><h2>Folder access</h2><div id="root">Checking…</div><div class="row"><button id="choose">Choose folder</button><button class="secondary" id="clear">Disconnect</button></div></section>
+<section><h2>Incoming notes</h2>
+<label class="choice"><input id="modeCreate" name="noteMode" type="radio" value="create"> Create a new Markdown note each time</label>
+<label class="choice"><input id="modeAppend" name="noteMode" type="radio" value="append"> Append to one existing Markdown note</label>
+<div id="createOptions"><label for="notesFolder">Folder for new notes</label><input id="notesFolder" value="Index Notes"><small>Each filename contains a timestamp and the start of the note.</small></div>
+<div id="appendOptions" class="hidden">
+  <label for="selectedNotePath">Recent Markdown notes</label><select id="selectedNotePath"></select>
+  <label for="noteQuery">Filter notes by title or file path</label><input id="noteQuery" placeholder="Search the selected folder">
+  <div class="row"><button class="secondary" id="refreshNotes" type="button">Search / refresh notes</button></div>
+  <p id="noteStatus"></p>
+  <label for="appendPlacement">Place incoming text</label><select id="appendPlacement"><option value="top">At the top (after frontmatter/title)</option><option value="bottom">At the bottom</option></select>
+</div>
+<label for="tag">Optional tag (without #)</label><input id="tag" placeholder="index">
+<label><input id="includeLocation" type="checkbox" checked> Include location metadata when an action supplies it</label>
+<label><input id="openObsidianLinks" type="checkbox"> Open action links in Obsidian</label>
+<small>Enable links only when the selected folder is an Obsidian vault. Leave them off for other Markdown folders.</small>
+</section>
+<section><h2>Reminders</h2><label for="remindersPath">Obsidian Tasks-compatible reminder file</label><input id="remindersPath" value="Index Reminders.md"></section>
+<button id="save">Save settings</button><p id="status"></p>
+<script>
+var target='plugin',loadedConfig={},operationPending=false;
+function byId(id){return document.getElementById(id)}
+async function send(message){return Pebble.sendMessage(target,message)}
+function setPending(value){operationPending=value;['choose','clear','refreshNotes','save'].forEach(function(id){byId(id).disabled=value})}
+async function runExclusive(work){if(operationPending)return;setPending(true);try{return await work()}finally{setPending(false)}}
+function selectedMode(){return byId('modeAppend').checked?'append':'create'}
+function showMode(){var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)loadNotes()}
+async function rootStatus(){
+  try{var value=await Pebble.files.status();byId('root').textContent=value.configured?'Connected: '+(value.name||'selected folder'):'No folder selected';return !!value.configured}
+  catch(e){byId('root').textContent=e.message;return false}
+}
+function addOption(select,path,title,missing){var option=document.createElement('option');option.value=path;option.textContent=(title||path)+' — '+path+(missing?' (missing)':'');option.disabled=!!missing;select.appendChild(option)}
+function makeRoomForSelected(select){while(select.options.length>=10)select.remove(select.options.length-1)}
+async function loadNotesCore(){
+  if(selectedMode()!=='append')return;
+  var select=byId('selectedNotePath'),keep=select.value||loadedConfig.selectedNotePath||'';select.innerHTML='';byId('noteStatus').textContent='Loading recent notes…';
+  try{
+    var result=await send({type:'listNotes',query:byId('noteQuery').value});if(result.error)throw new Error(result.error);
+    (result.notes||[]).forEach(function(note){addOption(select,note.path,note.title,false)});
+    var contains=Array.prototype.some.call(select.options,function(option){return option.value===keep});
+    if(keep&&!contains&&result.selected){makeRoomForSelected(select);addOption(select,result.selected.path,result.selected.title,false)}
+    else if(keep&&!contains&&result.selectedMissing){makeRoomForSelected(select);addOption(select,keep,keep,true)}
+    if(keep&&Array.prototype.some.call(select.options,function(option){return option.value===keep&&!option.disabled}))select.value=keep;
+    byId('noteStatus').className=result.selectedMissing?'error':'';
+    byId('noteStatus').textContent=result.selectedMissing?'The selected note was moved or deleted. Choose another.':(select.options.length?'Showing up to 10 most recently modified notes.':'No Markdown notes found in this folder.');
+  }catch(e){byId('noteStatus').className='error';byId('noteStatus').textContent=e.message}
+}
+function loadNotes(){return runExclusive(loadNotesCore)}
+async function loadCore(){
+  var result=await send({type:'status'}),c=result.config||{};loadedConfig=c;
+  byId(c.noteMode==='append'?'modeAppend':'modeCreate').checked=true;
+  ['notesFolder','remindersPath','tag','appendPlacement'].forEach(function(id){if(c[id]!==undefined)byId(id).value=c[id]});
+  byId('includeLocation').checked=c.includeLocation!==false;byId('openObsidianLinks').checked=c.openObsidianLinks===true;
+  await rootStatus();var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)await loadNotesCore();
+}
+function load(){return runExclusive(loadCore)}
+byId('modeCreate').onchange=showMode;byId('modeAppend').onchange=showMode;byId('refreshNotes').onclick=loadNotes;
+byId('noteQuery').onkeydown=function(event){if(event.key==='Enter'){event.preventDefault();loadNotes()}};
+byId('choose').onclick=function(){return runExclusive(async function(){await Pebble.files.selectRoot();await rootStatus();if(selectedMode()==='append')await loadNotesCore()})};
+byId('clear').onclick=function(){return runExclusive(async function(){await Pebble.files.clearRoot();await rootStatus();byId('selectedNotePath').innerHTML='';byId('noteStatus').textContent='No folder selected.'})};
+byId('save').onclick=function(){return runExclusive(async function(){
+  byId('status').className='';byId('status').textContent='Saving…';
+  var c={noteMode:selectedMode(),selectedNotePath:byId('selectedNotePath').value,appendPlacement:byId('appendPlacement').value,notesFolder:byId('notesFolder').value,remindersPath:byId('remindersPath').value,tag:byId('tag').value,includeLocation:byId('includeLocation').checked,openObsidianLinks:byId('openObsidianLinks').checked};
+  try{var result=await send({type:'save',config:c});if(!result.ok)throw new Error(result.error||'Could not save.');loadedConfig=result.config||c;byId('status').textContent='Saved. You can close this page.'}
+  catch(e){byId('status').className='error';byId('status').textContent=e.message}
+})};
+Pebble.addEventListener('ready',function(e){if(e.target===target)load()});if(Pebble.readyTargets().indexOf(target)!==-1)load();
+</script></main></body></html>

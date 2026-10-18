@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ChatGPT settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font: 16px system-ui, sans-serif;
+      }
+      body {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      p {
+        line-height: 1.5;
+      }
+      button {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border-radius: 10px;
+        margin: 6px 0;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+      }
+      small {
+        display: block;
+        line-height: 1.5;
+        opacity: 0.75;
+      }
+      #account {
+        font-weight: 600;
+      }
+      #status {
+        min-height: 48px;
+        margin-top: 20px;
+      }
+      textarea,
+      select,
+      input {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px;
+        border-radius: 8px;
+      }
+      h2 {
+        font-size: 20px;
+        margin-top: 28px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>ChatGPT</h1>
+    <h2>Dot</h2>
+    <p>Send messages from Pebble to your existing ChatGPT Dot.</p>
+    <section id="signedOut" hidden>
+      <button id="signin">Sign in with ChatGPT</button>
+      <small
+        >ChatGPT sign-in gives this plugin access to your ChatGPT account, not only your Dot. It is
+        used only to find your Dot and send it messages.</small
+      >
+    </section>
+    <section id="signedIn" hidden>
+      <p id="account"></p>
+      <button id="disconnect">Disconnect</button>
+    </section>
+    <h2>Codex</h2>
+    <p>Send messages to Codex sessions on your computers, and start or follow up Codex Cloud tasks.</p>
+    <section id="codexOut" hidden>
+      <button id="codexSignin">Sign in with ChatGPT for Codex</button>
+    </section>
+    <section id="codexIn" hidden>
+      <p id="codexAccount"></p>
+      <button id="codexEnroll">Connect to your computers</button>
+      <small
+        >Your computer needs Codex remote control turned on: in the Codex app, or with
+        <code>codex remote-control start</code>.</small
+      >
+      <section id="enroll" hidden>
+        <p>
+          1. Copy this link and open it in your phone's browser. Sign in when asked (OpenAI asks again
+          even if you are signed in).
+        </p>
+        <textarea id="enrollUrl" rows="4" readonly></textarea>
+        <button id="enrollCopy">Copy link</button>
+        <p>
+          2. The browser ends on a page that won't load, at an address starting with
+          <code>http://localhost:1455</code>. Copy that whole address and paste it here.
+        </p>
+        <input id="enrollCallback" type="url" placeholder="http://localhost:1455/auth/callback?code=…" />
+        <button id="enrollFinish">Finish connecting</button>
+      </section>
+      <ul id="computers"></ul>
+      <section id="pairing" hidden>
+        <p>
+          Pair each computer with this phone once. On the computer, open the Codex app's remote
+          control (Settings → Connections) or run <code>codex remote-control pair</code>, then paste
+          the code it shows (or the QR code's text).
+        </p>
+        <input id="pairCode" type="text" placeholder="ABCD-EFGH" autocapitalize="characters" />
+        <button id="pairButton">Pair computer</button>
+      </section>
+      <section id="chatsSection" hidden>
+      <h3>Codex chats</h3>
+      <small>Most recent first. "Send … to Codex" goes to the default chat; a nickname works too.</small>
+      <select id="chatSelect"></select>
+      <input id="chatNickname" type="text" maxlength="40" placeholder="Nickname, e.g. ble" />
+      <button id="chatSave">Save nickname</button>
+      <button id="chatDefault">Use as default</button>
+      <button id="chatsRefresh">Refresh chats</button>
+      <p id="chatDefaultLabel"></p>
+      <ul id="chatErrors"></ul>
+      </section>
+      <button id="codexDisconnect">Sign out of Codex</button>
+    </section>
+    <p id="status" role="status" aria-live="polite">Starting ChatGPT…</p>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      // ChatGPT's session cookie is too big for one cookie, so NextAuth splits it into .0 and .1.
+      const SESSION_COOKIES = ["__Secure-next-auth.session-token.0", "__Secure-next-auth.session-token.1"];
+      const buttons = [
+        "signin", "disconnect", "codexSignin", "codexEnroll", "enrollFinish", "codexDisconnect",
+        "chatSave", "chatDefault", "chatsRefresh", "pairButton",
+      ];
+      let chats = [];
+      let busy = false;
+      const say = (text) => {
+        $("status").textContent = text;
+      };
+      async function send(message) {
+        const result = await Pebble.sendMessage("plugin", message);
+        if (result.error) throw new Error(result.error);
+        return result;
+      }
+      async function render(state) {
+        const dots = state.dots;
+        $("signedOut").hidden = dots.configured;
+        $("signedIn").hidden = !dots.configured;
+        if (dots.configured) $("account").textContent = dots.dotName + (dots.email ? " · " + dots.email : "");
+        const codex = state.codex;
+        $("codexOut").hidden = codex.signedIn;
+        $("codexIn").hidden = !codex.signedIn;
+        $("codexAccount").textContent = codex.email ? "Signed in as " + codex.email : "Signed in";
+        $("codexEnroll").textContent = codex.remoteControl ? "Reconnect to your computers" : "Connect to your computers";
+        $("chatsSection").hidden = !codex.paired;
+        if (codex.paired && !chats.length) loadChats().catch((e) => say(e.message));
+        $("computers").replaceChildren();
+        $("pairing").hidden = !codex.remoteControl;
+        if (codex.remoteControl) {
+          try {
+            const { computers } = await send({ type: "codex_computers" });
+            if (!computers.length) $("computers").append(item("No computers with remote control on yet."));
+            computers.forEach((c) => $("computers").append(item(c.name + (c.online ? " · online" : " · offline"))));
+          } catch (e) {
+            $("computers").append(item(e.message));
+          }
+        }
+      }
+      function ago(ms) {
+        if (!ms) return "";
+        const minutes = Math.max(0, Math.round((Date.now() - ms) / 60000));
+        if (minutes < 60) return minutes + " min ago";
+        if (minutes < 48 * 60) return Math.round(minutes / 60) + " h ago";
+        return Math.round(minutes / 1440) + " d ago";
+      }
+      function chatName(chat) {
+        return (chat.nickname ? chat.nickname + " — " : "") + chat.label;
+      }
+      async function loadChats() {
+        $("chatSelect").replaceChildren(item("Loading Codex chats…", "option"));
+        const found = await send({ type: "codex_chats" });
+        chats = found.chats;
+        $("chatSelect").replaceChildren();
+        if (!chats.length) $("chatSelect").append(item("No Codex chats found", "option"));
+        chats.forEach((chat, i) => {
+          const where = chat.kind === "task" ? "Codex Cloud" : chat.computer;
+          const option = item((chat.isDefault ? "★ " : "") + chatName(chat) + " · " + where + " · " + ago(chat.updatedAt), "option");
+          option.value = String(i);
+          $("chatSelect").append(option);
+        });
+        const current = chats.find((chat) => chat.isDefault);
+        $("chatDefaultLabel").textContent = current ? "Default: " + chatName(current) : "No default chat yet.";
+        $("chatErrors").replaceChildren(...found.errors.map((e) => item(e)));
+        showSelected();
+      }
+      function selected() {
+        return chats[Number($("chatSelect").value)];
+      }
+      function showSelected() {
+        const chat = selected();
+        $("chatNickname").value = chat ? chat.nickname : "";
+      }
+      async function saveChat(makeDefault) {
+        const chat = selected();
+        if (!chat) throw new Error("Pick a Codex chat first.");
+        await send({ type: "codex_chat_save", chat, nickname: $("chatNickname").value, makeDefault });
+        await loadChats();
+      }
+      function item(text, tag = "li") {
+        const el = document.createElement(tag);
+        el.textContent = text;
+        return el;
+      }
+      async function run(fn) {
+        if (busy) return;
+        busy = true;
+        buttons.forEach((id) => ($(id).disabled = true));
+        try {
+          await fn();
+        } catch (e) {
+          say(e.message || "Something went wrong.");
+        } finally {
+          busy = false;
+          buttons.forEach((id) => ($(id).disabled = false));
+        }
+      }
+      function needsSignIn() {
+        if (Pebble.webSignIn) return false;
+        say("Signing in requires a newer version of the Pebble app.");
+        return true;
+      }
+      async function chatgptCookie() {
+        const cookies = await Pebble.webSignIn({
+          url: "https://chatgpt.com/auth/login",
+          cookies: SESSION_COOKIES,
+          domain: "chatgpt.com",
+        });
+        if (!cookies) say("Sign-in cancelled.");
+        return cookies && SESSION_COOKIES.map((name) => cookies[name]).join("");
+      }
+      function entropy(size) {
+        const bytes = crypto.getRandomValues(new Uint8Array(size));
+        return btoa(String.fromCharCode(...bytes));
+      }
+      $("signin").onclick = () =>
+        run(async () => {
+          if (needsSignIn()) return;
+          say("Opening ChatGPT sign-in…");
+          const sessionToken = await chatgptCookie();
+          if (!sessionToken) return;
+          say("Finding your Dot…");
+          await render(await send({ type: "dots_connect", session_token: sessionToken }));
+          say("Connected.");
+        });
+      $("disconnect").onclick = () =>
+        run(async () => {
+          await render(await send({ type: "dots_disconnect" }));
+          say("Disconnected. Saved sign-in removed from this plugin.");
+        });
+      $("codexSignin").onclick = () =>
+        run(async () => {
+          if (needsSignIn()) return;
+          say("Opening ChatGPT sign-in…");
+          const sessionToken = await chatgptCookie();
+          if (!sessionToken) return;
+          await render(await send({ type: "codex_connect", session_token: sessionToken }));
+          say("Signed in for Codex.");
+        });
+      $("codexEnroll").onclick = () =>
+        run(async () => {
+          const begun = await send({ type: "codex_enroll_begin", entropy: entropy(96) });
+          $("enrollUrl").value = begun.url;
+          $("enrollCallback").value = "";
+          $("enroll").hidden = false;
+          say("Follow the two steps below.");
+        });
+      $("enrollCopy").onclick = async () => {
+        $("enrollUrl").select();
+        try {
+          await navigator.clipboard.writeText($("enrollUrl").value);
+        } catch (e) {
+          document.execCommand("copy");
+        }
+        say("Link copied.");
+      };
+      $("enrollFinish").onclick = () =>
+        run(async () => {
+          await render(await send({ type: "codex_enroll_finish", url: $("enrollCallback").value }));
+          $("enroll").hidden = true;
+          say("Connected to your computers.");
+        });
+      $("pairButton").onclick = () =>
+        run(async () => {
+          const { computers } = await send({ type: "codex_pair", code: $("pairCode").value });
+          $("pairCode").value = "";
+          $("computers").replaceChildren(...computers.map((c) => item(c.name + (c.online ? " · online" : " · offline"))));
+          await render(await send({ type: "status" }));
+          say("Computer paired.");
+        });
+      $("chatSelect").onchange = showSelected;
+      $("chatsRefresh").onclick = () => run(async () => { await loadChats(); say("Chats refreshed."); });
+      $("chatSave").onclick = () => run(async () => { await saveChat(false); say("Nickname saved."); });
+      $("chatDefault").onclick = () => run(async () => { await saveChat(true); say("Default chat saved."); });
+      $("codexDisconnect").onclick = () =>
+        run(async () => {
+          await render(await send({ type: "codex_disconnect" }));
+          say("Signed out of Codex.");
+        });
+      Pebble.addEventListener("ready", (event) => {
+        if (event.target !== "plugin") return;
+        run(async () => {
+          await render(await send({ type: "status" }));
+          say("Ready.");
+        });
+      });
+    </script>
+  </body>
+</html>

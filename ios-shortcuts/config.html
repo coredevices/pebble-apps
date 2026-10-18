@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>iOS Shortcuts</title>
+  <style>
+    :root { color-scheme: dark; --bg:#1d1a1a; --card:#292525; --text:#f5f0ef; --muted:#aaa19f; --accent:#ff3b30; --line:#514948; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:20px 18px 48px; background:var(--bg); color:var(--text); font:16px/1.42 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    h1 { margin:0 0 4px; font-size:30px; }
+    h2 { margin:0 0 12px; font-size:20px; }
+    p { margin:8px 0; }
+    .subtle,.hint { color:var(--muted); }
+    .card { margin-top:18px; padding:18px; border:1px solid var(--line); border-radius:18px; background:var(--card); }
+    .status { margin-top:14px; padding:11px 13px; border-radius:12px; background:#332e2d; color:var(--muted); white-space:pre-wrap; }
+    .status.good { color:#b7e7bd; background:#203126; }
+    .status.bad { color:#ffc1bc; background:#3a2220; }
+    label { display:block; margin:13px 0 6px; font-weight:600; }
+    textarea,input,select,button { width:100%; min-height:44px; border:1px solid var(--line); border-radius:11px; padding:11px; color:var(--text); background:#171515; font:inherit; }
+    textarea { resize:vertical; min-height:126px; }
+    button { margin-top:12px; border-color:var(--accent); background:var(--accent); font-weight:700; }
+    button.secondary { background:transparent; color:var(--accent); }
+    button:disabled { opacity:.45; }
+    .toggle { display:flex; gap:10px; align-items:flex-start; margin:12px 0; font-weight:400; }
+    .toggle input { flex:0 0 auto; width:22px; min-height:22px; margin:1px 0 0; accent-color:var(--accent); }
+    code { color:#ffd0cc; overflow-wrap:anywhere; }
+    ol { padding-left:22px; }
+    .event { padding:10px 0; border-top:1px solid var(--line); }
+    .event:first-child { border-top:0; }
+    .event strong,.event span { display:block; }
+    .event span { color:var(--muted); font-size:14px; overflow-wrap:anywhere; }
+  </style>
+</head>
+<body>
+  <h1>iOS Shortcuts</h1>
+  <p class="subtle">Let Index run trusted shortcuts and let personal automations send input back to Index or Pebble.</p>
+  <div id="platform" class="status">Connecting to the plugin…</div>
+
+  <section class="card">
+    <h2>Shortcuts Index can run</h2>
+    <p class="hint">Create the Shortcut in Apple's Shortcuts app, then list it here. One per line:</p>
+    <p><code>Label | Exact Shortcut Name | Optional description</code></p>
+    <textarea id="shortcuts" spellcheck="false" placeholder="Movie Night | Movie Night | Set an Apple Home scene&#10;Commute | Start My Commute | Open maps and play my driving playlist"></textarea>
+    <p class="hint">Only these allow-listed names can run. Apple does not provide an API for another app to enumerate your Shortcuts library.</p>
+  </section>
+
+  <section class="card">
+    <h2>Input from automations</h2>
+    <label class="toggle"><input id="ask-index" type="checkbox"><span><strong>Ask Index</strong><br><span class="hint">Submit the automation's text to the same Index pipeline as the input box.</span></span></label>
+    <label class="toggle"><input id="quiet-time" type="checkbox"><span><strong>Set Pebble Quiet Time</strong><br><span class="hint">Turn Quiet Time on or off, useful with Focus and location automations.</span></span></label>
+    <label class="toggle"><input id="event" type="checkbox"><span><strong>Publish an event</strong><br><span class="hint">Keep a recent event that Index can read through the shortcuts/input source.</span></span></label>
+    <p class="hint">In Apple Shortcuts, add CoreApp's <strong>Send to Index/Pebble</strong> action. Choose Ask Index, Quiet Time, or Event. For example: “When Sleep Focus turns on → Quiet Time → On.”</p>
+  </section>
+
+  <button id="save">Save settings</button>
+  <div id="save-status" class="status">No changes saved yet.</div>
+
+  <section class="card">
+    <h2>Test an outgoing Shortcut</h2>
+    <label for="test-shortcut">Configured Shortcut</label>
+    <select id="test-shortcut"></select>
+    <label for="test-input">Shortcut Input</label>
+    <textarea id="test-input" placeholder="Optional text sent as Shortcut Input"></textarea>
+    <button id="test">Run Shortcut</button>
+    <div id="test-status" class="status">Save settings, then run a test.</div>
+  </section>
+
+  <section class="card">
+    <h2>Recent incoming inputs</h2>
+    <div id="events" class="hint">No incoming inputs yet.</div>
+    <button id="clear" class="secondary">Clear recent inputs</button>
+  </section>
+
+  <script>
+    (function () {
+      'use strict';
+      var $ = function (id) { return document.getElementById(id); };
+      var currentSettings = null;
+
+      function send(message) { return Pebble.sendMessage('plugin', message); }
+      function setStatus(id, text, kind) {
+        var node = $(id);
+        node.textContent = text;
+        node.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function parseRows() {
+        var result = [];
+        var lines = $('shortcuts').value.split(/\r?\n/);
+        for (var i = 0; i < lines.length; i += 1) {
+          var line = lines[i].trim();
+          if (!line) continue;
+          var parts = line.split('|');
+          var label = (parts[0] || '').trim();
+          var name = (parts[1] || parts[0] || '').trim();
+          var description = parts.slice(2).join('|').trim();
+          if (!label || !name) throw new Error('Line ' + (i + 1) + ' needs a label and Shortcut name.');
+          result.push({ label: label, name: name, description: description });
+        }
+        return result;
+      }
+
+      function renderSettings(settings) {
+        currentSettings = settings;
+        $('shortcuts').value = (settings.shortcuts || []).map(function (item) {
+          return item.label + ' | ' + item.name + (item.description ? ' | ' + item.description : '');
+        }).join('\n');
+        $('ask-index').checked = !!settings.inbound.askIndex;
+        $('quiet-time').checked = !!settings.inbound.quietTime;
+        $('event').checked = !!settings.inbound.event;
+        renderShortcutPicker(settings.shortcuts || []);
+      }
+
+      function renderShortcutPicker(shortcuts) {
+        var picker = $('test-shortcut');
+        var old = picker.value;
+        while (picker.firstChild) picker.removeChild(picker.firstChild);
+        if (!shortcuts.length) {
+          var empty = document.createElement('option');
+          empty.value = '';
+          empty.textContent = 'No shortcuts configured';
+          picker.appendChild(empty);
+        } else {
+          shortcuts.forEach(function (item) {
+            var option = document.createElement('option');
+            option.value = item.label;
+            option.textContent = item.label + (item.name === item.label ? '' : ' — ' + item.name);
+            picker.appendChild(option);
+          });
+          if (old) picker.value = old;
+        }
+        $('test').disabled = !shortcuts.length;
+      }
+
+      function renderEvents(events) {
+        var root = $('events');
+        while (root.firstChild) root.removeChild(root.firstChild);
+        if (!events || !events.length) {
+          root.textContent = 'No incoming inputs yet.';
+          root.className = 'hint';
+          return;
+        }
+        root.className = '';
+        events.forEach(function (item) {
+          var row = document.createElement('div');
+          row.className = 'event';
+          var title = document.createElement('strong');
+          title.textContent = item.command.replace('_', ' ') + ' · ' + new Date(item.receivedAtMs).toLocaleString();
+          var input = document.createElement('span');
+          input.textContent = item.text || '(no text)';
+          row.appendChild(title);
+          row.appendChild(input);
+          if (item.result) {
+            var result = document.createElement('span');
+            result.textContent = item.result;
+            row.appendChild(result);
+          }
+          root.appendChild(row);
+        });
+      }
+
+      async function refresh() {
+        try {
+          var status = await send({ type: 'status' });
+          if (status.error) throw new Error(status.error);
+          renderSettings(status.settings);
+          renderEvents(status.recentInputs);
+          setStatus('platform', status.platformSupported
+            ? 'Ready on this iPhone or iPad.'
+            : (status.reason || 'iOS Shortcuts is unavailable in this build.'),
+            status.platformSupported ? 'good' : 'bad');
+        } catch (error) {
+          setStatus('platform', error.message || String(error), 'bad');
+        }
+      }
+
+      $('save').onclick = async function () {
+        $('save').disabled = true;
+        try {
+          var shortcuts = parseRows();
+          var result = await send({
+            type: 'save',
+            shortcuts: shortcuts,
+            inbound: {
+              askIndex: $('ask-index').checked,
+              quietTime: $('quiet-time').checked,
+              event: $('event').checked
+            }
+          });
+          if (result.error) throw new Error(result.error);
+          renderSettings(result.settings);
+          setStatus('save-status', 'Settings saved. Index can use ' + result.settings.shortcuts.length + ' Shortcut' + (result.settings.shortcuts.length === 1 ? '' : 's') + '.', 'good');
+        } catch (error) {
+          setStatus('save-status', error.message || String(error), 'bad');
+        } finally {
+          $('save').disabled = false;
+        }
+      };
+
+      $('test').onclick = async function () {
+        var shortcut = $('test-shortcut').value;
+        if (!shortcut) return;
+        $('test').disabled = true;
+        setStatus('test-status', 'Opening Apple Shortcuts…');
+        try {
+          var result = await send({ type: 'testShortcut', shortcut: shortcut, input: $('test-input').value });
+          if (result.error) throw new Error(result.error);
+          setStatus('test-status', result.text, 'good');
+        } catch (error) {
+          setStatus('test-status', error.message || String(error), 'bad');
+        } finally {
+          $('test').disabled = !(currentSettings && currentSettings.shortcuts && currentSettings.shortcuts.length);
+        }
+      };
+
+      $('clear').onclick = async function () {
+        $('clear').disabled = true;
+        try {
+          var result = await send({ type: 'clearInputs' });
+          if (result.error) throw new Error(result.error);
+          renderEvents([]);
+        } catch (error) {
+          setStatus('save-status', error.message || String(error), 'bad');
+        } finally {
+          $('clear').disabled = false;
+        }
+      };
+
+      Pebble.addEventListener('ready', function (event) {
+        if (event.target === 'plugin') refresh();
+      });
+      if (Pebble.readyTargets && Pebble.readyTargets().indexOf('plugin') !== -1) refresh();
+    })();
+  </script>
+</body>
+</html>

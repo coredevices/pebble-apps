@@ -1,0 +1,87 @@
+{
+  "name": "tasks-org",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "pebble": {
+    "displayName": "Tasks.org",
+    "uuid": "05d91712-e6fa-4a67-a4ab-be5bb284b87e",
+    "sdkVersion": "3",
+    "plugin": {
+      "description": "Creates reminders in the tasks.org Android app and exposes the user's task lists so an agent can choose a destination.",
+      "script": "plugin.js",
+      "sources": [
+        {
+          "category": "reminders",
+          "items": [
+            "list"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "destination": [
+              "shortText"
+            ],
+            "url": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 300
+        }
+      ],
+      "actions": [
+        {
+          "name": "create_reminder",
+          "description": "Create a task in the tasks.org app. Use instanceId from the reminders/list source to choose a list; otherwise the configured list or the user's default list is used. due_iso is an absolute RFC3339 instant and must include the requested wall time's real UTC offset (for example, 2026-08-27T14:30:00-07:00 for 2:30 PM in Los Angeles, never 14:30:00Z). notify_before_ms adds an early notification when a due time is supplied.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Task title."
+              },
+              "due_iso": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional absolute RFC3339 due time with Z or a numeric UTC offset."
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional IANA time-zone name supplied by Index for context."
+              },
+              "notify_before_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "description": "Optional early-notification lead in milliseconds; used only with due_iso."
+              },
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional tasks.org list id from the reminders/list source."
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "reminders/list"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ],
+      "usesPermissions": [
+        "TasksOrg"
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

@@ -1,0 +1,64 @@
+diff --git a/src/activation.rs b/src/activation.rs
+--- a/src/activation.rs
++++ b/src/activation.rs
+@@ -36,0 +37,7 @@
++#[cfg(feature = "port-oracle")]
++pub struct PortOracleActivationSerialization {
++    pub activation_info_xml: Vec<u8>,
++    pub outer_xml: Vec<u8>,
++    pub form_body: Vec<u8>,
++}
++
+@@ -53,0 +61,36 @@
++#[cfg(feature = "port-oracle")]
++pub fn port_oracle_serialize_activation_request(
++    activation: ActivationInfo,
++    fair_play_cert_chain: Vec<u8>,
++    fair_play_signature: Vec<u8>,
++) -> Result<PortOracleActivationSerialization, PushError> {
++    let activation_info_xml = plist_to_buf(&activation)?;
++    let request = ActivationRequest {
++        activation_info_complete: true,
++        activation_info_xml: activation_info_xml.clone().into(),
++        fair_play_cert_chain: fair_play_cert_chain.into(),
++        fair_play_signature: fair_play_signature.into(),
++    };
++    let outer_xml = plist_to_buf(&request)?;
++
++    #[derive(Serialize)]
++    #[serde(rename_all = "kebab-case")]
++    struct FormBody {
++        activation_info: String,
++    }
++
++    // Building a reqwest request exercises the exact pinned form encoder without sending it.
++    let encoded = REQWEST
++        .post("https://albert.apple.com/deviceservices/deviceActivation?device=MacOS")
++        .form(&FormBody {
++            activation_info: String::from_utf8(outer_xml.clone()).expect("plist XML is UTF-8"),
++        })
++        .build()?;
++    let form_body = encoded.body()
++        .and_then(|body| body.as_bytes())
++        .expect("reqwest form body is buffered")
++        .to_vec();
++
++    Ok(PortOracleActivationSerialization { activation_info_xml, outer_xml, form_body })
++}
++
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -40,5 +40,12 @@
+ pub use util::{DebugRwLock, DebugMutex};
+ use activation::ActivationInfo;
++#[cfg(feature = "port-oracle")]
++pub use activation::{
++    activate as port_oracle_activate,
++    ActivationInfo as PortOracleActivationInfo,
++    PortOracleActivationSerialization,
++    port_oracle_serialize_activation_request,
++};
+ pub use aps::{APSConnectionResource, APSConnection, APSMessage, APSState};
+ #[cfg(feature = "port-oracle")]
+ pub use aps::{

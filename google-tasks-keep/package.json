@@ -1,0 +1,201 @@
+{
+  "name": "google-tasks-keep",
+  "author": "Core Devices",
+  "version": "0.3.0",
+  "pebble": {
+    "displayName": "Google Tasks & Keep",
+    "uuid": "a7c6e4b2-874a-4f08-9d7f-0a98e53c6b41",
+    "sdkVersion": "3",
+    "capabilities": [
+      "web_sign_in"
+    ],
+    "usesPermissions": [
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "android.clients.google.com",
+            "tasks-pa.clients6.google.com",
+            "www.googleapis.com"
+          ]
+        }
+      }
+    ],
+    "plugin": {
+      "description": "Saves notes to Google Keep and creates reminders in Google Tasks through one shared Google account.",
+      "script": "plugin.js",
+      "sources": [
+        {
+          "category": "notes",
+          "items": [
+            "destination"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ],
+            "account": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "list"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "destination": [
+              "shortText"
+            ],
+            "url": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 900
+        },
+        {
+          "category": "notes",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
+      "actions": [
+        {
+          "name": "create_note",
+          "displayName": "Google Keep",
+          "description": "Save a note to Google Keep. Google Keep is the notes destination for this shared Google integration.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "enum": [
+                  "google-keep"
+                ],
+                "description": "Optional Google Keep destination id."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The note text, preferably using the user's exact words."
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "notes/destination"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "create_reminder",
+          "displayName": "Google Tasks",
+          "description": "Create a Google Tasks reminder. Use instanceId from reminders/list for a named task list; omit it for My Tasks. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone. Omit due_iso for an undated task.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Reminder title."
+              },
+              "due_iso": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional absolute due instant in ISO-8601 format. Omit for an undated task."
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1,
+                "description": "IANA time-zone name used to preserve the user's local date and time. Required with due_iso."
+              },
+              "notify_before_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Optional notification lead time. Google Tasks cannot configure this per task, so it is accepted but not applied."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Optional Google Tasks list ID from reminders/list. Omit for My Tasks."
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "required": [
+                    "due_iso"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "timezone"
+                  ]
+                }
+              }
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "reminders/list"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

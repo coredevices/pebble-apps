@@ -1,0 +1,137 @@
+{
+  "name": "local-music",
+  "author": "Core Devices",
+  "version": "0.4.0",
+  "pebble": {
+    "displayName": "Android Music",
+    "uuid": "29ac6933-ed83-4340-a73c-c3d372081414",
+    "sdkVersion": "3",
+    "plugin": {
+      "description": "Starts music, albums, artists, playlists, genres, or subscribed podcasts in an installed Android player. This controls the player on the phone, including YouTube Music and Pocket Casts, without a separate service login.",
+      "script": "plugin.js",
+      "usesPermissions": [
+        "LocalMusicPlayback",
+        "AndroidIntents",
+        {
+          "name": "Internet",
+          "parameters": {
+            "domains": [
+              "music.youtube.com"
+            ]
+          }
+        }
+      ],
+      "androidIntents": {
+        "activities": [
+          {
+            "actions": [
+              "android.media.action.MEDIA_PLAY_FROM_SEARCH"
+            ],
+            "packages": [
+              "com.google.android.apps.youtube.music",
+              "com.google.android.youtube",
+              "com.spotify.music",
+              "com.apple.android.music",
+              "com.amazon.mp3",
+              "com.pandora.android",
+              "com.aspiro.tidal",
+              "deezer.android.app",
+              "com.sec.android.app.music",
+              "org.videolan.vlc",
+              "tv.plex.labs.plexamp",
+              "au.com.shiftyjelly.pocketcasts"
+            ]
+          },
+          {
+            "actions": [
+              "android.intent.action.VIEW"
+            ],
+            "packages": [
+              "com.google.android.apps.youtube.music"
+            ],
+            "schemes": [
+              "vnd.youtube.music"
+            ]
+          }
+        ]
+      },
+      "sources": [],
+      "actions": [
+        {
+          "name": "play",
+          "displayName": "Android Music",
+          "description": "Play music or a subscribed podcast in an Android app on this phone. Put the artist, song, album, playlist, genre, podcast, episode, or natural-language request in query. When the user names a player, set player; YouTube Music is youtube_music and Pocket Casts is pocket_casts. Omit player to use the configured default.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What to play, such as Ratatat, Get Lucky by Daft Punk, my Discover Mix, or the exact name of a subscribed Pocket Casts show or episode."
+              },
+              "player": {
+                "type": "string",
+                "enum": [
+                  "youtube_music",
+                  "youtube",
+                  "spotify",
+                  "apple_music",
+                  "amazon_music",
+                  "pandora",
+                  "tidal",
+                  "deezer",
+                  "samsung_music",
+                  "vlc",
+                  "plexamp",
+                  "pocket_casts"
+                ],
+                "description": "Optional requested Android player. Omit to use the default selected in plugin settings."
+              },
+              "media_type": {
+                "type": "string",
+                "enum": [
+                  "any",
+                  "artist",
+                  "track",
+                  "album",
+                  "playlist",
+                  "genre"
+                ],
+                "description": "Optional hint about what query identifies. Use any for podcasts or when uncertain."
+              },
+              "artist": {
+                "type": "string",
+                "description": "Optional exact artist hint."
+              },
+              "album": {
+                "type": "string",
+                "description": "Optional exact album hint."
+              },
+              "title": {
+                "type": "string",
+                "description": "Optional exact song or episode title."
+              },
+              "playlist": {
+                "type": "string",
+                "description": "Optional exact playlist name."
+              },
+              "genre": {
+                "type": "string",
+                "description": "Optional genre name."
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "additionalProperties": false
+          },
+          "destructive": false,
+          "requiresConfirmation": false,
+          "timeoutSec": 15,
+          "callerPermissions": []
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

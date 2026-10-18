@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Muse settings</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font:
+          16px system-ui,
+          sans-serif;
+      }
+      body {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      p {
+        line-height: 1.5;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 24px 0 8px;
+      }
+      select,
+      button {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border-radius: 10px;
+        margin: 6px 0;
+      }
+      button {
+        cursor: pointer;
+      }
+      #status {
+        min-height: 48px;
+        margin-top: 20px;
+      }
+      small {
+        display: block;
+        line-height: 1.5;
+        opacity: 0.75;
+      }
+      button:disabled,
+      select:disabled {
+        opacity: 0.5;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Muse</h1>
+    <p>Send messages from Pebble to your Muse assistant.</p>
+    <button id="signin" disabled>Sign in to Muse</button>
+    <label for="chat">Send messages to</label
+    ><select id="chat" disabled>
+      <option value="main">Main chat</option>
+    </select>
+    <small
+      >Main chat is the default. Your selection is saved automatically.</small
+    >
+    <button id="refresh" disabled>Refresh chats</button
+    ><button id="disconnect" disabled>Disconnect</button>
+    <p id="status" role="status" aria-live="polite">Starting Muse…</p>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let configured = false,
+        busy = false,
+        selected = "main";
+      const say = (text) => {
+        $("status").textContent = text;
+      };
+      function controls() {
+        for (const id of ["signin", "chat", "refresh", "disconnect"])
+          $(id).disabled = busy || (id !== "signin" && !configured);
+      }
+      async function send(message) {
+        const result = await Pebble.sendMessage("plugin", message);
+        if (result.error) throw new Error(result.error);
+        return result;
+      }
+      function render(result) {
+        configured = result.configured;
+        selected = result.selected || "main";
+        const options = [
+          { id: "main", title: "Main chat" },
+          ...(result.chats || []),
+        ];
+        if (!options.some((c) => c.id === selected))
+          options.push({
+            id: selected,
+            title: "Selected chat unavailable — choose another",
+          });
+        $("chat").replaceChildren(
+          ...options.map((c) => {
+            const o = document.createElement("option");
+            o.value = c.id;
+            o.textContent = c.title;
+            return o;
+          }),
+        );
+        $("chat").value = selected;
+        controls();
+      }
+      async function run(fn) {
+        if (busy) return;
+        busy = true;
+        controls();
+        try {
+          await fn();
+        } catch (e) {
+          say(e.message || "Could not connect to Muse.");
+          $("chat").value = selected;
+        } finally {
+          busy = false;
+          controls();
+        }
+      }
+      $("signin").onclick = () =>
+        run(async () => {
+          if (!Pebble.webSignIn) {
+            say("Muse sign-in requires a newer version of the Pebble app.");
+            return;
+          }
+          say("Opening Muse sign-in…");
+          const cookies = await Pebble.webSignIn({
+            url: "https://muse.ai/",
+            cookies: ["hatch_sess"],
+            domain: "muse.ai",
+          });
+          if (!cookies) {
+            say("Sign-in cancelled.");
+            return;
+          }
+          say("Connecting to Muse…");
+          render(await send({ type: "connect", session: { cookie: "hatch_sess=" + cookies.hatch_sess } }));
+          say("Connected to Muse.");
+        });
+      $("refresh").onclick = () =>
+        run(async () => {
+          say("Loading chats…");
+          render(await send({ type: "listChats" }));
+          say("Chats refreshed.");
+        });
+      $("chat").onchange = () => {
+        const id = $("chat").value;
+        run(async () => {
+          say("Saving chat…");
+          const result = await send({ type: "selectChat", id });
+          selected = result.selected;
+          say("Chat saved.");
+        });
+      };
+      $("disconnect").onclick = () =>
+        run(async () => {
+          render(await send({ type: "disconnect" }));
+          say("Disconnected. Saved connection removed from this plugin.");
+        });
+      Pebble.addEventListener("ready", (event) => {
+        if (event.target !== "plugin") return;
+        run(async () => {
+          const state = await send({ type: "status" });
+          render(state);
+          if (state.configured) {
+            say("Loading chats…");
+            render(await send({ type: "listChats" }));
+            say("Connected to Muse.");
+          } else say("Sign in to connect your Muse account.");
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,179 @@
+{
+  "name": "obsidian",
+  "author": "Core Devices",
+  "version": "0.2.0",
+  "pebble": {
+    "displayName": "Obsidian/Markdown Notes",
+    "uuid": "8ee7164e-0afd-4a79-9a8a-d0bcf35570d8",
+    "sdkVersion": "3",
+    "plugin": {
+      "description": "Creates separate Markdown notes or safely appends to a selected existing note in a user-selected folder, with Obsidian-compatible tasks and links.",
+      "script": "plugin.js",
+      "sources": [
+        {
+          "category": "notes",
+          "items": [
+            "destination"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ],
+            "path": [
+              "shortText",
+              "longText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "list"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "destination": [
+              "shortText"
+            ],
+            "path": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
+      "actions": [
+        {
+          "name": "create_note",
+          "description": "Save a note as Markdown in the configured folder. Optional location metadata is included only when the user supplied it.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "enum": [
+                  "markdown-notes"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "location": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "notes/destination"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "create_reminder",
+          "description": "Append an Obsidian Tasks-compatible Markdown reminder. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "enum": [
+                  "markdown-reminders"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "due_iso": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "notify_before_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "location": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "reminders/list"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ],
+      "usesPermissions": [
+        "FileSystem"
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

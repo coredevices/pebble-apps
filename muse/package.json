@@ -1,0 +1,69 @@
+{
+  "name": "muse",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "npm run build && node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@noble/ciphers": "1.3.0",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "buffer": "6.0.3",
+    "protobufjs": "8.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  },
+  "pebble": {
+    "displayName": "Muse",
+    "uuid": "b8346592-cd59-4b83-9185-87d94e0734b0",
+    "sdkVersion": "3",
+    "capabilities": [
+      "web_sign_in"
+    ],
+    "usesPermissions": [
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "muse.ai",
+            "hatch.metaaivm.com"
+          ]
+        }
+      }
+    ],
+    "plugin": {
+      "description": "Send a message to your chosen Muse chat. Sign in and choose the destination in settings.",
+      "script": "plugin.js",
+      "sources": [],
+      "actions": [
+        {
+          "name": "send_to_muse",
+          "description": "Send a message to the Muse chat selected in plugin settings (Main chat by default). Do not use unless the user explicitly addresses Muse or asks to send something to it, e.g. \"message Muse …\", \"send to Muse …\", \"tell Muse …\", \"ask Muse …\" or \"Muse, …\". Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not Muse’s answer. Do not automatically retry an uncertain delivery.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "The text to deliver to Muse, without the \"send to Muse\" instruction itself.",
+                "minLength": 1,
+                "maxLength": 16000
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "destructive": false,
+          "requiresConfirmation": false
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

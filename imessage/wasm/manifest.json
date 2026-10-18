@@ -1,0 +1,18 @@
+{
+  "blinkCommit": "f006a4fc6f9b8de9272504fdff0dbbe5ce5dc580",
+  "emscripten": "4.0.11",
+  "inputs": {
+    "plugins/imessage/wasm/build.py": "3c4ad70c841b38ae3542ed9b443bae68e976380c958736a83ed772db27e677f2",
+    "plugins/imessage/wasm/entropy.c": "0508e34bcee7e5bae80fe2cfc9bdd2abb9607c9f9dd1b07a824bb2403f636f63",
+    "plugins/imessage/wasm/pre.js": "f64edbc030968a500dcf6ca52aba0b5f302275dc53507049ff2a4d94926446bc",
+    "x86executor-interpreter/src/main/c/pebble_x86_executor_blink.c": "440851bacddae132b7e2f70831347bec87f9ad7b94b8621ae65c8f147e2618c8",
+    "x86executor-interpreter/src/main/c/apple/config.h": "4371ce5a0cf1b3a7f01c0827b4874383540f66e6f60802802d63eac06c09e5fd",
+    "x86executor-interpreter/src/main/c/apple/blink-members.txt": "6c9ebfacb2c3aec15001877a84a1def966e3017680e3299713acd61babde8e95",
+    "x86executor-interpreter/src/main/c/patches/blink-guest-memory-protection.patch": "a591165f959c7fd3933aa8ef37ac57139435bde23d11434afcb41766af886014",
+    "x86executor-native/src/main/cpp/include/pebble_x86_executor.h": "461c6fb8197da3f7559f609f50b0f1404327fd42e2b7f4ff6bf0f91d66f858a2"
+  },
+  "outputs": {
+    "blink-wasm-legacy.js": "b414ed74ae40999710e3edfa9c706413f87aa801b9bc927e51b4d4f84da914b1",
+    "blink-wasm.js": "84c705fc23e95281ce9cbf124803bc19040112f94af3e47a64887925004f68b2"
+  }
+}

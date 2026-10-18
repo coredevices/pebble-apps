@@ -1,0 +1,75 @@
+{
+  "name": "grok-bot",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test test/plugin.test.js"
+  },
+  "pebble": {
+    "displayName": "Grok Bot",
+    "uuid": "80ee6780-856f-411f-954b-4553ba7f2af8",
+    "sdkVersion": "3",
+    "capabilities": [
+      "web_sign_in"
+    ],
+    "usesPermissions": [
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "cursor.sh",
+            "cursorvm.com"
+          ]
+        }
+      }
+    ],
+    "plugin": {
+      "description": "Send messages to your Grok Bot and read its replies. Sign in and choose the bot in settings.",
+      "script": "plugin.js",
+      "sources": [],
+      "actions": [
+        {
+          "name": "send_to_grok_bot",
+          "description": "Send the user’s message to the Grok Bot selected in plugin settings. Returns a delivery receipt, not the bot's answer; use read_grok_bot later for its reply. Do not automatically retry an uncertain delivery.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "The message to send to Grok Bot.",
+                "minLength": 1,
+                "maxLength": 16000
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "destructive": false,
+          "requiresConfirmation": false
+        },
+        {
+          "name": "read_grok_bot",
+          "description": "Read the latest replies from the Grok Bot selected in plugin settings, oldest first.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer",
+                "description": "How many recent replies to return (1-20, default 3).",
+                "minimum": 1,
+                "maximum": 20
+              }
+            },
+            "additionalProperties": false
+          },
+          "destructive": false,
+          "requiresConfirmation": false
+        }
+      ]
+    },
+    "configPage": "config.html"
+  }
+}

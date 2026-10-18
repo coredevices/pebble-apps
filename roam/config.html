@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roam Research</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    p { line-height: 1.45; }
+    label { display: block; font-size: 14px; font-weight: 650; margin: 20px 0 6px; }
+    input[type="text"], input[type="password"] {
+      box-sizing: border-box; width: 100%; padding: 11px 12px; font-size: 15px;
+      border: 1px solid rgba(128,128,128,.45); border-radius: 8px;
+      background: transparent; color: inherit;
+    }
+    .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; }
+    .check input { margin-top: 4px; }
+    .check label { margin: 0; font-size: 15px; font-weight: 500; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    button { padding: 11px 16px; border: 0; border-radius: 8px; font-size: 15px;
+      background: #4772fa; color: white; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled { opacity: .55; }
+    #status { margin-top: 16px; padding: 11px 12px; border-radius: 8px;
+      background: rgba(128,128,128,.15); font-size: 14px; line-height: 1.4; }
+    .hint { opacity: .72; font-size: 13px; }
+    ol { padding-left: 22px; line-height: 1.5; }
+    a { color: #668dff; }
+  </style>
+</head>
+<body>
+  <h1>Roam Research</h1>
+  <p>Capture Index notes to today's daily note using a least-privilege, append-only token.</p>
+
+  <ol>
+    <li>In Roam, open <strong>Settings → Graph</strong>.</li>
+    <li>Copy the graph name shown there.</li>
+    <li>Under API tokens, create a new token with <strong>Append-only access</strong>.</li>
+  </ol>
+  <p class="hint"><a href="https://roamresearch.com/#/app/developer-documentation/page/eb8OVhaFC" target="_blank" rel="noreferrer">Open Roam's Append API documentation</a></p>
+
+  <label for="graph">Graph name</label>
+  <input id="graph" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+
+  <label for="token">Append-only graph token</label>
+  <input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false">
+  <p class="hint">The token is kept in this plugin's private settings on this phone. Leave it blank later to keep the saved token.</p>
+
+  <div class="check">
+    <input id="group" type="checkbox" checked>
+    <label for="group">Group captures under one block on the daily note</label>
+  </div>
+  <label for="section">Grouping block</label>
+  <input id="section" type="text" value="[[Pebble Captures]]">
+
+  <div class="check">
+    <input id="timestamp" type="checkbox" checked>
+    <label for="timestamp">Prepend each capture with the phone's local <strong>HH:mm</strong> time</label>
+  </div>
+
+  <div class="buttons">
+    <button id="save" type="button">Save &amp; test connection</button>
+    <button id="unlink" class="secondary" type="button">Disconnect</button>
+  </div>
+  <div id="status">Starting the Roam plugin…</div>
+  <p class="hint">Saving performs one real append to a page named “Pebble Connection Check.” Roam's append API does not provide a read-only validation endpoint.</p>
+
+  <script>
+    var graphInput = document.getElementById('graph');
+    var tokenInput = document.getElementById('token');
+    var groupInput = document.getElementById('group');
+    var sectionInput = document.getElementById('section');
+    var timestampInput = document.getElementById('timestamp');
+    var saveButton = document.getElementById('save');
+    var statusElement = document.getElementById('status');
+
+    function send(message) {
+      return Pebble.sendMessage('plugin', message);
+    }
+
+    function setBusy(busy) {
+      saveButton.disabled = busy;
+      document.getElementById('unlink').disabled = busy;
+    }
+
+    function syncSectionState() {
+      sectionInput.disabled = !groupInput.checked;
+    }
+
+    function showState(state) {
+      graphInput.value = state.graphName || '';
+      groupInput.checked = !!state.nestUnder;
+      sectionInput.value = state.nestUnder || '[[Pebble Captures]]';
+      timestampInput.checked = state.prependTimestamp !== false;
+      tokenInput.value = '';
+      tokenInput.placeholder = state.configured ? 'Token saved on this phone' : 'roam-graph-token-…';
+      statusElement.textContent = state.configured
+        ? 'Roam is connected to “' + state.graphName + '”.'
+        : 'Roam is not connected.';
+      syncSectionState();
+    }
+
+    groupInput.onchange = syncSectionState;
+
+    saveButton.onclick = async function () {
+      setBusy(true);
+      statusElement.textContent = 'Testing the graph and append-only token…';
+      try {
+        var result = await send({
+          type: 'save',
+          graphName: graphInput.value,
+          token: tokenInput.value,
+          nestUnder: groupInput.checked ? sectionInput.value : '',
+          prependTimestamp: timestampInput.checked,
+        });
+        if (result.error) {
+          statusElement.textContent = result.error;
+          return;
+        }
+        showState(result);
+        statusElement.textContent = 'Connected. The verification block was captured in Roam.';
+      } catch (error) {
+        statusElement.textContent = 'Could not contact the Roam plugin. Try reopening this page.';
+      } finally {
+        tokenInput.value = '';
+        setBusy(false);
+      }
+    };
+
+    document.getElementById('unlink').onclick = async function () {
+      setBusy(true);
+      try {
+        showState(await send({ type: 'unlink' }));
+      } catch (error) {
+        statusElement.textContent = 'Could not disconnect Roam. Try reopening this page.';
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    Pebble.addEventListener('ready', async function (event) {
+      if (event.target !== 'plugin') return;
+      showState(await send({ type: 'status' }));
+    });
+  </script>
+</body>
+</html>

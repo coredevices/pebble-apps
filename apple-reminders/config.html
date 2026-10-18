@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Apple Reminders</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    p { line-height: 1.45; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
+    select { box-sizing: border-box; width: 100%; padding: 11px 12px; font-size: 16px;
+      border: 1px solid rgba(128,128,128,.45); border-radius: 8px; background: transparent; color: inherit; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    button { padding: 10px 16px; border: 0; border-radius: 8px; font-size: 15px;
+      background: #ff3b30; color: white; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled, select:disabled { opacity: .5; }
+    #status { margin-top: 16px; padding: 11px 12px; border-radius: 8px;
+      background: rgba(128,128,128,.15); font-size: 14px; white-space: pre-wrap; }
+    .hint { opacity: .72; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Apple Reminders</h1>
+  <p>Allow Pebble to create native reminders, then choose where reminders without a named list should save.</p>
+  <p class="hint">If you use the system default, changing the default list in Reminders also changes Pebble’s destination.</p>
+
+  <div class="buttons">
+    <button id="connect" type="button">Allow Reminders Access</button>
+    <button id="reload" class="secondary" type="button">Reload Lists</button>
+  </div>
+
+  <label for="destination">Default destination</label>
+  <select id="destination" disabled>
+    <option value="">System default list</option>
+  </select>
+  <div class="buttons">
+    <button id="save" type="button" disabled>Save Destination</button>
+    <button id="system" class="secondary" type="button" disabled>Use System Default</button>
+  </div>
+  <div id="status">Checking Apple Reminders…</div>
+
+  <script>
+    var target = 'plugin';
+    var destination = document.getElementById('destination');
+    var statusElement = document.getElementById('status');
+    var connectButton = document.getElementById('connect');
+    var reloadButton = document.getElementById('reload');
+    var saveButton = document.getElementById('save');
+    var systemButton = document.getElementById('system');
+
+    function send(message) { return Pebble.sendMessage(target, message); }
+    function show(text) { statusElement.textContent = text; }
+    function enableLists(enabled) {
+      destination.disabled = !enabled;
+      saveButton.disabled = !enabled;
+      systemButton.disabled = !enabled;
+    }
+
+    async function loadLists() {
+      show('Loading reminder lists…');
+      var reply = await send({ type: 'listLists' });
+      if (reply.error) { enableLists(false); show(reply.error); return; }
+      destination.innerHTML = '';
+      var defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'System default list';
+      destination.appendChild(defaultOption);
+      reply.lists.forEach(function (list) {
+        var option = document.createElement('option');
+        option.value = list.id;
+        option.textContent = list.title + (list.isDefault ? ' (system default)' : '');
+        destination.appendChild(option);
+      });
+      destination.value = reply.selectedListId || '';
+      enableLists(true);
+      show(reply.selectedListId ? 'Pebble will use the selected list unless you name another.' :
+        'Pebble will use the current system default list.');
+    }
+
+    async function load() {
+      var reply = await send({ type: 'status', action: 'create_reminder' });
+      if (!reply.supported) {
+        enableLists(false);
+        connectButton.disabled = true;
+        show('Apple Reminders is available only in the iPhone version of CoreApp.');
+        return;
+      }
+      if (reply.authorization !== 'authorized') {
+        enableLists(false);
+        show(reply.authorization === 'notDetermined' ? 'Allow access to choose a reminder list.' :
+          'Full Reminders access is off. Enable it in iOS Settings → Privacy & Security → Reminders → Pebble.');
+        return;
+      }
+      connectButton.textContent = 'Reminders Access Allowed';
+      await loadLists();
+    }
+
+    connectButton.onclick = async function () {
+      show('Requesting Reminders access…');
+      var reply = await send({ type: 'requestAccess' });
+      if (reply.error) { show(reply.error); return; }
+      await load();
+    };
+    reloadButton.onclick = loadLists;
+    saveButton.onclick = async function () {
+      if (!destination.value) {
+        await useSystemDefault();
+        return;
+      }
+      show('Saving destination…');
+      var reply = await send({ type: 'saveDestination', listId: destination.value });
+      show(reply.error || ('Default destination: ' + reply.selectedListTitle));
+    };
+    async function useSystemDefault() {
+      show('Using system default…');
+      var reply = await send({ type: 'useSystemDefault' });
+      if (!reply.error) destination.value = '';
+      show(reply.error || 'Pebble will use the current system default list.');
+    }
+    systemButton.onclick = useSystemDefault;
+
+    Pebble.addEventListener('ready', function (event) { if (event.target === target) load(); });
+    if (Pebble.readyTargets && Pebble.readyTargets().indexOf(target) !== -1) load();
+  </script>
+</body>
+</html>

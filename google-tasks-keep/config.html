@@ -1,0 +1,132 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Google Tasks &amp; Keep</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    p { line-height: 1.4; }
+    button { padding: 10px 16px; margin: 4px 6px 4px 0; border: 0; border-radius: 8px;
+             font-size: 15px; background: #4285f4; color: white; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled { opacity: .5; }
+    .warning { margin: 12px 0; padding: 12px; border: 1px solid #d97706; border-radius: 8px;
+               background: rgba(217,119,6,.12); }
+    .warning p { margin: 0 0 10px; }
+    #status { margin: 14px 0; padding: 10px 12px; border-radius: 8px;
+              background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Google Tasks &amp; Keep</h1>
+  <button id="googleSignIn" type="button" hidden>Sign in with Google</button>
+  <div id="status">Starting the Google plugin…</div>
+  <div id="keepPending" class="warning" role="alert" hidden>
+    <p id="keepPendingText">A Google Keep write may already have succeeded.</p>
+    <button id="keepWasSaved" class="secondary" type="button">I checked — it was saved</button>
+    <button id="keepWasNotSaved" class="secondary" type="button">I checked — it was not saved</button>
+  </div>
+  <button id="unlink" class="secondary" type="button" hidden>Sign out</button>
+
+  <script>
+    var statusElement = document.getElementById('status');
+    var keepPending = document.getElementById('keepPending');
+    var keepPendingText = document.getElementById('keepPendingText');
+    var keepWasSaved = document.getElementById('keepWasSaved');
+    var keepWasNotSaved = document.getElementById('keepWasNotSaved');
+    var pendingMutation = null;
+
+    function send(message) { return Pebble.sendMessage('plugin', message); }
+    function say(text) { statusElement.textContent = text; }
+
+    // An uncertain Keep write blocks further notes until it's resolved here.
+    function showPendingMutation(pending) {
+      pendingMutation = pending || null;
+      keepPending.hidden = !pendingMutation;
+      if (!pendingMutation) return;
+      keepPendingText.textContent = pendingMutation.canResolve ?
+        'A Google Keep note may already have been saved. Check Keep, then choose what happened.' :
+        'A Google Keep note is still being saved. Wait two minutes and reopen this page.';
+      keepWasSaved.disabled = !pendingMutation.canResolve;
+      keepWasNotSaved.disabled = !pendingMutation.canResolve;
+    }
+
+    function showSignedIn(signedIn) {
+      document.getElementById('googleSignIn').hidden = signedIn;
+      document.getElementById('unlink').hidden = !signedIn;
+    }
+
+    document.getElementById('googleSignIn').onclick = async function () {
+      say('Opening Google sign-in…');
+      var captured;
+      if (typeof Pebble.webSignIn !== 'function') { say('Google sign-in is unavailable in this app version.'); return; }
+      try {
+        captured = await Pebble.webSignIn({
+          url: 'https://accounts.google.com/EmbeddedSetup',
+          cookies: ['oauth_token'],
+          domain: 'accounts.google.com',
+        });
+      }
+      catch (error) { say(error.message || 'Google sign-in could not start.'); return; }
+      if (!captured) { say('Google sign-in cancelled.'); return; }
+      say('Securing the Google account…');
+      var saved = await send({ type: 'setCredentials', oauthToken: captured.oauth_token });
+      if (saved.error) { say(saved.error); return; }
+      say('Connecting to Google Tasks and Keep…');
+      var verified = await send({ type: 'testConnection' });
+      if (verified.error) { say(verified.error); return; }
+      await refresh();
+    };
+
+    async function refresh() {
+      var result = await send({ type: 'status' });
+      if (result.error) { say(result.error); return; }
+      showPendingMutation(result.pendingKeepMutation);
+      showSignedIn(!!result.configured && !result.exchangePending);
+      if (!result.configured) {
+        say('No Google account is connected.');
+      } else if (result.exchangePending) {
+        say('Google sign-in did not finish. Sign in with Google again.');
+      } else {
+        say(result.email ? 'Signed in as ' + result.email + '.' : 'Signed in to Google.');
+      }
+    }
+
+    document.getElementById('unlink').onclick = async function () {
+      await send({ type: 'unlink' });
+      await refresh();
+      say('Signed out and cleared the Google account.');
+    };
+
+    async function resolveKeepMutation(outcome) {
+      if (!pendingMutation || !pendingMutation.canResolve) return;
+      var saved = outcome === 'saved';
+      var prompt = saved ?
+        'Confirm you checked Google Keep and the note IS present. Index will treat this request as completed and will not send it again.' :
+        'Confirm you checked Google Keep and the note IS NOT present. Index may safely send it again.';
+      if (!window.confirm(prompt)) return;
+      keepWasSaved.disabled = true;
+      keepWasNotSaved.disabled = true;
+      var result = await send({
+        type: 'resolveKeepMutation',
+        mutationId: pendingMutation.mutationId,
+        confirmedChecked: true,
+        outcome: outcome,
+      });
+      if (result.error) { say(result.error); showPendingMutation(pendingMutation); return; }
+      showPendingMutation(null);
+      say(saved ? 'Marked saved.' : 'Marked not saved. Index can send that note again.');
+    }
+    keepWasSaved.onclick = function () { resolveKeepMutation('saved'); };
+    keepWasNotSaved.onclick = function () { resolveKeepMutation('not_saved'); };
+
+    Pebble.addEventListener('ready', function (event) {
+      if (event.target !== 'plugin') return;
+      refresh();
+    });
+  </script>
+</body>
+</html>

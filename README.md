@@ -39,6 +39,12 @@ code of [icloud-md](https://github.com/coddingtonbear/icloud-md) (see `apple-not
 `hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
 are also bundled into the app, which still builds them from its own `test-apps/` copies.
 
+## Icons
+
+Each plugin has `src/icon.svg`: one 1.6px line on a 24×24 grid, round caps, no fill. The App Store
+takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) and `-w 80 -h 80`
+(small).
+
 ## Plugins
 
 | Directory | Name |

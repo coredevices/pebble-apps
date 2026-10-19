@@ -9,7 +9,7 @@ function load() {
   const module = { exports: {} };
   const context = { module, Date, Math, JSON, Promise, encodeURIComponent };
   Object.defineProperty(context, "setTimeout", { get() { throw new Error("setTimeout is not available to plugins"); } });
-  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "plugin.js"), "utf8"), context);
+  vm.runInNewContext(readFileSync(path.join(__dirname, "..", "src", "plugin", "index.js"), "utf8"), context);
   return module.exports;
 }
 

@@ -8,7 +8,7 @@
     "sdkVersion": "3",
     "plugin": {
       "description": "Creates reminders in the native Apple Reminders app using an optionally selected default list.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "reminders",
@@ -77,11 +77,12 @@
           "requiresConfirmation": false,
           "callerPermissions": []
         }
-      ],
-      "usesPermissions": [
-        "AppleReminders"
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin",
+    "usesPermissions": [
+      "AppleReminders"
+    ]
   }
 }

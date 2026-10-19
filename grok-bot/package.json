@@ -26,7 +26,7 @@
     ],
     "plugin": {
       "description": "Send messages to your Grok Bot and read its replies. Sign in and choose the bot in settings.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [],
       "actions": [
         {
@@ -70,6 +70,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

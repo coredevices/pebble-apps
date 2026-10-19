@@ -23,7 +23,7 @@
     ],
     "plugin": {
       "description": "Saves notes to Google Keep and creates reminders in Google Tasks through one shared Google account.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "notes",
@@ -196,6 +196,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

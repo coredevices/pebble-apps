@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {readFileSync} = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const SOURCE = readFileSync(path.join(__dirname, '../plugin.js'), 'utf8');
+const SOURCE = readFileSync(path.join(__dirname, '../src/plugin/index.js'), 'utf8');
 const ORG='11111111-1111-4111-8111-111111111111', OTHER='22222222-2222-4222-8222-222222222222';
 const CHAT='33333333-3333-4333-8333-333333333333', HUMAN='44444444-4444-4444-8444-444444444444', LEAF='55555555-5555-4555-8555-555555555555';
 const CODE='cse_example123', BASE='/api/organizations/'+ORG, DETAIL=BASE+'/chat_conversations/'+CHAT+'?tree=True&rendering_mode=messages&render_all_tools=true';

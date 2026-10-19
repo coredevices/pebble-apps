@@ -82,7 +82,7 @@ function harness(
     },
   };
   vm.runInNewContext(
-    fs.readFileSync(path.join(__dirname, 'plugin.js'), 'utf8'),
+    fs.readFileSync(path.join(__dirname, 'src', 'plugin', 'index.js'), 'utf8'),
     context,
   );
   return {
@@ -197,9 +197,9 @@ function config(handler, message) {
   assert.equal(previewResult.ok, true);
   assert.equal(preview.request().packageId, 'org.videolan.vlc');
   assert.equal(preview.storage.has('defaultPlayerPackage'), false);
-  const appinfo = JSON.parse(fs.readFileSync(path.join(__dirname, 'appinfo.json'), 'utf8'));
-  assert.equal(appinfo.plugin.usesPermissions.includes('AndroidIntents'), true);
-  const internet = appinfo.plugin.usesPermissions.find(permission => (
+  const appinfo = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).pebble;
+  assert.equal(appinfo.usesPermissions.includes('AndroidIntents'), true);
+  const internet = appinfo.usesPermissions.find(permission => (
     permission && permission.name === 'Internet'
   ));
   assert.deepEqual(internet.parameters.domains, ['music.youtube.com']);

@@ -19,7 +19,7 @@
     ],
     "plugin": {
       "description": "Weather where the phone is, from the Norwegian Meteorological Institute (api.met.no). One location instance (the phone's current position) and the hours ahead of it.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "weather",
@@ -95,6 +95,7 @@
           "suggestedRefreshIntervalSec": 1800
         }
       ]
-    }
+    },
+    "projectType": "plugin"
   }
 }

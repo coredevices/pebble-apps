@@ -92,6 +92,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "config.html",
+    "projectType": "plugin"
   }
 }

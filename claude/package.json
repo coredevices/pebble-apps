@@ -25,7 +25,7 @@
     ],
     "plugin": {
       "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, sends to the default selected in settings. Supports chat nicknames. Sign in in settings.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "messaging",
@@ -49,7 +49,7 @@
       "actions": [
         {
           "name": "send_to_claude",
-          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. Use when the user says \"send \u2026 to Claude\", \"tell Claude \u2026\", or names a chat or nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat picked in settings. \"Send to Claude - status\" sends the message \"status\" to that default; it does not search for a status chat. Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
+          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. Use when the user says \"send … to Claude\", \"tell Claude …\", or names a chat or nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat picked in settings. \"Send to Claude - status\" sends the message \"status\" to that default; it does not search for a status chat. Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -103,6 +103,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

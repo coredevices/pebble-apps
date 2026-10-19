@@ -18,7 +18,7 @@
     ],
     "plugin": {
       "description": "Captures notes to today's Roam daily note using an append-only graph token.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "notes",
@@ -78,6 +78,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

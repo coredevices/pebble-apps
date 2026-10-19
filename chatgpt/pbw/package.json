@@ -51,7 +51,7 @@
       "actions": [
         {
           "name": "send_to_dot",
-          "description": "Send a message to the user's ChatGPT Dot (their existing primary Dot in ChatGPT). Do not use unless the user explicitly addresses their Dot or asks to send something to it, as \"Dot\" or \"my Dot\" or by the Dot's own name, e.g. \"message my Dot \u2026\", \"tell Dot \u2026\", \"ask my Dot \u2026\" or \"tell Taz \u2026\" when the Dot is named Taz. The Dot's name is in the 'ChatGPT: messaging/dot' source; when the user messages a name that is not clearly one of their contacts, read that source to check whether it is their Dot. Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not the Dot's answer. Do not automatically retry an uncertain delivery.",
+          "description": "Send a message to the user's ChatGPT Dot (their existing primary Dot in ChatGPT). Do not use unless the user explicitly addresses their Dot or asks to send something to it, as \"Dot\" or \"my Dot\" or by the Dot's own name, e.g. \"message my Dot …\", \"tell Dot …\", \"ask my Dot …\" or \"tell Taz …\" when the Dot is named Taz. The Dot's name is in the 'ChatGPT: messaging/dot' source; when the user messages a name that is not clearly one of their contacts, read that source to check whether it is their Dot. Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not the Dot's answer. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -74,7 +74,7 @@
         },
         {
           "name": "send_to_codex",
-          "description": "Send a message to one of the user's Codex chats: a Codex session running on their computer, or a Codex Cloud task. Use when the user says \"send \u2026 to Codex\", \"tell Codex \u2026\", or names one of their Codex chats or its nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat the user picked in settings. Returns a receipt, not Codex's answer. Do not automatically retry an uncertain delivery.",
+          "description": "Send a message to one of the user's Codex chats: a Codex session running on their computer, or a Codex Cloud task. Use when the user says \"send … to Codex\", \"tell Codex …\", or names one of their Codex chats or its nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat the user picked in settings. Returns a receipt, not Codex's answer. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -147,6 +147,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "config.html",
+    "projectType": "plugin"
   }
 }

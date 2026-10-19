@@ -10,7 +10,7 @@ globalThis._HostTimer = {
     return id;
   },
 };
-const { createService, safeError } = require("../plugin.js");
+const { createService, safeError } = require("../src/plugin/index.js");
 
 const BOX = "https://abc-pod-def.us12.cursorvm.com";
 

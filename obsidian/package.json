@@ -8,7 +8,7 @@
     "sdkVersion": "3",
     "plugin": {
       "description": "Creates separate Markdown notes or safely appends to a selected existing note in a user-selected folder, with Obsidian-compatible tasks and links.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "notes",
@@ -169,11 +169,12 @@
           "requiresConfirmation": false,
           "callerPermissions": []
         }
-      ],
-      "usesPermissions": [
-        "FileSystem"
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin",
+    "usesPermissions": [
+      "FileSystem"
+    ]
   }
 }

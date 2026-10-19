@@ -8,7 +8,7 @@
     "sdkVersion": "3",
     "plugin": {
       "description": "Creates reminders in the tasks.org Android app and exposes the user's task lists so an agent can choose a destination.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "reminders",
@@ -77,11 +77,12 @@
           "requiresConfirmation": false,
           "callerPermissions": []
         }
-      ],
-      "usesPermissions": [
-        "TasksOrg"
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin",
+    "usesPermissions": [
+      "TasksOrg"
+    ]
   }
 }

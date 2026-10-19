@@ -18,7 +18,7 @@
     ],
     "plugin": {
       "description": "Share prices for the tickers the user picked in settings. Each ticker is an instance carrying its price, the day's change in cash and the same change as a percentage.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "finance",
@@ -50,6 +50,7 @@
         }
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

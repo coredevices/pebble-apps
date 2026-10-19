@@ -18,7 +18,7 @@
     ],
     "plugin": {
       "description": "Creates Todoist tasks as reminders and exposes active projects as reminder destinations.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "reminders",
@@ -123,6 +123,7 @@
         "todoist": {}
       }
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

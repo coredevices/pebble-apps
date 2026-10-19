@@ -1,0 +1,1508 @@
+{
+  "name": "apple-home",
+  "author": "Core Devices",
+  "version": "0.3.1",
+  "private": true,
+  "pebble": {
+    "displayName": "Apple Home Control",
+    "uuid": "da18c090-292c-4e22-955c-a2d52c8eca09",
+    "versionCode": 4,
+    "capabilities": [
+      "configurable"
+    ],
+    "resources": {
+      "media": []
+    },
+    "sdkVersion": "3",
+    "targetPlatforms": [],
+    "watchapp": {
+      "watchface": false
+    },
+    "plugin": {
+      "uuid": "da18c090-292c-4e22-955c-a2d52c8eca09",
+      "name": "Apple Home Control",
+      "description": "Control existing Apple Home devices and scenes with native HomeKit on iOS. Connect and choose a home in settings first.",
+      "script": "src/plugin/index.js",
+      "configPage": "src/config.html",
+      "sources": [
+        {
+          "category": "home",
+          "items": [
+            "home"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "room"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "home": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "device"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "accessory": [
+              "shortText"
+            ],
+            "room": [
+              "shortText"
+            ],
+            "home": [
+              "shortText"
+            ],
+            "type": [
+              "shortText"
+            ],
+            "online": [
+              "boolean"
+            ],
+            "capabilities": [
+              "longText"
+            ],
+            "cached_state": [
+              "longText"
+            ],
+            "freshness": [
+              "shortText"
+            ],
+            "on": [
+              "boolean"
+            ],
+            "muted": [
+              "boolean"
+            ],
+            "locked": [
+              "boolean"
+            ],
+            "brightness": [
+              "numericValue"
+            ],
+            "volume": [
+              "numericValue"
+            ],
+            "fan_speed": [
+              "numericValue"
+            ],
+            "ambient_temperature": [
+              "numericValue"
+            ],
+            "setpoint": [
+              "numericValue"
+            ],
+            "humidity": [
+              "numericValue"
+            ],
+            "battery": [
+              "numericValue"
+            ],
+            "color_temperature": [
+              "numericValue"
+            ],
+            "thermostat_mode": [
+              "shortText"
+            ],
+            "media_state": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "scene",
+            "automation"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "home": [
+              "shortText"
+            ],
+            "runnable": [
+              "boolean"
+            ],
+            "blocked_reason": [
+              "shortText"
+            ],
+            "manually_runnable": [
+              "boolean"
+            ],
+            "kind": [
+              "shortText"
+            ],
+            "enabled": [
+              "boolean"
+            ],
+            "starters": [
+              "longText"
+            ],
+            "actions": [
+              "longText"
+            ],
+            "trigger_details": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 30
+        }
+      ],
+      "actions": [
+        {
+          "name": "get_state",
+          "displayName": "Apple Home Control",
+          "description": "Read current HomeKit state for one device. Each field reports fresh or unavailable; cached discovery values are not current readings. Use the structured result to answer the user.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 30
+        },
+        {
+          "name": "turn_on",
+          "displayName": "Apple Home Control",
+          "description": "Turn on a light, switch, outlet, or fan. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "turn_off",
+          "displayName": "Apple Home Control",
+          "description": "Turn off a light, switch, outlet, or fan. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_brightness",
+          "displayName": "Apple Home Control",
+          "description": "Set a light brightness percentage; this does not implicitly turn the light on. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "brightness": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              },
+              "brightness_pct": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "brightness"
+                ]
+              },
+              {
+                "required": [
+                  "brightness_pct"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_color",
+          "displayName": "Apple Home Control",
+          "description": "Set a light hue in degrees and saturation percentage. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "hue": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 360
+              },
+              "saturation": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [
+              "hue",
+              "saturation"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_color_temperature",
+          "displayName": "Apple Home Control",
+          "description": "Set light color temperature using kelvin or mireds. Kelvin converts to the nearest integer mired; native HomeKit validates the accessory range and step.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "mireds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              },
+              "kelvin": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1000000,
+                "description": "Color temperature in Kelvin, e.g. 2700 warm white or 4000 neutral. Provide kelvin or mireds."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "kelvin"
+                ]
+              },
+              {
+                "required": [
+                  "mireds"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_fan_speed",
+          "displayName": "Apple Home Control",
+          "description": "Set fan rotation speed as a percentage; this does not implicitly turn the fan on. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "speed": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [
+              "speed"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_thermostat",
+          "displayName": "Apple Home Control",
+          "description": "Set thermostat target temperature with an explicit unit, and/or mode. Respect device min/max/step/validValues. Temperature conversion uses Celsius internally. Auto-mode heating/cooling thresholds are not exposed. Read home/device first for exact names, service IDs, and writable capabilities. Only the home selected in settings is accessible. Never retry an unconfirmed write without reading state.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "temperature": {
+                "type": "number"
+              },
+              "unit": {
+                "type": "string",
+                "enum": [
+                  "celsius",
+                  "fahrenheit"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "heat",
+                  "cool",
+                  "auto"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              },
+              "temperature_c": {
+                "type": "number",
+                "description": "Celsius alias; omit temperature, temperature_f, and unit."
+              },
+              "temperature_f": {
+                "type": "number",
+                "description": "Fahrenheit alias; omit temperature, temperature_c, and unit."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "run_scene",
+          "displayName": "Apple Home Control",
+          "description": "Run an existing scene in the selected home. Read home/scene first and choose a runnable scene. Scenes containing locks, garages, security systems, or unknown actions are blocked. A failed scene may have partly run; do not retry automatically.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Scene ID from home/scene. Use this or scene, not both."
+              },
+              "scene": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact unambiguous scene name."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for scene. Exact names only."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/scene"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 30
+        },
+        {
+          "name": "set_volume",
+          "displayName": "Apple Home Control",
+          "description": "Set the volume of a compatible HomeKit speaker to 0–100 percent. Read home/device for exact names, IDs, and writable capabilities. Read state before retrying any unconfirmed operation.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "volume": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              },
+              "volume_pct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "required": [
+                  "volume"
+                ]
+              },
+              {
+                "required": [
+                  "volume_pct"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "set_muted",
+          "displayName": "Apple Home Control",
+          "description": "Mute or unmute a compatible HomeKit speaker. Read home/device for exact names, IDs, and writable capabilities. Read state before retrying any unconfirmed operation.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "muted": {
+                "type": "boolean"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [
+              "muted"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "media_control",
+          "displayName": "Apple Home Control",
+          "description": "Play, pause, or stop a compatible HomeKit television or speaker. Requires iOS 18 or later and an advertised writable media state; HomePod/AirPlay playback may not be exposed by HomeKit. Read home/device for exact names, IDs, and writable capabilities. Read state before retrying any unconfirmed operation.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "all": {
+                "type": "boolean",
+                "description": "Set true only when the user requested every matching device in a room. Requires room and device_type; omit device and instanceId. Maximum 10 devices."
+              },
+              "command": {
+                "type": "string",
+                "enum": [
+                  "play",
+                  "pause",
+                  "stop"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "lock",
+          "displayName": "Apple Home Control",
+          "description": "Lock one explicitly selected HomeKit lock. Group lock operations are unavailable. Read home/device for exact names, IDs, and writable capabilities. Read state before retrying any unconfirmed operation.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "unlock",
+          "displayName": "Apple Home Control",
+          "description": "Unlock one explicitly selected HomeKit lock after the user authenticates with Face ID, Touch ID, or device passcode in the foreground. Never invoke without an explicit unlock request. A saved PIN is not used. Read home/device for exact names, IDs, and writable capabilities. Read state before retrying any unconfirmed operation.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service ID from home/device. Use either instanceId or device."
+              },
+              "device": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact service or accessory name; qualify duplicate names with room, or use instanceId."
+              },
+              "room": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact room name or ID from home/room."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "device_type": {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "switch",
+                  "outlet",
+                  "fan",
+                  "thermostat",
+                  "speaker",
+                  "television",
+                  "lock",
+                  "temperature_sensor",
+                  "humidity_sensor",
+                  "motion_sensor",
+                  "contact_sensor",
+                  "occupancy_sensor",
+                  "leak_sensor",
+                  "smoke_sensor",
+                  "light_sensor",
+                  "battery",
+                  "garage_door",
+                  "security_system",
+                  "window_covering",
+                  "carbon_monoxide_sensor",
+                  "carbon_dioxide_sensor"
+                ],
+                "description": "Optional service type; required for group control."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for device. Exact names only."
+              },
+              "type": {
+                "type": "string",
+                "description": "Alias for device_type."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/device"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 120
+        },
+        {
+          "name": "run_automation",
+          "displayName": "Apple Home Control",
+          "description": "Run an existing, manually runnable Apple Home scene by name or ID. This is the Apple Home equivalent of Google Home run_automation. Timed/event triggers are not manually started. Scenes containing security controls are blocked.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Scene ID from home/scene. Use this or scene, not both."
+              },
+              "scene": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Exact unambiguous scene name."
+              },
+              "home": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Optional name or ID of the connected home. Changing homes requires plugin settings."
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Alias for scene. Exact names only."
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "targets": [
+            "home/automation"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "usesPermissions": [
+            {
+              "name": "AppleHome",
+              "parameters": {}
+            }
+          ],
+          "callerPermissions": [],
+          "timeoutSec": 30
+        }
+      ]
+    },
+    "projectType": "plugin",
+    "configPage": "src/config.html",
+    "usesPermissions": [
+      {
+        "name": "AppleHome",
+        "parameters": {}
+      }
+    ]
+  }
+}

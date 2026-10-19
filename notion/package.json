@@ -18,7 +18,7 @@
     ],
     "plugin": {
       "description": "Adds notes as bullets under a “Todo” heading, creates child pages, or appends plain text to a selected Notion page.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "notes",
@@ -99,6 +99,7 @@
         "notion": {}
       }
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin"
   }
 }

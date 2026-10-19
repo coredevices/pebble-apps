@@ -5,7 +5,7 @@ const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
 // config.html has no crypto.subtle (not a secure context), so it carries its own SHA-256 for PKCE.
-const html = readFileSync(path.join(__dirname, "..", "config.html"), "utf8");
+const html = readFileSync(path.join(__dirname, "..", "src", "config.html"), "utf8");
 const source = html.match(/      function sha256\(bytes\) \{[\s\S]*?\n      \}\n/)[0];
 const sha256 = new Function(source + "return sha256;")();
 

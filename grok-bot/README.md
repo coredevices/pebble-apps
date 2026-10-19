@@ -48,7 +48,7 @@ names follow the open-source clients
 
 ## Build and test
 
-`plugin.js` is plain JS with no build step and no dependencies.
+`src/plugin/index.js` is plain JS with no build step and no dependencies.
 
 ```sh
 cd grok-bot

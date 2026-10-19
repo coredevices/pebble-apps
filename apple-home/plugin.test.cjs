@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const script = fs.readFileSync(path.join(__dirname, 'plugin.js'), 'utf8');
-const manifest = require('./appinfo.json').plugin;
+const script = fs.readFileSync(path.join(__dirname, 'src', 'plugin', 'index.js'), 'utf8');
+const manifest = require('./package.json').pebble.plugin;
 function device(id, name, room = 'Kitchen', type = 'light') {
   return { id, name, accessoryName: name, room, roomId: room, type, reachable: true, cachedState: { power: false },
     stateFreshness: 'cached; use get_state for current readings', capabilities: ['power', 'brightness', 'hue', 'saturation', 'color_temperature', 'fan_speed', 'target_temperature', 'thermostat_mode', 'volume', 'muted', 'media_state', 'locked']
@@ -36,7 +36,7 @@ function fixture(options = {}) {
     source: item => dispatch('source', { category: 'home', item }), config: message => dispatch('config', message) };
 }
 test('bundle declares only native HomeKit permission and all handlers', async () => {
-  assert.equal(manifest.uuid, require('./appinfo.json').uuid);
+  assert.equal(manifest.uuid, require('./package.json').pebble.uuid);
   assert.equal(manifest.actions.length, 15);
   for (const declaration of [...manifest.sources, ...manifest.actions]) {
     assert.deepEqual(declaration.usesPermissions, [{ name: 'AppleHome', parameters: {} }]);

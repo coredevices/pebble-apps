@@ -8,7 +8,7 @@
     "sdkVersion": "3",
     "plugin": {
       "description": "Connects Index and Pebble with Apple's Shortcuts app. Index can run allow-listed shortcuts with text or JSON input and display their textual output; Shortcuts automations can submit text to Index, control Pebble Quiet Time, or publish an event back to Index.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "sources": [
         {
           "category": "shortcuts",
@@ -135,11 +135,12 @@
             }
           ]
         }
-      ],
-      "usesPermissions": [
-        "IOSShortcuts"
       ]
     },
-    "configPage": "config.html"
+    "configPage": "src/config.html",
+    "projectType": "plugin",
+    "usesPermissions": [
+      "IOSShortcuts"
+    ]
   }
 }

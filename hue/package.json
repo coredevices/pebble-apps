@@ -6,7 +6,7 @@
     "displayName": "Hue",
     "uuid": "6f9c1a44-3d1e-4b8a-9c2f-0d5e7a1b3c40",
     "sdkVersion": "3",
-    "configPage": "config.html",
+    "configPage": "src/config.html",
     "usesPermissions": [
       "LocalNetwork",
       {
@@ -20,7 +20,7 @@
     ],
     "plugin": {
       "description": "Philips Hue lights on the user's local bridge. Reads whether a light, a room or the whole home is on and how bright it is; turns them on and off and dims them.",
-      "script": "plugin.js",
+      "script": "src/plugin/index.js",
       "definesPermissions": [
         {
           "name": "HomeControl",
@@ -153,6 +153,7 @@
           ]
         }
       ]
-    }
+    },
+    "projectType": "plugin"
   }
 }

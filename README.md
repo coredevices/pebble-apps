@@ -5,24 +5,36 @@ the app repo: [`test-apps/plugins.md`](https://github.com/coredevices/mobileapp/
 
 ## Building
 
-A directory with a `package.json` that has a `pebble` block is a packaged plugin:
+Every plugin is a Pebble SDK plugin project (`"projectType": "plugin"` in `package.json`, plus a
+`wscript`), so the plugins SDK builds it: install `pebble-tool` and the SDK from their `plugins`
+branches, then
 
 ```sh
-python3 scripts/pack-plugin-pbw.py <dir>      # writes <dir>/build/<name>.pbw
+cd <dir> && pebble build      # writes <dir>/build/<dir>.pbw
+pebble install --emulator emery
 ```
 
-Plugins with a bundled source tree keep the source at the directory root and the packaged plugin
-in `pbw/`. Build the bundle, then pack `pbw/`:
+Each plugin's real source is in `src/`. Hand-written plugins are the project itself: the script is
+`src/plugin/index.js` and the settings page `src/config.html`. Plugins with a build step keep their
+source and build at the directory root and the SDK project (built script, settings page) in `pbw/`:
+build, then run `pebble build` in `pbw/`.
 
 | Plugin | Build | Test |
 |---|---|---|
+| `apple-notes` | `npm ci && npm run build` | `npm test` |
+| `googlehome` | `npm ci && npm run build` | `npm test` |
 | `chatgpt` | `npm ci && npm run build` | `npm test` |
 | `location-sharing` | `npm ci --prefix ../chat/imessage && npm ci && node scripts/build-plugin.mjs` | `node --test plugin.test.cjs test/*.test.cjs` |
 | `chat` | `npm ci --prefix imessage && python3 build.py` | `node --test *.test.cjs` |
-| `local-music`, `apple-home` | `python3 build.py` (packs to `build/`) | `node --test plugin.test.cjs` |
+| `muse` | `npm ci && npm run build` (SDK project at the root) | `npm test` |
 
 `chat/imessage` is Chat's iMessage engine (Apple account, APNs, crypto); `location-sharing` reuses
-its Apple account and crypto code through `../chat/imessage/src`.
+its Apple account and crypto code through `../chat/imessage/src`. `apple-notes` vendors the CRDT
+code of [icloud-md](https://github.com/coddingtonbear/icloud-md) (see `apple-notes/UPSTREAM.md`);
+`googlehome` shares its Google Home client with
+[googlehome-mcp](https://github.com/ericmigi/googlehome-mcp).
+
+`scripts/pack-plugin-pbw.py <dir>` still packs a plugin without the SDK.
 
 `hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
 are also bundled into the app, which still builds them from its own `test-apps/` copies.

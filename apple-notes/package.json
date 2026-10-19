@@ -1,104 +1,23 @@
 {
-  "name": "apple-notes",
-  "author": "Core Devices",
+  "name": "apple-notes-plugin",
   "version": "0.3.0",
-  "pebble": {
-    "displayName": "Apple Notes",
-    "uuid": "04a1a397-7447-4d81-a378-3508ca0de95c",
-    "sdkVersion": "3",
-    "capabilities": [
-      "web_sign_in"
-    ],
-    "usesPermissions": [
-      {
-        "name": "Internet",
-        "parameters": {
-          "domains": [
-            "icloud.com"
-          ]
-        }
-      }
-    ],
-    "plugin": {
-      "description": "Saves plain-text input as new Apple Notes or appends it to a configured existing note through iCloud.",
-      "script": "plugin.js",
-      "sources": [
-        {
-          "category": "notes",
-          "items": [
-            "destination"
-          ],
-          "properties": {
-            "name": [
-              "shortText"
-            ],
-            "configured": [
-              "boolean",
-              "shortText"
-            ],
-            "account": [
-              "shortText",
-              "longText"
-            ],
-            "url": [
-              "longText"
-            ]
-          },
-          "supportsMultiple": false,
-          "callerPermissions": [],
-          "suggestedRefreshIntervalSec": 60
-        },
-        {
-          "category": "notes",
-          "items": [
-            "configured"
-          ],
-          "properties": {
-            "name": [
-              "shortText"
-            ],
-            "configured": [
-              "boolean",
-              "shortText"
-            ]
-          },
-          "supportsMultiple": false,
-          "callerPermissions": [],
-          "suggestedRefreshIntervalSec": 60
-        }
-      ],
-      "actions": [
-        {
-          "name": "create_note",
-          "description": "Save plain text to the configured Apple Notes destination, either as a new note or appended to one selected note. Use only when the user explicitly asks to save or send a note to Apple Notes.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "instanceId": {
-                "type": "string",
-                "enum": [
-                  "apple-notes"
-                ],
-                "description": "Optional destination id from the notes/destination source."
-              },
-              "text": {
-                "type": "string",
-                "description": "The complete note text, preferably using the user's exact words. In new-note mode its first line becomes the title; in append mode it is added at the configured placement."
-              }
-            },
-            "required": [
-              "text"
-            ]
-          },
-          "targets": [
-            "notes/destination"
-          ],
-          "destructive": false,
-          "requiresConfirmation": false,
-          "callerPermissions": []
-        }
-      ]
-    },
-    "configPage": "config.html"
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepare:upstream": "node scripts/prepare-upstream.mjs",
+    "build": "node scripts/build-runtime.mjs",
+    "build:test-upstream": "node scripts/build-upstream-test.mjs",
+    "test": "npm run prepare:upstream && node test/vendor-sync.mjs && npm run build && npm run build:test-upstream && node test/compare.mjs && node --test test/*.test.js"
+  },
+  "dependencies": {
+    "pako": "3.0.1"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "esbuild": "0.25.9",
+    "node-diff3": "3.2.1"
   }
 }

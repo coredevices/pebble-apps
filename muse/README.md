@@ -23,12 +23,10 @@ cd muse
 npm ci
 npm run build
 npm test
-cd ../../..
-python3 scripts/pack-plugin-pbw.py muse
+pebble build
 ```
 
-`plugin.js` is the checked-in, self-contained bundle. The existing
-`:androidApp:buildTestAppPbws` task packages it into both Android and iOS resources.
+`plugin.js` is the checked-in, self-contained bundle.
 The build has no dependency on a private npm registry or local checkout.
 
 ## Library and host integration

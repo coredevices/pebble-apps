@@ -8,7 +8,7 @@ The shared JavaScript and settings page use existing Android/iOS plugin APIs. Th
 
 ## Setup
 
-1. Run `python3 scripts/pack-plugin-pbw.py claude` from the internal repository root, then sideload `build/claude.pbw` through Apps → Sideload App. No host source changes or bundled-app registration are required.
+1. Run `pebble build` in `claude/`, then `pebble install --phone <ip>` (or sideload `build/claude.pbw` through Apps → Sideload App).
 2. Open Claude plugin settings and sign in with Claude. On hosts without sign-in popup support, choose **Continue with email**; the Google popup flow does not complete on those hosts. Existing saved plugin credentials remain usable.
 3. Select an organization (required when the account has multiple organizations).
 4. Load **Claude chats** or **Claude Code**, select a session, and save the default.
@@ -80,12 +80,8 @@ No npm dependencies or JavaScript build step.
 ```sh
 cd claude
 npm test
-cd ../../..
-python3 scripts/pack-plugin-pbw.py claude
+pebble build
 ```
-
-The root Gradle `:androidApp:buildTestAppPbws` task includes Claude and copies its
-PBW to Android and iOS bundle directories.
 
 ## Research, checked October 18, 2026
 

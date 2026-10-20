@@ -164,7 +164,8 @@ From the repository root:
 
 ```sh
 npm --prefix imessage ci
-python3 chat/build.py
+node chat/scripts/build-plugin.mjs
+(cd chat/pbw && pebble build)
 node --test chat/*.test.cjs
 npm --prefix imessage test
 ./gradlew :libpebble3:jvmTest --tests '*ChatPluginApiTest*'

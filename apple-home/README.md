@@ -98,7 +98,7 @@ From the internal repository root:
 
 ```sh
 node --test apple-home/plugin.test.cjs
-python3 apple-home/build.py
+(cd apple-home && pebble build)
 ./gradlew :libpebble3:jvmTest \
   --tests 'io.rebble.libpebblecommon.plugin.AppleHomeControlTest' \
   --tests 'io.rebble.libpebblecommon.plugin.AppleHomeNativeBridgeTest'
@@ -106,8 +106,7 @@ python3 apple-home/build.py
 ```
 
 The public repository uses the same commands without the `public/` prefix.
-`build.py` produces the checked-in `libpebble3/src/androidMain/assets/plugins/apple-home.pbw`
-with deterministic ZIP metadata. The directory is also bundled into the iOS app.
+`pebble build` writes `apple-home/build/apple-home.pbw`.
 JavaScript source and tests stay next to this README for review and maintenance.
 
 ## Testing

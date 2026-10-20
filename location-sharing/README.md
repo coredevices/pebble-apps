@@ -31,6 +31,7 @@ modules are required from `../chat/imessage/src` directly.
 npm --prefix imessage ci
 npm --prefix location-sharing ci
 node location-sharing/scripts/build-plugin.mjs
+(cd location-sharing/pbw && pebble build)
 node --test location-sharing/plugin.test.cjs location-sharing/test/*.test.cjs
 ```
 

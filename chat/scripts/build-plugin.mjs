@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 if (existsSync(new URL('../../../x86executor-interpreter', import.meta.url))) await import('../imessage/wasm/verify.mjs');
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 
 await build({
   absWorkingDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
@@ -23,3 +23,6 @@ const settings = await build({
 });
 const template = await readFile(path.join(root, 'config.template.html'), 'utf8');
 await writeFile(path.join(root, 'config.html'), template.replace('/* CHAT_SETTINGS_SCRIPT */', () => settings.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')));
+
+// pbw/ is the SDK project `pebble build` packs; the tests read the copies here.
+for (const name of ['plugin.js', 'config.html']) await copyFile(path.join(root, name), path.join(root, 'pbw', name));

@@ -12,7 +12,7 @@ That cold-start fallback remains subject to Android's background-activity restri
 Build with:
 
 ```sh
-python3 local-music/build.py
+cd local-music && pebble build
 ```
 
 ## Functions

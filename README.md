@@ -25,7 +25,7 @@ build, then run `pebble build` in `pbw/`.
 | `googlehome` | `npm ci && npm run build` | `npm test` |
 | `chatgpt` | `npm ci && npm run build` | `npm test` |
 | `location-sharing` | `npm ci --prefix ../chat/imessage && npm ci && node scripts/build-plugin.mjs` | `node --test plugin.test.cjs test/*.test.cjs` |
-| `chat` | `npm ci --prefix imessage && python3 build.py` | `node --test *.test.cjs` |
+| `chat` | `npm ci --prefix imessage && node scripts/build-plugin.mjs` | `node --test *.test.cjs` |
 | `muse` | `npm ci && npm run build` (SDK project at the root) | `npm test` |
 
 `chat/imessage` is Chat's iMessage engine (Apple account, APNs, crypto); `location-sharing` reuses
@@ -33,8 +33,6 @@ its Apple account and crypto code through `../chat/imessage/src`. `apple-notes` 
 code of [icloud-md](https://github.com/coddingtonbear/icloud-md) (see `apple-notes/UPSTREAM.md`);
 `googlehome` shares its Google Home client with
 [googlehome-mcp](https://github.com/ericmigi/googlehome-mcp).
-
-`scripts/pack-plugin-pbw.py <dir>` still packs a plugin without the SDK.
 
 `hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
 are also bundled into the app, which still builds them from its own `test-apps/` copies.

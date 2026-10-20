@@ -55,8 +55,6 @@ names follow the open-source clients
 ```sh
 cd grok-bot
 npm test
-cd ../../..
-python3 scripts/pack-plugin-pbw.py grok-bot
+pebble build
 ```
 
-`:androidApp:buildTestAppPbws` packages it for both apps along with the other test apps.

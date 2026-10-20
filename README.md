@@ -51,7 +51,6 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 |---|---|
 | `apple-home` | Apple Home Control |
 | `apple-notes` | Apple Notes |
-| `apple-reminders` | Apple Reminders |
 | `chat` | Chat |
 | `chatgpt` | ChatGPT (Dot, Codex sessions, Codex Cloud) |
 | `claude` | Claude |

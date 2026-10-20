@@ -1,5 +1,7 @@
 # Grok Bot Pebble plugin
 
+*Uses the Grok Bot apps' private API, reverse engineered.*
+
 Two actions:
 
 - `send_to_grok_bot({ message })` sends to the bot chosen in settings and returns a receipt.

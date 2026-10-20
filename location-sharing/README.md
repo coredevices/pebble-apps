@@ -1,5 +1,7 @@
 # Location Sharing plugin
 
+*Uses Google Maps' private location-sharing endpoints, reverse engineered (Apple Find My support is written but switched off).*
+
 Reads the latest locations of people who already share with Google Maps.
 The packaged plugin (`package.json`, `config.html`, generated `plugin.js`) lives in `pbw/`.
 
@@ -31,3 +33,18 @@ npm --prefix location-sharing ci
 node location-sharing/scripts/build-plugin.mjs
 node --test location-sharing/plugin.test.cjs location-sharing/test/*.test.cjs
 ```
+
+## Functions
+
+### `find_person(person?)`
+
+Find someone who already shares their location with the user, and reply with a short answer ready to show as a notification. person can be a name or a nickname the user saved, such as "my wife". Leave person blank to list everyone sharing.
+
+- `person` (string, optional): The name or saved nickname (e.g. "my wife") of the person to find.
+
+## Data sources
+
+Read by Index and agents; `instanceId` values in the functions above come from these.
+
+- `people/location`: name, provider, configured, address, latitude, longitude, accuracyMeters, updatedAt, stale, url
+

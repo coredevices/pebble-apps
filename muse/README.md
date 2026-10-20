@@ -1,10 +1,20 @@
 # Muse Pebble plugin
 
+*Uses the Muse app's private web API and session, reverse engineered.*
+
 Exposes one action, `send_to_muse({ message })`. Settings open native Muse sign-in,
 capture the account session, and list writable active chats. New accounts default
 to **Main chat**. The destination persists for the same account; switching accounts
 resets it to Main chat. A missing/archived selected chat fails instead of sending
 elsewhere. The action returns an acceptance receipt, not the assistant's answer.
+
+## Functions
+
+### `send_to_muse(message)`
+
+Send a message to the Muse chat selected in plugin settings (Main chat by default). Do not use unless the user explicitly addresses Muse or asks to send something to it, e.g. "message Muse …", "send to Muse …", "tell Muse …", "ask Muse …" or "Muse, …". Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not Muse’s answer. Do not automatically retry an uncertain delivery.
+
+- `message` (string): The text to deliver to Muse, without the "send to Muse" instruction itself.
 
 ## Build and test
 

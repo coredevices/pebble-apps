@@ -1,10 +1,28 @@
 # Chat plugin
 
+*The iMessage connection uses reverse-engineered Apple sign-in, push and iMessage protocols; the Beeper connections use Beeper's own app integration.*
+
 Chat adds the `send_message(recipient, text, operation_id?)` action to the existing
 PBW plugin catalogue. Users approve individual or group rooms in Chat settings.
 The host rejects unapproved or ambiguous recipients. Approval is bound to the
 connected account and exact room ID; a nickname provides a unique spoken name.
 Group approval follows the room's current membership.
+
+## Functions
+
+### `send_message(recipient?, text, operation_id?, chat_id?, connection?)`
+
+Send plain text to an allowed chat on an enabled connection. Only send when the user explicitly asks. Use list_chats to find exact chat_id values. When a name matches multiple chats or connections, ask the user which one; never guess or fall back to another connection. Direct iMessage and Android SMS support individuals only.
+
+- `recipient` (string, optional): The approved contact, group name, nickname, or exact chat ID/address.
+- `text` (string): The exact message requested by the user.
+- `operation_id` (string, optional): unique operation ID. Reuse it when retrying the same send.
+- `chat_id` (string, optional): Exact account-and-connection-bound ID returned by list_chats; use it to disambiguate the destination.
+- `connection` (string, optional): connection ID to limit name resolution.
+
+### `list_chats()`
+
+List only the chats the user has allowed on enabled connections, including names, nicknames, network badges, and exact chat_id values for send_message. Ask the user to choose when multiple chats match. This does not search the address book or expose unapproved chats.
 
 ## Connections and allow lists
 

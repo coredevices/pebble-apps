@@ -1,5 +1,7 @@
 # Claude
 
+*Uses claude.ai's private, cookie-authenticated web APIs; not the Anthropic API.*
+
 Index/Pebble plugin for existing Claude chats and Claude Code sessions, using the
 same private, cookie-authenticated APIs as claude.ai. No desktop bridge or API key.
 The shared JavaScript and settings page use existing Android/iOS plugin APIs. The host must already support `web_sign_in` and secure storage; iOS has not been live-tested.

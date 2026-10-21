@@ -434,7 +434,7 @@ PERFORMANCE OF THIS SOFTWARE.
       var STORE_COOKIES = "location-sharing-google-cookies";
       var STORE_CACHE = "location-sharing-google-people-v1";
       var STORE_DIAGNOSTICS = "location-sharing-google-diagnostics-v1";
-      var PLUGIN_VERSION = "0.12.0";
+      var PLUGIN_VERSION = "0.13.0";
       var MAX_DIAGNOSTIC_EVENTS = 40;
       var MAPS_RPC_ID = "Qt4aBe";
       var MAPS_RPC_METHOD = "/MapsLocationSharingService.GetState";
@@ -1381,8 +1381,9 @@ PERFORMANCE OF THIS SOFTWARE.
       var SETTINGS_KEY = "location-sharing-answer-settings";
       var MODE_NAMES = { drive: "drive", bike: "bike", walk: "walk" };
       var MAX_PLACES = 20;
+      var AUTO_LIMIT_SECONDS = 20 * 60;
       function defaultSettings() {
-        return { show: { drive: false, bike: false, walk: false }, nicknames: {}, places: [] };
+        return { show: { auto: true, drive: false, bike: false, walk: false }, nicknames: {}, places: [] };
       }
       function cleanText(value, max) {
         return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
@@ -1462,7 +1463,7 @@ PERFORMANCE OF THIS SOFTWARE.
         });
         return Object.assign({
           ok: true,
-          pluginVersion: "0.12.0",
+          pluginVersion: "0.13.0",
           settings: controller.settings(),
           apple: status.apple,
           google: status.google,
@@ -1504,7 +1505,7 @@ PERFORMANCE OF THIS SOFTWARE.
         try {
           var saved = JSON.parse(this.storage && this.storage.get(SETTINGS_KEY) || "{}");
           Object.keys(settings.show).forEach(function(mode) {
-            settings.show[mode] = !!(saved.show && saved.show[mode]);
+            if (saved.show) settings.show[mode] = !!saved.show[mode];
           });
           if (saved.nicknames && typeof saved.nicknames === "object") settings.nicknames = saved.nicknames;
           if (Array.isArray(saved.places)) settings.places = saved.places;
@@ -1516,9 +1517,10 @@ PERFORMANCE OF THIS SOFTWARE.
         this.storage.set(SETTINGS_KEY, JSON.stringify(settings));
       };
       LocationSharingController.prototype.routesTo = async function(person, settings) {
-        var modes = Object.keys(settings.show).filter(function(mode) {
+        var chosen = Object.keys(MODE_NAMES).filter(function(mode) {
           return settings.show[mode];
         });
+        var modes = settings.show.auto ? Object.keys(MODE_NAMES) : chosen;
         if (!modes.length || !this.http || !Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) return {};
         var origin = await this.currentPosition();
         if (!origin) return {};
@@ -1528,12 +1530,28 @@ PERFORMANCE OF THIS SOFTWARE.
             return null;
           });
         }));
-        var routes = {};
+        var all = {};
         modes.forEach(function(mode, index) {
-          if (found[index]) routes[mode] = found[index];
+          if (found[index]) all[mode] = found[index];
+        });
+        return pickRoutes(all, settings.show);
+      };
+      function pickRoutes(all, show) {
+        var picked = Object.keys(MODE_NAMES).filter(function(mode) {
+          return show[mode];
+        });
+        if (show.auto) {
+          var quick = ["walk", "bike"].filter(function(mode) {
+            return all[mode] && all[mode].seconds < AUTO_LIMIT_SECONDS;
+          });
+          picked = picked.concat(quick.length ? quick : ["drive"]);
+        }
+        var routes = {};
+        picked.forEach(function(mode) {
+          if (all[mode]) routes[mode] = all[mode];
         });
         return routes;
-      };
+      }
       LocationSharingController.prototype.readyProviders = function(requestedProvider) {
         var providers = [];
         if ((!requestedProvider || requestedProvider === PROVIDERS.APPLE) && this.appleConfiguration.status().ready === true) {
@@ -1736,6 +1754,7 @@ PERFORMANCE OF THIS SOFTWARE.
         LocationSharingController,
         PROVIDERS,
         answerText,
+        pickRoutes,
         matchingPeople,
         personProperties,
         personUrl,

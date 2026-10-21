@@ -85,8 +85,10 @@ function personProperties(person) {
 var SETTINGS_KEY = "location-sharing-answer-settings";
 var MODE_NAMES = { drive: "drive", bike: "bike", walk: "walk" };
 var MAX_PLACES = 20;
+// "auto" shows walking and biking times when either is under this, otherwise driving.
+var AUTO_LIMIT_SECONDS = 20 * 60;
 function defaultSettings() {
-  return { show: { drive: false, bike: false, walk: false }, nicknames: {}, places: [] };
+  return { show: { auto: true, drive: false, bike: false, walk: false }, nicknames: {}, places: [] };
 }
 function cleanText(value, max) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
@@ -166,7 +168,7 @@ function configReply(controller, result) {
   });
   return Object.assign({
     ok: true,
-    pluginVersion: "0.12.0",
+    pluginVersion: "0.13.0",
     settings: controller.settings(),
     apple: status.apple,
     google: status.google,
@@ -205,7 +207,9 @@ LocationSharingController.prototype.settings = function() {
   var settings = defaultSettings();
   try {
     var saved = JSON.parse(this.storage && this.storage.get(SETTINGS_KEY) || "{}");
-    Object.keys(settings.show).forEach(function(mode) { settings.show[mode] = !!(saved.show && saved.show[mode]); });
+    Object.keys(settings.show).forEach(function(mode) {
+      if (saved.show) settings.show[mode] = !!saved.show[mode];
+    });
     if (saved.nicknames && typeof saved.nicknames === "object") settings.nicknames = saved.nicknames;
     if (Array.isArray(saved.places)) settings.places = saved.places;
   } catch (_) {
@@ -217,7 +221,8 @@ LocationSharingController.prototype.saveSettings = function(settings) {
 };
 /** Travel times from the phone's current position for the modes turned on in settings. */
 LocationSharingController.prototype.routesTo = async function(person, settings) {
-  var modes = Object.keys(settings.show).filter(function(mode) { return settings.show[mode]; });
+  var chosen = Object.keys(MODE_NAMES).filter(function(mode) { return settings.show[mode]; });
+  var modes = settings.show.auto ? Object.keys(MODE_NAMES) : chosen;
   if (!modes.length || !this.http || !Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) return {};
   var origin = await this.currentPosition();
   if (!origin) return {};
@@ -225,10 +230,22 @@ LocationSharingController.prototype.routesTo = async function(person, settings) 
   var found = await Promise.all(modes.map(function(mode) {
     return maps.route(http, origin, person, mode).catch(function() { return null; });
   }));
-  var routes = {};
-  modes.forEach(function(mode, index) { if (found[index]) routes[mode] = found[index]; });
-  return routes;
+  var all = {};
+  modes.forEach(function(mode, index) { if (found[index]) all[mode] = found[index]; });
+  return pickRoutes(all, settings.show);
 };
+
+/** The routes to show: every mode checked, plus for "auto" walk and bike if either is quick, else drive. */
+function pickRoutes(all, show) {
+  var picked = Object.keys(MODE_NAMES).filter(function(mode) { return show[mode]; });
+  if (show.auto) {
+    var quick = ["walk", "bike"].filter(function(mode) { return all[mode] && all[mode].seconds < AUTO_LIMIT_SECONDS; });
+    picked = picked.concat(quick.length ? quick : ["drive"]);
+  }
+  var routes = {};
+  picked.forEach(function(mode) { if (all[mode]) routes[mode] = all[mode]; });
+  return routes;
+}
 LocationSharingController.prototype.readyProviders = function(requestedProvider) {
   var providers = [];
   if ((!requestedProvider || requestedProvider === PROVIDERS.APPLE) && this.appleConfiguration.status().ready === true) {
@@ -429,6 +446,7 @@ module.exports = {
   LocationSharingController,
   PROVIDERS,
   answerText,
+  pickRoutes,
   matchingPeople,
   personProperties,
   personUrl,

@@ -33,6 +33,24 @@
           "suggestedRefreshIntervalSec": 60
         },
         {
+          "category": "notes",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
           "category": "reminders",
           "items": [
             "list"
@@ -51,12 +69,30 @@
           "supportsMultiple": false,
           "callerPermissions": [],
           "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
         }
       ],
       "actions": [
         {
           "name": "create_note",
-          "description": "Save a note as Markdown in the configured folder. Optional location metadata is included only when the user supplied it.",
+          "description": "Save a note as a Markdown file in the configured folder: a new timestamped note, or a block appended to the selected existing note. Use only when the user explicitly asks to save or send a note to Obsidian/Markdown. Optional location metadata is included only when the user supplied it.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -64,11 +100,13 @@
                 "type": "string",
                 "enum": [
                   "markdown-notes"
-                ]
+                ],
+                "description": "Optional destination id from the notes/destination source."
               },
               "text": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "The complete note text, preferably the user's exact words. In create mode the first line becomes the title."
               },
               "location": {
                 "type": "object",
@@ -91,7 +129,8 @@
                   "latitude",
                   "longitude"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Optional place to record with the note."
               }
             },
             "required": [
@@ -108,7 +147,7 @@
         },
         {
           "name": "create_reminder",
-          "description": "Append an Obsidian Tasks-compatible Markdown reminder. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone.",
+          "description": "Append an Obsidian Tasks-compatible checklist item to the configured reminder file. Use only when the user explicitly asks for a reminder or task in Obsidian/Markdown. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -116,22 +155,27 @@
                 "type": "string",
                 "enum": [
                   "markdown-reminders"
-                ]
+                ],
+                "description": "Optional destination id from the reminders/list source."
               },
               "title": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Reminder title."
               },
               "due_iso": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "description": "Optional absolute due instant in ISO-8601 format."
               },
               "timezone": {
-                "type": "string"
+                "type": "string",
+                "description": "IANA time zone used to write the due date and time; defaults to the phone's zone."
               },
               "notify_before_ms": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Optional notification lead time in milliseconds, written as whole minutes."
               },
               "location": {
                 "type": "object",
@@ -154,7 +198,8 @@
                   "latitude",
                   "longitude"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Optional place to record with the reminder."
               }
             },
             "required": [
@@ -174,7 +219,8 @@
     "configPage": "src/config.html",
     "projectType": "plugin",
     "usesPermissions": [
-      "FileSystem"
+      "ReadFiles",
+      "WriteFiles"
     ]
   }
 }

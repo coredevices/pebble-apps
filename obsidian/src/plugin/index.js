@@ -1,5 +1,7 @@
 var STORE_KEY = 'markdown_notes_config_v1';
-var REFRESHED = ['notes/destination', 'reminders/list'];
+var REFRESHED = ['notes/destination', 'notes/configured', 'reminders/list', 'reminders/configured'];
+var MAX_SCANNED_FILES = 2000;
+var MAX_READ_FILES = 200;
 var writeQueue = Promise.resolve();
 
 function cleanPath(raw, fallback) {
@@ -12,6 +14,8 @@ function cleanPath(raw, fallback) {
   }).filter(Boolean);
   return parts.length ? parts.join('/') : fallback;
 }
+
+function segments(path) { return cleanPath(path, '').split('/').filter(Boolean); }
 
 function cleanTag(raw) {
   return String(raw || '').trim().replace(/^#+/, '').replace(/[^A-Za-z0-9_\/-]+/g, '-');
@@ -39,6 +43,9 @@ function config() {
   var noteMode = value.noteMode === 'create' || value.noteMode === 'append' ? value.noteMode : legacyMode;
   var legacyPath = cleanPath(value.notesPath || 'Index Notes.md', 'Index Notes.md');
   return {
+    // The id of the directory grant the settings page picked (Pebble.showDirectoryPicker).
+    folderId: typeof value.folderId === 'string' ? value.folderId : '',
+    folderName: typeof value.folderName === 'string' ? value.folderName : '',
     noteMode: noteMode,
     selectedNotePath: cleanPath(value.selectedNotePath || (noteMode === 'append' ? legacyPath : ''), ''),
     appendPlacement: value.appendPlacement === 'top' ? 'top' : 'bottom',
@@ -51,9 +58,13 @@ function config() {
   };
 }
 
+function store(value) { localStorage.setItem(STORE_KEY, JSON.stringify(value)); }
+
 function saveConfig(value) {
   var current = config();
   var next = {
+    folderId: current.folderId,
+    folderName: current.folderName,
     noteMode: value.noteMode === 'append' ? 'append' : 'create',
     selectedNotePath: cleanPath(value.selectedNotePath || '', ''),
     appendPlacement: value.appendPlacement === 'top' ? 'top' : 'bottom',
@@ -64,15 +75,39 @@ function saveConfig(value) {
     openObsidianLinks: value.openObsidianLinks === true,
     recentFiles: current.recentFiles,
   };
-  localStorage.setItem(STORE_KEY, JSON.stringify(next));
+  store(next);
   return next;
+}
+
+// Paths are relative to the picked folder, so a different folder invalidates them.
+function setFolder(id, name) {
+  var current = config();
+  var changed = current.folderId !== id;
+  current.folderId = id;
+  current.folderName = name;
+  if (changed) {
+    current.selectedNotePath = '';
+    current.recentFiles = {};
+  }
+  store(current);
+  return current;
+}
+
+function clearFolder() {
+  var current = config();
+  current.folderId = '';
+  current.folderName = '';
+  current.selectedNotePath = '';
+  current.recentFiles = {};
+  store(current);
+  return current;
 }
 
 function recordRecent(path, modifiedAtMs) {
   var current = config();
   current.recentFiles[path] = modifiedAtMs || Date.now();
   current.recentFiles = cleanRecent(current.recentFiles);
-  localStorage.setItem(STORE_KEY, JSON.stringify(current));
+  store(current);
 }
 
 function slug(text) {
@@ -202,7 +237,14 @@ function resultWithOptionalUrl(result, current, root, path) {
   return result;
 }
 
-function isNotFound(error) { return !!error && error.code === 'NOT_FOUND'; }
+// ------------------------------------------------------------------ file access
+//
+// The settings page has the user pick a folder (Pebble.showDirectoryPicker, mode 'readwrite') and
+// sends its grant id here; Pebble.fileSystem.getHandle(id) then gives a FileSystemDirectoryHandle
+// that every path in the configuration is resolved under. Errors carry DOMException names.
+
+function isNotFound(error) { return !!error && (error.name === 'NotFoundError' || error.code === 'NOT_FOUND'); }
+function isNotAllowed(error) { return !!error && (error.name === 'NotAllowedError' || error.code === 'PERMISSION_DENIED'); }
 function fileError(error) { return error && error.message ? error.message : String(error || 'Unknown file error'); }
 
 function serialized(work) {
@@ -211,60 +253,101 @@ function serialized(work) {
   return operation;
 }
 
-async function readExisting(path) {
-  return (await readSnapshot(path)).content;
+/** The picked folder and what the user currently allows on it. `handle` is only set when readable. */
+async function rootStatus() {
+  var current = config();
+  var status = { configured: false, writable: false, withdrawn: false, id: current.folderId, name: current.folderName, handle: null };
+  if (!current.folderId) return status;
+  var handle;
+  try { handle = await Pebble.fileSystem.getHandle(current.folderId); }
+  catch (error) {
+    // The grant was revoked (settings page, the app's permissions page, or the platform).
+    if (isNotAllowed(error) || isNotFound(error)) { status.withdrawn = true; return status; }
+    throw error;
+  }
+  if (handle.kind !== 'directory') { status.withdrawn = true; return status; }
+  var readable = (await handle.queryPermission({ mode: 'read' })) === 'granted';
+  var writable = readable && (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
+  status.name = handle.name || current.folderName;
+  status.configured = readable;
+  status.withdrawn = !readable;
+  status.writable = writable;
+  status.handle = readable ? handle : null;
+  return status;
 }
 
-async function readSnapshot(path) {
-  var value = await Pebble.files.read(path);
-  if (!value || typeof value.content !== 'string') throw new Error('The file could not be read as text.');
+async function directoryAt(root, parts, create) {
+  var dir = root;
+  for (var index = 0; index < parts.length; index++) {
+    dir = await dir.getDirectoryHandle(parts[index], { create: !!create });
+  }
+  return dir;
+}
+
+async function fileAt(root, path, create) {
+  var parts = segments(path);
+  if (!parts.length) throw new Error('A file path is required.');
+  var name = parts.pop();
+  var dir = await directoryAt(root, parts, create);
+  return dir.getFileHandle(name, { create: !!create });
+}
+
+async function fileExists(root, path) {
+  try { await fileAt(root, path, false); return true; }
+  catch (error) {
+    if (isNotFound(error)) return false;
+    throw error;
+  }
+}
+
+async function readSnapshot(root, path) {
+  var file = await (await fileAt(root, path, false)).getFile();
+  var content = await file.text();
+  if (typeof content !== 'string') throw new Error('The file could not be read as text.');
   return {
-    content: value.content,
-    revision: typeof value.revision === 'string' ? value.revision : null,
-    modifiedAtMs: typeof value.modifiedAtMs === 'number' ? value.modifiedAtMs : null,
+    content: content,
+    modifiedAtMs: typeof file.lastModified === 'number' && file.lastModified > 0 ? file.lastModified : null,
   };
 }
 
-async function verifyWritten(path, expected) {
-  var value = await readExisting(path);
+async function readExisting(root, path) {
+  return (await readSnapshot(root, path)).content;
+}
+
+async function writeFile(root, path, content) {
+  var file = await fileAt(root, path, true);
+  var writable = await file.createWritable();
+  try { await writable.write(content); }
+  catch (error) {
+    try { await writable.abort(); } catch (ignored) {}
+    throw error;
+  }
+  await writable.close();
+}
+
+async function verifyWritten(root, path, expected) {
+  var value = await readExisting(root, path);
   if (value !== expected) throw new Error('The file changed while it was being saved; review it before retrying.');
 }
 
-async function rewriteExisting(path, transform) {
-  for (var attempt = 0; attempt < 3; attempt++) {
-    var snapshot;
-    try { snapshot = await readSnapshot(path); }
-    catch (error) {
-      if (isNotFound(error)) throw new Error('The selected note no longer exists. Choose it again in plugin settings.');
-      throw error;
-    }
-    var next = transform(snapshot.content);
-    if (snapshot.revision && typeof Pebble.files.writeIfRevision === 'function') {
-      try {
-        await Pebble.files.writeIfRevision(path, next, snapshot.revision);
-        recordRecent(path, Date.now());
-        return;
-      } catch (error) {
-        if (error && error.code === 'CONFLICT' && attempt < 2) continue;
-        if (error && error.code === 'CONFLICT') {
-          throw new Error('The selected note kept changing. Nothing was overwritten; try again.');
-        }
-        if (isNotFound(error)) throw new Error('The selected note was moved or deleted before it could be saved.');
-        throw error;
-      }
-    }
-    var confirmed;
-    try { confirmed = await readExisting(path); }
-    catch (error) {
-      if (isNotFound(error)) throw new Error('The selected note was moved or deleted before it could be saved.');
-      throw error;
-    }
-    if (confirmed !== snapshot.content) throw new Error('The selected note changed while preparing the update. Nothing was written; try again.');
-    await Pebble.files.write(path, next);
-    await verifyWritten(path, next);
-    recordRecent(path, Date.now());
-    return;
+async function rewriteExisting(root, path, transform) {
+  var snapshot;
+  try { snapshot = await readSnapshot(root, path); }
+  catch (error) {
+    if (isNotFound(error)) throw new Error('The selected note no longer exists. Choose it again in plugin settings.');
+    throw error;
   }
+  var next = transform(snapshot.content);
+  var confirmed;
+  try { confirmed = await readExisting(root, path); }
+  catch (error) {
+    if (isNotFound(error)) throw new Error('The selected note was moved or deleted before it could be saved.');
+    throw error;
+  }
+  if (confirmed !== snapshot.content) throw new Error('The selected note changed while preparing the update. Nothing was written; try again.');
+  await writeFile(root, path, next);
+  await verifyWritten(root, path, next);
+  recordRecent(path, Date.now());
 }
 
 function insertionOffset(content) {
@@ -291,71 +374,67 @@ function insertBlock(content, block, placement) {
   return (base ? base + '\n\n' : '') + block.replace(/\n+$/, '\n');
 }
 
-async function appendExisting(path, block, placement) {
-  return rewriteExisting(path, function (content) { return insertBlock(content, block, placement); });
+async function appendExisting(root, path, block, placement) {
+  return rewriteExisting(root, path, function (content) { return insertBlock(content, block, placement); });
 }
 
-async function appendOrCreate(path, block) {
-  for (var attempt = 0; attempt < 3; attempt++) {
-    try {
-      await readExisting(path);
-      return rewriteExisting(path, function (content) { return insertBlock(content, block, 'bottom'); });
-    } catch (error) {
-      if (!isNotFound(error)) throw error;
-    }
-    if (typeof Pebble.files.writeIfAbsent === 'function') {
-      try {
-        await Pebble.files.writeIfAbsent(path, block);
-        recordRecent(path, Date.now());
-        return;
-      } catch (error) {
-        if (error && error.code === 'CONFLICT') continue;
-        throw error;
-      }
-    }
-    await Pebble.files.write(path, block);
-    await verifyWritten(path, block);
-    recordRecent(path, Date.now());
-    return;
+async function appendOrCreate(root, path, block) {
+  if (await fileExists(root, path)) {
+    return rewriteExisting(root, path, function (content) { return insertBlock(content, block, 'bottom'); });
   }
-  throw new Error('The reminder file kept appearing or moving. Nothing was overwritten; try again.');
+  await writeFile(root, path, block);
+  await verifyWritten(root, path, block);
+  recordRecent(path, Date.now());
 }
 
-async function createUniqueFile(folder, text, now, content) {
+async function createUniqueFile(root, folder, text, now, content) {
   var base = folder + '/' + timestamp(now) + '-' + slug(text.split('\n')[0]);
   for (var number = 1; number <= 1000; number++) {
     var path = base + (number === 1 ? '' : '-' + number) + '.md';
-    if (typeof Pebble.files.writeIfAbsent === 'function') {
-      try {
-        await Pebble.files.writeIfAbsent(path, content);
-        recordRecent(path, Date.now());
-        return path;
-      } catch (error) {
-        if (error && error.code === 'CONFLICT') continue;
-        throw error;
-      }
-    }
-    try { await Pebble.files.read(path); }
-    catch (error) {
-      if (isNotFound(error)) {
-        await Pebble.files.write(path, content);
-        await verifyWritten(path, content);
-        recordRecent(path, Date.now());
-        return path;
-      }
-      throw error;
-    }
+    if (await fileExists(root, path)) continue;
+    await writeFile(root, path, content);
+    await verifyWritten(root, path, content);
+    recordRecent(path, Date.now());
+    return path;
   }
   throw new Error('Could not allocate a unique Markdown filename.');
 }
 
-async function requireRoot(respond) {
-  var status = await Pebble.files.status();
-  if (!status || !status.configured) {
-    respond.error('AUTH_REQUIRED', 'Choose an Obsidian/Markdown folder in plugin settings first.');
+/** Every Markdown file under `dir`, skipping dot-directories (.obsidian, .trash, .git). */
+async function collectMarkdown(dir, prefix, out) {
+  for await (var pair of dir.entries()) {
+    if (out.length >= MAX_SCANNED_FILES) return;
+    var name = pair[0];
+    var entry = pair[1];
+    if (entry.kind === 'directory') {
+      if (name.charAt(0) !== '.') await collectMarkdown(entry, prefix + name + '/', out);
+    } else if (/\.md$/i.test(name)) {
+      out.push({ path: prefix + name, handle: entry });
+    }
+  }
+}
+
+async function requireRoot(respond, write) {
+  var status = await rootStatus();
+  if (!status.configured) {
+    respond.error('AUTH_REQUIRED', status.withdrawn
+      ? 'Access to the Obsidian/Markdown folder was withdrawn. Choose it again in plugin settings.'
+      : 'Choose an Obsidian/Markdown folder in plugin settings first.');
+    return null;
+  }
+  if (write && !status.writable) {
+    respond.error('PERMISSION_DENIED', 'The Obsidian/Markdown folder is read-only. Allow this plugin to change files, or choose the folder again in plugin settings.');
     return null;
   }
   return status;
+}
+
+function failWrite(respond, where, error) {
+  if (isNotAllowed(error)) {
+    respond.error('PERMISSION_DENIED', 'Could not save to ' + where + ': access to the folder was withdrawn.');
+    return;
+  }
+  respond.error('PLUGIN_UNAVAILABLE', 'Could not save to ' + where + ': ' + fileError(error));
 }
 
 function shortText(text) { return { shortText: { text: String(text) } }; }
@@ -364,24 +443,51 @@ function boolText(value) {
   return { boolean: { value: !!value }, shortText: { text: value ? 'Connected' : 'Not connected' } };
 }
 
+/** True once create_note can run: a writable folder, and in append mode a note that still exists. */
+async function noteReady(root, current) {
+  if (!root.configured || !root.writable) return false;
+  if (current.noteMode === 'create') return true;
+  if (!current.selectedNotePath) return false;
+  try { await readExisting(root.handle, current.selectedNotePath); return true; }
+  catch (error) {
+    if (isNotFound(error) || isNotAllowed(error) || error.name === 'TypeMismatchError') return false;
+    throw error;
+  }
+}
+
+function reminderReady(root) { return root.configured && root.writable; }
+
+function configuredInstance(instanceId, ready) {
+  return {
+    validUntilMs: Date.now() + 60000,
+    instances: [{
+      instanceId: instanceId,
+      properties: { name: shortText('Obsidian/Markdown Notes'), configured: boolText(ready) },
+    }],
+  };
+}
+
 Pebble.registerSourceHandler(async function (request, respond) {
-  var status = await Pebble.files.status();
+  var root = await rootStatus();
   var current = config();
-  var configured = !!(status && status.configured);
+  var configured = root.configured;
+  if (request.category === 'notes' && request.item === 'configured') {
+    respond.data(configuredInstance('markdown-notes', await noteReady(root, current)));
+    return;
+  }
+  if (request.category === 'reminders' && request.item === 'configured') {
+    respond.data(configuredInstance('markdown-reminders', reminderReady(root)));
+    return;
+  }
   if (request.category === 'notes' && request.item === 'destination') {
     var path = current.noteMode === 'append' ? current.selectedNotePath : current.notesFolder;
-    var noteReady = configured && (current.noteMode === 'create' || !!current.selectedNotePath);
-    if (noteReady && current.noteMode === 'append') {
-      try { await readExisting(current.selectedNotePath); }
-      catch (error) { if (isNotFound(error)) noteReady = false; else throw error; }
-    }
     respond.data({
       validUntilMs: Date.now() + 60000,
       instances: [{
         instanceId: 'markdown-notes',
         properties: {
           name: shortText('Obsidian/Markdown Notes'),
-          configured: boolText(noteReady),
+          configured: boolText(await noteReady(root, current)),
           path: longText(path || 'Choose an existing note'),
         },
       }],
@@ -434,7 +540,7 @@ async function createNote(args, respond) {
   if (!text) { respond.error('INVALID_ARGS', 'The note text cannot be empty.'); return; }
   var invalidLocation = locationError(args.location);
   if (invalidLocation) { respond.error('INVALID_ARGS', invalidLocation); return; }
-  var root = await requireRoot(respond); if (!root) return;
+  var root = await requireRoot(respond, true); if (!root) return;
   var current = config();
   if (current.noteMode === 'append' && !current.selectedNotePath) {
     respond.error('AUTH_REQUIRED', 'Choose an existing Markdown note in plugin settings first.'); return;
@@ -445,13 +551,13 @@ async function createNote(args, respond) {
     await serialized(async function () {
       if (current.noteMode === 'create') {
         var content = newNoteContent(text, args, current, now);
-        path = await createUniqueFile(current.notesFolder, text, now, content);
+        path = await createUniqueFile(root.handle, current.notesFolder, text, now, content);
       } else {
-        await appendExisting(path, noteBlock(text, args, current, now), current.appendPlacement);
+        await appendExisting(root.handle, path, noteBlock(text, args, current, now), current.appendPlacement);
       }
     });
   } catch (error) {
-    respond.error('PLUGIN_UNAVAILABLE', 'Could not save to ' + path + ': ' + fileError(error)); return;
+    failWrite(respond, path, error); return;
   }
   var excerpt = text.replace(/\s+/g, ' '); if (excerpt.length > 42) excerpt = excerpt.substring(0, 39) + '...';
   respond.ok(resultWithOptionalUrl({
@@ -483,7 +589,7 @@ async function createReminder(args, respond) {
   }
   var reminderLocationError = locationError(args.location);
   if (reminderLocationError) { respond.error('INVALID_ARGS', reminderLocationError); return; }
-  var root = await requireRoot(respond); if (!root) return;
+  var root = await requireRoot(respond, true); if (!root) return;
   var current = config();
   var id = 'index-' + Date.now().toString(36);
   var block = '- [ ] ' + title;
@@ -499,9 +605,9 @@ async function createReminder(args, respond) {
   block += ' ^' + id + '\n';
   var metadata = locationInlineLines(args.location, current.includeLocation);
   if (metadata.length) block += '  ' + metadata.join('\n  ') + '\n';
-  try { await serialized(function () { return appendOrCreate(current.remindersPath, block); }); }
+  try { await serialized(function () { return appendOrCreate(root.handle, current.remindersPath, block); }); }
   catch (error) {
-    respond.error('PLUGIN_UNAVAILABLE', 'Could not write ' + current.remindersPath + ': ' + fileError(error)); return;
+    failWrite(respond, current.remindersPath, error); return;
   }
   respond.ok(resultWithOptionalUrl({
     text: 'Created “' + title.replace(/\s+/g, ' ') + '” in Obsidian/Markdown Notes.',
@@ -526,53 +632,50 @@ function firstHeading(content, fallback) {
   return match && match[1].trim() ? match[1].trim().substring(0, 100) : fallback;
 }
 
-async function listRecentNotes(query) {
+async function listRecentNotes(root, query) {
   var current = config();
-  var result = typeof Pebble.files.listWithMetadata === 'function'
-    ? await Pebble.files.listWithMetadata('', true)
-    : await Pebble.files.list('', true);
-  var entries = result && Array.isArray(result.files) ? result.files : [];
-  entries = entries.map(function (entry) {
-    if (typeof entry === 'string') return { path: cleanPath(entry, ''), modifiedAtMs: null };
-    return {
-      path: cleanPath(entry && entry.path, ''),
-      modifiedAtMs: entry && typeof entry.modifiedAtMs === 'number' ? entry.modifiedAtMs : null,
-    };
-  }).filter(function (entry, index, all) {
-    return entry.path && /\.md$/i.test(entry.path) && entry.path !== current.remindersPath &&
-      all.findIndex(function (candidate) { return candidate.path === entry.path; }) === index;
-  });
-  var wanted = typeof query === 'string' ? query.trim().toLowerCase() : '';
-  var candidates = [];
-  for (var index = 0; index < entries.length; index++) {
-    var path = entries[index].path;
-    var title = filenameTitle(path);
-    var snapshot;
+  var found = [];
+  await collectMarkdown(root, '', found);
+  var entries = [];
+  for (var index = 0; index < found.length; index++) {
+    var path = cleanPath(found[index].path, '');
+    if (!path || path === current.remindersPath) continue;
+    var modifiedAtMs = null;
     try {
-      snapshot = await readSnapshot(path);
-      title = firstHeading(snapshot.content, title);
+      var file = await found[index].handle.getFile();
+      if (typeof file.lastModified === 'number' && file.lastModified > 0) modifiedAtMs = file.lastModified;
+    } catch (error) {
+      if (isNotFound(error)) continue;
+      throw error;
     }
-    catch (error) { if (isNotFound(error)) continue; throw error; }
-    if (!wanted || path.toLowerCase().indexOf(wanted) !== -1 || title.toLowerCase().indexOf(wanted) !== -1) {
-      candidates.push({
-        path: path,
-        title: title,
-        modifiedAtMs: entries[index].modifiedAtMs || snapshot.modifiedAtMs ||
-          current.recentFiles[path] || timestampHint(path) || null,
-      });
-    }
+    entries.push({
+      path: path,
+      handle: found[index].handle,
+      modifiedAtMs: modifiedAtMs || current.recentFiles[path] || timestampHint(path) || null,
+    });
   }
-  candidates.sort(function (left, right) {
+  entries.sort(function (left, right) {
     var leftTime = left.modifiedAtMs || 0;
     var rightTime = right.modifiedAtMs || 0;
     if (leftTime !== rightTime) return rightTime - leftTime;
     return left.path.localeCompare(right.path);
   });
-  var notes = candidates.slice(0, 10);
+  // Titles need the content, so newest first and only as far as the list needs.
+  var wanted = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  var notes = [];
+  for (var position = 0; position < entries.length && position < MAX_READ_FILES && notes.length < 10; position++) {
+    var entry = entries[position];
+    var title = filenameTitle(entry.path);
+    try { title = firstHeading(await (await entry.handle.getFile()).text(), title); }
+    catch (error) { if (isNotFound(error)) continue; throw error; }
+    if (!wanted || entry.path.toLowerCase().indexOf(wanted) !== -1 || title.toLowerCase().indexOf(wanted) !== -1) {
+      notes.push({ path: entry.path, title: title, modifiedAtMs: entry.modifiedAtMs });
+    }
+  }
   var selected = null;
   if (current.selectedNotePath) {
     try {
-      var selectedContent = await readExisting(current.selectedNotePath);
+      var selectedContent = await readExisting(root, current.selectedNotePath);
       selected = { path: current.selectedNotePath, title: firstHeading(selectedContent, filenameTitle(current.selectedNotePath)) };
     } catch (error) {
       if (!isNotFound(error)) throw error;
@@ -588,24 +691,43 @@ Pebble.registerActionHandler(async function (request, respond) {
   respond.error('INVALID_REQUEST', 'Unsupported Obsidian/Markdown Notes action.');
 });
 
+function publicRoot(root) {
+  return { configured: root.configured, writable: root.writable, withdrawn: root.withdrawn, id: root.id, name: root.name };
+}
+
 Pebble.registerConfigHandler(async function (message, respond) {
   if (!message || message.type === 'status') {
-    var root = await Pebble.files.status();
-    var configured = !!(root && root.configured);
-    var ready = configured;
+    var root = await rootStatus();
     var current = config();
-    if (configured && message && message.action === 'create_note' && current.noteMode === 'append') {
-      if (!current.selectedNotePath) ready = false;
-      else {
-        try { await readExisting(current.selectedNotePath); }
-        catch (error) { if (isNotFound(error)) ready = false; else throw error; }
-      }
-    }
-    respond({ configured: configured, ready: ready, config: current });
+    var ready = message && message.action === 'create_reminder' ? reminderReady(root) : await noteReady(root, current);
+    respond({ configured: root.configured, ready: ready, root: publicRoot(root), config: current });
+    return;
+  }
+  if (message.type === 'setFolder') {
+    // The page picked a directory with Pebble.showDirectoryPicker and hands us its grant id.
+    var id = typeof message.id === 'string' ? message.id : '';
+    if (!id) { respond({ error: 'No folder was chosen.' }); return; }
+    var handle;
+    try { handle = await Pebble.fileSystem.getHandle(id); }
+    catch (error) { respond({ error: 'Could not open the chosen folder: ' + fileError(error) }); return; }
+    if (handle.kind !== 'directory') { respond({ error: 'Choose a folder, not a file.' }); return; }
+    var previousId = config().folderId;
+    setFolder(id, handle.name || (typeof message.name === 'string' ? message.name : ''));
+    respond({ ok: true, previousId: previousId !== id ? previousId : '', root: publicRoot(await rootStatus()), config: config() });
+    return;
+  }
+  if (message.type === 'clearFolder') {
+    var clearedId = config().folderId;
+    clearFolder();
+    respond({ ok: true, previousId: clearedId, config: config() });
     return;
   }
   if (message.type === 'listNotes') {
-      try { respond(await listRecentNotes(message.query)); }
+    try {
+      var listRoot = await rootStatus();
+      if (!listRoot.configured) { respond({ error: 'Choose a folder first.' }); return; }
+      respond(await listRecentNotes(listRoot.handle, message.query));
+    }
     catch (error) { respond({ error: 'Could not list Markdown notes: ' + fileError(error) }); }
     return;
   }
@@ -614,7 +736,9 @@ Pebble.registerConfigHandler(async function (message, respond) {
     if (candidate.noteMode === 'append') {
       var path = cleanPath(candidate.selectedNotePath || '', '');
       if (!path) { respond({ error: 'Choose an existing Markdown note to append to.' }); return; }
-      try { await readExisting(path); }
+      var saveRoot = await rootStatus();
+      if (!saveRoot.configured) { respond({ error: 'Choose a folder first.' }); return; }
+      try { await readExisting(saveRoot.handle, path); }
       catch (error) {
         respond({ error: isNotFound(error) ? 'That note was moved or deleted. Refresh the list and choose it again.' : 'Could not verify the selected note: ' + fileError(error) });
         return;

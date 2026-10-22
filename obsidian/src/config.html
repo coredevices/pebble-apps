@@ -6,10 +6,10 @@
   h1{margin-top:0}section{border:1px solid #494542;border-radius:14px;padding:18px;margin:16px 0;background:#201e1c}
   label{display:block;margin:14px 0 6px;color:#ddd5cf}input,select,button{font:inherit;box-sizing:border-box;border-radius:8px;border:1px solid #625d58;padding:11px;background:#2b2927;color:#fff;width:100%}
   input[type=radio],input[type=checkbox]{width:auto;margin-right:8px}button{background:#ff4033;border:0;font-weight:650;margin-top:10px}button.secondary{background:#45413e}button:disabled{opacity:.55}
-  small,#status,#noteStatus{color:#aaa29c}.row{display:flex;gap:10px}.row button{width:auto;flex:1}.choice{padding:8px 0}.hidden{display:none}.error{color:#ff8b83!important}
+  small,#status,#noteStatus,#rootHint{color:#aaa29c}.row{display:flex;gap:10px}.row button{width:auto;flex:1}.choice{padding:8px 0}.hidden{display:none}.error{color:#ff8b83!important}
 </style></head><body><main>
 <h1>Obsidian/Markdown Notes</h1><p>Choose a folder containing Markdown files. It can be an Obsidian vault or another synced directory.</p>
-<section><h2>Folder access</h2><div id="root">Checking…</div><div class="row"><button id="choose">Choose folder</button><button class="secondary" id="clear">Disconnect</button></div></section>
+<section><h2>Folder access</h2><div id="root">Checking…</div><p id="rootHint"></p><div class="row"><button id="choose">Choose folder</button><button class="secondary" id="clear">Disconnect</button></div></section>
 <section><h2>Incoming notes</h2>
 <label class="choice"><input id="modeCreate" name="noteMode" type="radio" value="create"> Create a new Markdown note each time</label>
 <label class="choice"><input id="modeAppend" name="noteMode" type="radio" value="append"> Append to one existing Markdown note</label>
@@ -29,22 +29,39 @@
 <section><h2>Reminders</h2><label for="remindersPath">Obsidian Tasks-compatible reminder file</label><input id="remindersPath" value="Index Reminders.md"></section>
 <button id="save">Save settings</button><p id="status"></p>
 <script>
-var target='plugin',loadedConfig={},operationPending=false;
+var target='plugin',loadedConfig={},currentRoot={},operationPending=false;
 function byId(id){return document.getElementById(id)}
 async function send(message){return Pebble.sendMessage(target,message)}
 function setPending(value){operationPending=value;['choose','clear','refreshNotes','save'].forEach(function(id){byId(id).disabled=value})}
 async function runExclusive(work){if(operationPending)return;setPending(true);try{return await work()}finally{setPending(false)}}
 function selectedMode(){return byId('modeAppend').checked?'append':'create'}
 function showMode(){var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)loadNotes()}
+function showRoot(root){
+  currentRoot=root||{};var hint=byId('rootHint');hint.className='';hint.textContent='';
+  if(currentRoot.configured){
+    byId('root').textContent='Connected: '+(currentRoot.name||'selected folder');
+    if(!currentRoot.writable){hint.className='error';hint.textContent='Read-only: allow this plugin to change files on its permissions page, or choose the folder again.'}
+  }else if(currentRoot.withdrawn){
+    byId('root').textContent='Access to '+(currentRoot.name?'“'+currentRoot.name+'”':'the folder')+' was withdrawn';hint.textContent='Choose the folder again to reconnect.'
+  }else byId('root').textContent='No folder selected';
+  return !!currentRoot.configured
+}
 async function rootStatus(){
-  try{var value=await Pebble.files.status();byId('root').textContent=value.configured?'Connected: '+(value.name||'selected folder'):'No folder selected';return !!value.configured}
+  try{var result=await send({type:'status'});return showRoot(result.root)}
   catch(e){byId('root').textContent=e.message;return false}
+}
+// The plugin only ever uses one folder, so anything else it holds is a leftover from an earlier pick.
+async function revokeOthers(keepId){
+  var held;try{held=await Pebble.fileSystem.grants()}catch(e){return}
+  for(var i=0;i<held.length;i++){if(held[i].id!==keepId){try{await Pebble.fileSystem.revoke(held[i].id)}catch(e){}}}
 }
 function addOption(select,path,title,missing){var option=document.createElement('option');option.value=path;option.textContent=(title||path)+' — '+path+(missing?' (missing)':'');option.disabled=!!missing;select.appendChild(option)}
 function makeRoomForSelected(select){while(select.options.length>=10)select.remove(select.options.length-1)}
 async function loadNotesCore(){
   if(selectedMode()!=='append')return;
-  var select=byId('selectedNotePath'),keep=select.value||loadedConfig.selectedNotePath||'';select.innerHTML='';byId('noteStatus').textContent='Loading recent notes…';
+  var select=byId('selectedNotePath'),keep=select.value||loadedConfig.selectedNotePath||'';select.innerHTML='';
+  if(!currentRoot.configured){byId('noteStatus').className='';byId('noteStatus').textContent='Choose a folder first.';return}
+  byId('noteStatus').textContent='Loading recent notes…';
   try{
     var result=await send({type:'listNotes',query:byId('noteQuery').value});if(result.error)throw new Error(result.error);
     (result.notes||[]).forEach(function(note){addOption(select,note.path,note.title,false)});
@@ -58,17 +75,34 @@ async function loadNotesCore(){
 }
 function loadNotes(){return runExclusive(loadNotesCore)}
 async function loadCore(){
-  var result=await send({type:'status'}),c=result.config||{};loadedConfig=c;
+  var result=await send({type:'status'}),c=result.config||{};loadedConfig=c;showRoot(result.root);
   byId(c.noteMode==='append'?'modeAppend':'modeCreate').checked=true;
   ['notesFolder','remindersPath','tag','appendPlacement'].forEach(function(id){if(c[id]!==undefined)byId(id).value=c[id]});
   byId('includeLocation').checked=c.includeLocation!==false;byId('openObsidianLinks').checked=c.openObsidianLinks===true;
-  await rootStatus();var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)await loadNotesCore();
+  var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)await loadNotesCore();
 }
 function load(){return runExclusive(loadCore)}
 byId('modeCreate').onchange=showMode;byId('modeAppend').onchange=showMode;byId('refreshNotes').onclick=loadNotes;
 byId('noteQuery').onkeydown=function(event){if(event.key==='Enter'){event.preventDefault();loadNotes()}};
-byId('choose').onclick=function(){return runExclusive(async function(){await Pebble.files.selectRoot();await rootStatus();if(selectedMode()==='append')await loadNotesCore()})};
-byId('clear').onclick=function(){return runExclusive(async function(){await Pebble.files.clearRoot();await rootStatus();byId('selectedNotePath').innerHTML='';byId('noteStatus').textContent='No folder selected.'})};
+byId('choose').onclick=function(){return runExclusive(async function(){
+  var hint=byId('rootHint');hint.className='';hint.textContent='';
+  var folder;
+  try{folder=await Pebble.showDirectoryPicker({mode:'readwrite'})}
+  catch(e){
+    if(e&&e.name==='AbortError')return;
+    hint.className='error';
+    hint.textContent=e&&e.name==='NotAllowedError'?'Allow this plugin to read and change files on its permissions page first.':'Could not choose a folder: '+(e&&e.message||e);
+    return
+  }
+  var result=await send({type:'setFolder',id:folder.id,name:folder.name});
+  if(result.error){hint.className='error';hint.textContent=result.error;try{await Pebble.fileSystem.revoke(folder.id)}catch(e){}return}
+  await revokeOthers(folder.id);loadedConfig=result.config||loadedConfig;showRoot(result.root);
+  byId('selectedNotePath').innerHTML='';if(selectedMode()==='append')await loadNotesCore()
+})};
+byId('clear').onclick=function(){return runExclusive(async function(){
+  await send({type:'clearFolder'});await revokeOthers('');await rootStatus();
+  byId('selectedNotePath').innerHTML='';byId('noteStatus').className='';byId('noteStatus').textContent='No folder selected.'
+})};
 byId('save').onclick=function(){return runExclusive(async function(){
   byId('status').className='';byId('status').textContent='Saving…';
   var c={noteMode:selectedMode(),selectedNotePath:byId('selectedNotePath').value,appendPlacement:byId('appendPlacement').value,notesFolder:byId('notesFolder').value,remindersPath:byId('remindersPath').value,tag:byId('tag').value,includeLocation:byId('includeLocation').checked,openObsidianLinks:byId('openObsidianLinks').checked};

@@ -1,5 +1,5 @@
 #include <pebble.h>
-#include "espn.h"
+#include "sports.h"
 
 int main(void) {
 #ifdef PBL_TOUCH
@@ -7,7 +7,7 @@ int main(void) {
   // firmware only routes touches to window recognizers through it.
   app_touch_navigation_enable(true);
 #endif
-  espn_init();
+  sports_init();
   app_event_loop();
-  espn_deinit();
+  sports_deinit();
 }

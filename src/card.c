@@ -4,7 +4,7 @@
 #include "generated/keys.h"
 #include "card.h"
 #include "windows/win-card.h"
-#include "espn.h"
+#include "sports.h"
 
 static CardData *s_data = NULL;
 
@@ -109,7 +109,7 @@ void card_in_received_handler(DictionaryIterator *iter) {
       }
 
       tuple = dict_find(iter, MESSAGE_KEY_leadChange);
-      if (tuple && tuple->value->uint8 && espn_get_buzz_on() && win_card_is_loaded()) {
+      if (tuple && tuple->value->uint8 && sports_get_buzz_on() && win_card_is_loaded()) {
         vibes_short_pulse();
       }
 
@@ -122,6 +122,6 @@ void card_in_received_handler(DictionaryIterator *iter) {
 }
 
 CardData *card_get_data() {
-  CardData *data = espn_get_card_data(espn_get_selected_card());
+  CardData *data = sports_get_card_data(sports_get_selected_card());
   return data != NULL ? data : s_data;
 }

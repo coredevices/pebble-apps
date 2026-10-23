@@ -4,7 +4,7 @@
 #include "win-games.h"
 #include "win-card.h"
 #include "card.h"
-#include "espn.h"
+#include "sports.h"
 #include "config.h"
 #include "analytics.h"
 
@@ -54,7 +54,7 @@ void win_games_set_selected_card(uint16_t row) {
   if (!window_is_loaded(s_window)) {
     return;
   }
-  menu_layer_set_selected_index(s_menu_layer, (MenuIndex) { .section = espn_get_selected_league(),
+  menu_layer_set_selected_index(s_menu_layer, (MenuIndex) { .section = sports_get_selected_league(),
                                                             .row = row },
                                 MenuRowAlignCenter, false);
 }
@@ -62,17 +62,17 @@ void win_games_set_selected_card(uint16_t row) {
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - //
 
 static char* get_title_status() {
-  if (espn_is_loading()) {
+  if (sports_is_loading()) {
     return "LOADING";
   }
-  return ((espn_get_selected_league() == 0 && !espn_get_has_teams()) ?
+  return ((sports_get_selected_league() == 0 && !sports_get_has_teams()) ?
       ("FOLLOW TEAMS\nFROM GAME\nCARDS") :
       "NO GAMES\nTODAY");
 }
 
 static void down_up_click_handler(ClickRecognizerRef recognizer, void *context) {
   const bool is_up = (click_recognizer_get_button_id(recognizer) == BUTTON_ID_UP);
-  if (espn_get_num_cards() != 0) {
+  if (sports_get_num_cards() != 0) {
     menu_layer_set_selected_next(s_menu_layer, is_up, MenuRowAlignCenter, true);
     return;
   }
@@ -81,8 +81,8 @@ static void down_up_click_handler(ClickRecognizerRef recognizer, void *context) 
 
 // Shared by the SELECT button and a tap on the highlighted row.
 static void select_game(MenuIndex cell_index) {
-  if (espn_get_num_cards() > 0) {
-    espn_set_selected_card(cell_index.row);
+  if (sports_get_num_cards() > 0) {
+    sports_set_selected_card(cell_index.row);
     analytics_set_screen(SCREEN_GAMECARD, BUTTON_ID_SELECT);
     win_card_push();
   }
@@ -119,7 +119,7 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
   const GFont font_gothic_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
 #endif
   set_compositing_mode(ctx);
-  if (espn_get_num_cards() == 0) {
+  if (sports_get_num_cards() == 0) {
     char *title = get_title_status();
 #ifdef PBL_BW
     graphics_context_set_fill_color(ctx, GColorWhite);
@@ -144,13 +144,13 @@ static void draw_games_row_rect(GContext *ctx, const Layer *cell_layer, MenuInde
 
   } else {
     graphics_context_set_fill_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ?
-                                         COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack) :
+                                         COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack) :
                                          GColorWhite);
     graphics_fill_rect(ctx, bounds, 0, GCornerNone);
     graphics_context_set_text_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ? GColorWhite :
                                                                                       GColorBlack);
 
-    const CardData *data = espn_get_card_data(row);
+    const CardData *data = sports_get_card_data(row);
     const bool is_pregame = data->gameState == KEY_GAMESTATE_PREGAME;
 
 #ifdef PBL_PLATFORM_EMERY
@@ -217,7 +217,7 @@ static void draw_games_row_round(GContext *ctx, const Layer *cell_layer, MenuInd
   const GFont font_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
   
   set_compositing_mode(ctx);
-  if (espn_get_num_cards() == 0) {
+  if (sports_get_num_cards() == 0) {
     char *title = get_title_status();
     graphics_context_set_text_color(ctx, COLOR_FALLBACK(GColorLightGray, GColorBlack));
     
@@ -245,13 +245,13 @@ static void draw_games_row_round(GContext *ctx, const Layer *cell_layer, MenuInd
 #endif
   } else {
     graphics_context_set_fill_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ?
-                                         COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack) :
+                                         COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack) :
                                          GColorWhite);
     graphics_fill_rect(ctx, bounds, 0, GCornerNone);
     graphics_context_set_text_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ? GColorWhite :
                                                                                       GColorBlack);
 
-    const CardData *data = espn_get_card_data(row);
+    const CardData *data = sports_get_card_data(row);
     const int16_t text_buffer_length = 64;
     char text[text_buffer_length];
 
@@ -322,7 +322,7 @@ static void menu_draw_row_callback(GContext *ctx, const Layer *cell_layer, MenuI
                                    void *context) {
   PBL_IF_RECT_ELSE(draw_games_row_rect(ctx, cell_layer, cell_index),
                    draw_games_row_round(ctx, cell_layer, cell_index));
-  text_layer_set_text(s_header_text, espn_get_league_title(espn_get_selected_league()));
+  text_layer_set_text(s_header_text, sports_get_league_title(sports_get_selected_league()));
 }
 
 static uint16_t menu_get_num_sections_callback(struct MenuLayer *menu_layer, void *context) {
@@ -331,7 +331,7 @@ static uint16_t menu_get_num_sections_callback(struct MenuLayer *menu_layer, voi
 
 static uint16_t menu_get_num_rows_callback(struct MenuLayer *menu_layer, uint16_t section_index,
                                            void *context) {
-  const uint16_t cards = espn_get_num_cards();
+  const uint16_t cards = sports_get_num_cards();
   return (cards == 0 ? 1 : cards);
 }
 
@@ -342,7 +342,7 @@ static void menu_select_click_callback(struct MenuLayer *menu_layer, MenuIndex *
 
 static int16_t menu_get_cell_height_callback(struct MenuLayer *menu_layer, MenuIndex *cell_index,
                                              void *context) {
-  if (espn_get_num_cards() > 0) {
+  if (sports_get_num_cards() > 0) {
       
 #if PBL_PLATFORM_GABBRO
     return menu_layer_cell_is_selected(cell_index) ? 100 : 50;

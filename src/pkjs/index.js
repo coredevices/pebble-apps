@@ -20,7 +20,7 @@ Sports.teams = [];
 Sports.favs = [];
 
 /*
- * Aplite holds one league's games at a time (see s_loaded_league in espn.c).
+ * Aplite holds one league's games at a time (see s_loaded_league in sports.c).
  * Its REQUESTCARDS sets `lazy`: the launch refresh then sends each league's
  * SIZE and END but no DATA, and the watch asks for a league's games with
  * REQUESTLEAGUE when it is opened. Sports.events keeps each league's last
@@ -196,7 +196,7 @@ function requestPin(opts) {
         "id": `sports-${opts.id}`,
         "time": new Date(res.startTime).toISOString(),
         // The watch launches the parent app itself for an openWatchApp action,
-        // with launchCode in launch_get_args() - which is where espn.c's
+        // with launchCode in launch_get_args() - which is where sports.c's
         // APP_LAUNCH_TIMELINE_ACTION path reads the game id from. The phone
         // always appends its own 'Remove' action, so this is the only one to
         // send; other action types are dropped before they reach the watch.
@@ -214,7 +214,7 @@ function requestPin(opts) {
           "lastUpdated": new Date().toISOString(),
           // Empty for every team outside the college leagues, and sent anyway:
           // the layout wants strings, not missing keys. In a playoff or
-          // tournament game ESPN's rank is the seed.
+          // tournament game the API's rank is the seed.
           "rankAway": event.rankAway || '',
           "rankHome": event.rankHome || '',
           "nameAway": event.nameAway,
@@ -227,8 +227,8 @@ function requestPin(opts) {
         }
       };
 
-      // Keyed on the display name the API puts on a card, which is ESPN's own
-      // abbreviation (NCAAF, NCAAM, NCAAW, WNBA) except for the Premier League,
+      // Keyed on the display name the API puts on a card, which is the league's
+      // usual abbreviation (NCAAF, NCAAM, NCAAW, WNBA) except for the Premier League,
       // shortened to EPL in the API's alternateLeagueNames. A league with no
       // case keeps the NOTIFICATION_FLAG set on the layout above.
       var icon = '';

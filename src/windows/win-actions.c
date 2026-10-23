@@ -2,7 +2,7 @@
 #include <libs/pebble-assist.h>
 #include "win-actions.h"
 #include "card.h"
-#include "espn.h"
+#include "sports.h"
 #include "config.h"
 
 #define NUM_ACTION_MENU_ITEMS 3
@@ -35,10 +35,10 @@ static void action_performed_callback(ActionMenu *action_menu,
 
   switch (current_action) {
     case 0:
-      espn_set_buzz_on(!espn_get_buzz_on());
+      sports_set_buzz_on(!sports_get_buzz_on());
       snprintf(s_confirmation_text, sizeof(s_confirmation_text),
                "LEAD CHANGE BUZZ %s",
-               espn_get_buzz_on() ? "ON" : "OFF");
+               sports_get_buzz_on() ? "ON" : "OFF");
       break;
     case 1:
       snprintf(topic, sizeof(topic), "%s:%s", data->league, data->nameAway);
@@ -75,7 +75,7 @@ void win_actions_init(void) {
   s_root_level = action_menu_level_create(NUM_ACTION_MENU_ITEMS);
 
   s_result_window = window_create();
-  window_set_background_color(s_result_window, PBL_IF_COLOR_ELSE(ESPN_DEFAULT_COLOR, GColorWhite));
+  window_set_background_color(s_result_window, PBL_IF_COLOR_ELSE(SPORTS_DEFAULT_COLOR, GColorWhite));
   window_set_window_handlers(s_result_window, (WindowHandlers) {
     .load = result_window_load,
     .unload = result_window_unload,
@@ -84,7 +84,7 @@ void win_actions_init(void) {
 
 void win_actions_push(void) {
   snprintf(s_buzz_action, sizeof(s_buzz_action), "%s buzz on lead change",
-           espn_get_buzz_on() ? "Disable" : "Enable");
+           sports_get_buzz_on() ? "Disable" : "Enable");
   action_menu_level_add_action(s_root_level, s_buzz_action, action_performed_callback, (void*)0);
 
   CardData *data = card_get_data();
@@ -108,7 +108,7 @@ void win_actions_push(void) {
   ActionMenuConfig config = {
     .root_level = s_root_level,
     .colors = {
-      .background = ESPN_DEFAULT_COLOR,
+      .background = SPORTS_DEFAULT_COLOR,
       .foreground = GColorBlack,
     },
     .align = ActionMenuAlignCenter

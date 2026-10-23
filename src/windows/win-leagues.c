@@ -4,7 +4,7 @@
 #include "win-leagues.h"
 #include "win-games.h"
 #include "card.h"
-#include "espn.h"
+#include "sports.h"
 #include "config.h"
 #include "ui/prompt.h"
 #include "analytics.h"
@@ -66,7 +66,7 @@ static void select_league(MenuIndex cell_index) {
     prompt_hide();
     persist_write_bool(KEY_PERSIST_CONFIG_STATUS, true);
   } else {
-    espn_set_selected_league(cell_index.section);
+    sports_set_selected_league(cell_index.section);
     win_games_push();
   }
 }
@@ -100,7 +100,7 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
   }
   set_compositing_mode(ctx);
   graphics_context_set_fill_color(ctx, menu_cell_layer_is_highlighted(cell_layer) ?
-                                       PBL_IF_BW_ELSE(GColorBlack, ESPN_DEFAULT_COLOR) :
+                                       PBL_IF_BW_ELSE(GColorBlack, SPORTS_DEFAULT_COLOR) :
                                        PBL_IF_BW_ELSE(GColorWhite, GColorBlack));
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 #if defined(PBL_BW)
@@ -114,38 +114,38 @@ static void draw_leagues_row(GContext *ctx, const Layer *cell_layer, MenuIndex *
 #endif
 
 #if PBL_PLATFORM_GABBRO
-  graphics_draw_text(ctx, espn_get_league_title(section),
+  graphics_draw_text(ctx, sports_get_league_title(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
                      GRect(38, 7, 160, 28),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_text(ctx, espn_get_league_subtitle(section),
+  graphics_draw_text(ctx, sports_get_league_subtitle(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_24),
                      GRect(38, 31, 150, 20),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
+  graphics_draw_bitmap_in_rect(ctx, sports_get_league_icon(section),
                                GRect(197, 23, 25, 25));
 #elif PBL_PLATFORM_EMERY
-  graphics_draw_text(ctx, espn_get_league_title(section),
+  graphics_draw_text(ctx, sports_get_league_title(section),
                     fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD),
                     GRect(38, 5, 180, 20),
                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_text(ctx, espn_get_league_subtitle(section),
+  graphics_draw_text(ctx, sports_get_league_subtitle(section),
                     fonts_get_system_font(FONT_KEY_GOTHIC_24),
                     GRect(38, 30, 150, 20),
                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
+  graphics_draw_bitmap_in_rect(ctx, sports_get_league_icon(section),
                                 PBL_IF_RECT_ELSE(GRect(9, 18, 25, 25),
                                                 GRect(186, 23, 25, 25)));
 #else
-  graphics_draw_text(ctx, espn_get_league_title(section),
+  graphics_draw_text(ctx, sports_get_league_title(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
                      PBL_IF_RECT_ELSE(GRect(34, 5, 100, 20), GRect(40, 5, 90, 20)),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_text(ctx, espn_get_league_subtitle(section),
+  graphics_draw_text(ctx, sports_get_league_subtitle(section),
                      fonts_get_system_font(FONT_KEY_GOTHIC_14),
                      PBL_IF_RECT_ELSE(GRect(34, 23, 90, 20), GRect(40, 23, 90, 20)),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_bitmap_in_rect(ctx, espn_get_league_icon(section),
+  graphics_draw_bitmap_in_rect(ctx, sports_get_league_icon(section),
                                PBL_IF_RECT_ELSE(GRect(6, 9, 25, 25),
                                                 GRect(125, 11, 25, 25)));
 #endif
@@ -157,7 +157,7 @@ static void menu_draw_row_callback(GContext *ctx, const Layer *cell_layer, MenuI
 }
 
 static uint16_t menu_get_num_sections_callback(struct MenuLayer *menu_layer, void *context) {
-  return espn_get_num_leagues();
+  return sports_get_num_leagues();
 }
 
 static uint16_t menu_get_num_rows_callback(struct MenuLayer *menu_layer, uint16_t section_index,

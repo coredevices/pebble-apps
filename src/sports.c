@@ -2,7 +2,7 @@
 #include <libs/pebble-assist.h>
 // #include "generated/appinfo.h"
 #include "generated/keys.h"
-#include "espn.h"
+#include "sports.h"
 #include "card.h"
 #include "windows/win-splash.h"
 #include "windows/win-leagues.h"
@@ -52,7 +52,7 @@ static uint16_t s_selected_card = 0;
 static bool s_buzz_on = true;
 static bool s_has_teams = false;
 
-void espn_init(void) {
+void sports_init(void) {
   app_message_register_inbox_received(in_received_handler);
   app_message_register_outbox_failed(out_failed_handler);
   app_message_open(512, 256);
@@ -100,7 +100,7 @@ void espn_init(void) {
   }
 }
 
-void espn_deinit(void) {
+void sports_deinit(void) {
   persist_write_bool(KEY_PERSIST_BUZZON, s_buzz_on);
   persist_write_bool(KEY_PERSIST_HASTEAMS, s_has_teams);
 // #ifndef LOW_MEM
@@ -110,11 +110,11 @@ void espn_deinit(void) {
   card_deinit();
   win_leagues_deinit();
   win_games_deinit();
-  for (int i = 0; i < espn_get_num_leagues(); i++) {
+  for (int i = 0; i < sports_get_num_leagues(); i++) {
     gbitmap_destroy_safe(s_leagues[i].icon);
     gbitmap_destroy_safe(s_leagues[i].card_icon);
   }
-  for (int i = 0; i < espn_get_num_leagues(); i++) {
+  for (int i = 0; i < sports_get_num_leagues(); i++) {
     free_safe(s_leagues[i].cards);
   }
 }
@@ -141,11 +141,11 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
 
     case KEY_TYPE_READY: {
       if (launch_reason() == APP_LAUNCH_TIMELINE_ACTION) {
-        espn_request_card();
+        sports_request_card();
         win_card_increment_progress(60);
       } else {
         app_comm_set_sniff_interval(SNIFF_INTERVAL_REDUCED);
-        espn_request_cards();
+        sports_request_cards();
         win_splash_increment_progress(20);
       }
       break;
@@ -153,7 +153,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
 
     case KEY_TYPE_LOADED:
       app_comm_set_sniff_interval(SNIFF_INTERVAL_NORMAL);
-      if (espn_get_num_cards() > 0) {
+      if (sports_get_num_cards() > 0) {
         win_games_set_selected_card(1);
       }
       win_splash_set_progress(100);
@@ -177,7 +177,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           uint16_t idx = tuple->value->uint16;
           tuple = dict_find(iter, MESSAGE_KEY_count);
           if (!tuple) break;
-          if (idx >= espn_get_num_leagues()) break;
+          if (idx >= sports_get_num_leagues()) break;
           free_safe(s_leagues[idx].cards);
           s_leagues[idx].num_cards = 0;
           s_leagues[idx].num_games = tuple->value->uint16;
@@ -212,7 +212,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           uint16_t idx = tuple->value->uint16;
 
           // Also covers a league whose SIZE was capped or failed to allocate.
-          if (league >= espn_get_num_leagues() || idx >= s_leagues[league].num_cards) {
+          if (league >= sports_get_num_leagues() || idx >= s_leagues[league].num_cards) {
             break;
           }
           CardData *data = &s_leagues[league].cards[idx];
@@ -302,7 +302,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
           break;
         }
         case KEY_METHOD_END: {
-          win_splash_increment_progress(80 / espn_get_num_leagues());
+          win_splash_increment_progress(80 / sports_get_num_leagues());
           tuple = dict_find(iter, MESSAGE_KEY_index);
           if (s_loading && tuple && tuple->value->uint16 == s_selected_league) {
             s_loading = false;
@@ -326,7 +326,7 @@ static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reas
 #endif
 }
 
-void espn_request_cards() {
+void sports_request_cards() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTCARDS);
@@ -360,7 +360,7 @@ static void send_league_request(void *context) {
 }
 #endif
 
-void espn_request_card() {
+void sports_request_card() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTCARD);
@@ -373,7 +373,7 @@ void espn_request_card() {
   app_message_outbox_send();
 }
 
-void espn_request_game() {
+void sports_request_game() {
   DictionaryIterator *iter;
   app_message_outbox_begin(&iter);
   dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTGAME);
@@ -387,7 +387,7 @@ void espn_request_game() {
 }
 
 #ifdef PBL_RECT
-static bool espn_is_NCAA(uint16_t section) {
+static bool sports_is_NCAA(uint16_t section) {
   return (section == KEY_LEAGUE_NCAAF ||
           section == KEY_LEAGUE_NCAAM ||
           section == KEY_LEAGUE_NCAAW);
@@ -414,20 +414,20 @@ void timeline_remove(const char *team, uint32_t id) {
   app_message_outbox_send();
 }
 
-uint16_t espn_get_num_leagues() {
+uint16_t sports_get_num_leagues() {
   return ARRAY_LENGTH(s_leagues);
 }
 
-uint16_t espn_get_selected_league() {
+uint16_t sports_get_selected_league() {
   return s_selected_league;
 }
 
-void espn_set_selected_league(const uint16_t idx) {
+void sports_set_selected_league(const uint16_t idx) {
   analytics_set_screen(idx, BUTTON_ID_SELECT);
   s_selected_league = idx;
 #ifdef LOW_MEM
-  if (idx != s_loaded_league && idx < espn_get_num_leagues()) {
-    if (s_loaded_league < espn_get_num_leagues()) {
+  if (idx != s_loaded_league && idx < sports_get_num_leagues()) {
+    if (s_loaded_league < sports_get_num_leagues()) {
       free_safe(s_leagues[s_loaded_league].cards);
       s_leagues[s_loaded_league].num_cards = 0;
     }
@@ -438,19 +438,19 @@ void espn_set_selected_league(const uint16_t idx) {
 #endif
 }
 
-const char* espn_get_league_title(const uint16_t idx) {
+const char* sports_get_league_title(const uint16_t idx) {
 #ifdef PBL_RECT
   static char title[16];
-  if (espn_is_NCAA(idx)) {
+  if (sports_is_NCAA(idx)) {
     snprintf(title, sizeof(title) / sizeof(char), "%s Top 25", s_leagues[idx].title);
     return title;
   }
 #endif
-  return idx < espn_get_num_leagues() ? s_leagues[idx].title : "";
+  return idx < sports_get_num_leagues() ? s_leagues[idx].title : "";
 }
 
-const char* espn_get_league_subtitle(const uint16_t idx) {
-  if (idx >= espn_get_num_leagues()) {
+const char* sports_get_league_subtitle(const uint16_t idx) {
+  if (idx >= sports_get_num_leagues()) {
     return "";
   }
   static char subtitle[16];
@@ -469,50 +469,50 @@ int get_icon_index(const int idx) {
   }
 }
 
-GBitmap* espn_get_selected_card_icon() {
+GBitmap* sports_get_selected_card_icon() {
   return PBL_IF_BW_ELSE(s_leagues[get_icon_index(s_selected_league)].icon,
                         s_leagues[get_icon_index(s_selected_league)].card_icon);
 }
 
-GBitmap* espn_get_league_icon(const uint16_t idx) {
+GBitmap* sports_get_league_icon(const uint16_t idx) {
   return s_leagues[get_icon_index(idx)].icon;
 }
 
-CardData* espn_get_card_data(const uint16_t idx) {
-  return idx < espn_get_num_cards() ? &s_leagues[s_selected_league].cards[idx] : NULL;
+CardData* sports_get_card_data(const uint16_t idx) {
+  return idx < sports_get_num_cards() ? &s_leagues[s_selected_league].cards[idx] : NULL;
 }
 
-uint16_t espn_get_num_cards() {
+uint16_t sports_get_num_cards() {
   // None until the league's END, so the games list never draws a row whose
   // DATA has not arrived yet.
   return s_loading ? 0 : s_leagues[s_selected_league].num_cards;
 }
 
 // True between opening a league on aplite and the phone finishing its games.
-bool espn_is_loading() {
+bool sports_is_loading() {
   return s_loading;
 }
 
-uint16_t espn_get_selected_card() {
+uint16_t sports_get_selected_card() {
   return s_selected_card;
 }
 
-void espn_set_selected_card(const uint16_t idx) {
-  if (idx < espn_get_num_cards()) {
+void sports_set_selected_card(const uint16_t idx) {
+  if (idx < sports_get_num_cards()) {
     s_selected_card = idx;
     win_games_set_selected_card(idx);
   }
 }
 
-bool espn_get_buzz_on() {
+bool sports_get_buzz_on() {
   return s_buzz_on;
 }
 
-void espn_set_buzz_on(bool on) {
+void sports_set_buzz_on(bool on) {
   s_buzz_on = on;
   analytics_send_buzz_analytics(s_buzz_on);
 }
 
-bool espn_get_has_teams() {
+bool sports_get_has_teams() {
   return s_has_teams;
 }

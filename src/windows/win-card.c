@@ -4,7 +4,7 @@
 #include "layers/progress_layer.h"
 #include "win-card.h"
 #include "card.h"
-#include "espn.h"
+#include "sports.h"
 #include "win-actions.h"
 #include "config.h"
 #include "analytics.h"
@@ -148,7 +148,7 @@ static void prv_draw_dotted_line(GContext* ctx, GPoint p0, uint16_t length, bool
 }
 
 static void after_scroll_swap_text(Animation *animation, bool finished, void *context) {
-  espn_set_selected_card(s_selected_card);
+  sports_set_selected_card(s_selected_card);
 }
 
 static Animation *create_anim_scroll_out(Layer *layer, uint32_t duration, int16_t dy) {
@@ -213,12 +213,12 @@ static void ask_for_scroll(ScrollDirection direction) {
 
   Animation *scroll_animation = NULL;
 
-  if ((direction == ScrollDirectionUp && (espn_get_selected_card() == 0)) ||
-      (direction == ScrollDirectionDown && (espn_get_selected_card() + 1 ==
-                                            espn_get_num_cards()))) {
+  if ((direction == ScrollDirectionUp && (sports_get_selected_card() == 0)) ||
+      (direction == ScrollDirectionDown && (sports_get_selected_card() + 1 ==
+                                            sports_get_num_cards()))) {
     scroll_animation = animation_for_bounce(direction);
   } else {
-    s_selected_card = espn_get_selected_card() + delta;
+    s_selected_card = sports_get_selected_card() + delta;
     scroll_animation = animation_for_scroll(direction);
   }
 
@@ -268,9 +268,9 @@ static void draw_status_bar(GContext *ctx, GRect box) {
 
   char pagination_text[6];
 
-  if (espn_get_num_cards() > 0) {
-    snprintf(pagination_text, sizeof(pagination_text), "%d/%d", espn_get_selected_card() + 1,
-             espn_get_num_cards() ? espn_get_num_cards() : 1);
+  if (sports_get_num_cards() > 0) {
+    snprintf(pagination_text, sizeof(pagination_text), "%d/%d", sports_get_selected_card() + 1,
+             sports_get_num_cards() ? sports_get_num_cards() : 1);
 
   }
 
@@ -285,7 +285,7 @@ static void draw_status_bar(GContext *ctx, GRect box) {
   prv_draw_dotted_line(ctx, GPoint(box.origin.y, box.size.h), box.size.w, false);
 
   if (card_get_data()->gameState == KEY_GAMESTATE_INGAME) {
-    graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+    graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
 #if (PBL_DISPLAY_HEIGHT >= 200)
     graphics_draw_text(ctx, "LIVE", fonts_get_system_font(FONT_KEY_GOTHIC_18), status_box,
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
@@ -315,7 +315,7 @@ static void draw_league(GContext *ctx, GRect box) {
   GRect icon_box = box;
   icon_box.size = GSize(25, 25);
 
-  GBitmap *icon = espn_get_selected_card_icon();
+  GBitmap *icon = sports_get_selected_card_icon();
 
 #ifdef PBL_RECT
   if (icon != NULL) {
@@ -323,7 +323,7 @@ static void draw_league(GContext *ctx, GRect box) {
     graphics_draw_bitmap_in_rect(ctx, icon, icon_box);
   }
 
-  if (espn_get_buzz_on()) {
+  if (sports_get_buzz_on()) {
     GRect buzz_box = box;
     // Right-aligned within the strip. Was hardcoded to 101, which is
     // 126 - 25 on a 144-wide screen but lands mid-strip on emery.
@@ -334,7 +334,7 @@ static void draw_league(GContext *ctx, GRect box) {
     graphics_draw_bitmap_in_rect(ctx, s_buzz_icon, buzz_box);
   }
 
-  graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+  graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
 
   GRect league_box = box;
   league_box.origin.x += icon_box.size.w + 4;
@@ -403,7 +403,7 @@ static void draw_league(GContext *ctx, GRect box) {
   // off-centre by 40px on gabbro's 260-wide screen.
   const int16_t center_x = box.size.w / 2;
 
-  if (espn_get_buzz_on()) {
+  if (sports_get_buzz_on()) {
     text_width += text_to_buzz + (buzz_box.size.w - 9);
     buzz_box.origin.x = center_x + (text_width / 2) - (buzz_box.size.w - 9);
     set_compositing_mode(ctx);
@@ -417,7 +417,7 @@ static void draw_league(GContext *ctx, GRect box) {
   }
 
   league_box.origin.x = icon_box.origin.x + icon_box.size.w + icon_to_text;
-  graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+  graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
   graphics_draw_text(ctx, card_get_data()->league, league_font,
                     league_box, GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
@@ -595,7 +595,7 @@ static void main_layer_update_proc(Layer *layer, GContext *ctx) {
 
   draw_status_bar(ctx, status_box);
 
-  graphics_context_set_stroke_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+  graphics_context_set_stroke_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
 
   prv_draw_dotted_line(ctx, GPoint(0, bounds.size.h - CARD_FOOTER_H), bounds.size.w, false);
 }
@@ -631,7 +631,7 @@ static void footer_layer_update_proc(Layer *layer, GContext *ctx) {
   subtitle_box.origin.x += 9;
   subtitle_box.size = subtitle_size;
 
-  graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+  graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
 
   graphics_draw_text(ctx, card_get_data()->subtitle, font, subtitle_box,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
@@ -640,7 +640,7 @@ static void footer_layer_update_proc(Layer *layer, GContext *ctx) {
     GPoint hor_line = bounds.origin;
     hor_line.x = subtitle_size.w + 17;
 
-    graphics_context_set_stroke_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+    graphics_context_set_stroke_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
     prv_draw_dotted_line(ctx, hor_line, bounds.size.h, true);
 
     GRect broadcaster_box = bounds;
@@ -653,7 +653,7 @@ static void footer_layer_update_proc(Layer *layer, GContext *ctx) {
 
 
 #elif PBL_ROUND
-  graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+  graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
   graphics_draw_text(ctx, card_get_data()->subtitle, font, subtitle_box,
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
@@ -665,7 +665,7 @@ static void footer_layer_update_proc(Layer *layer, GContext *ctx) {
 #else
     broadcaster_box.origin.y += 18;
 #endif
-    graphics_context_set_text_color(ctx, COLOR_FALLBACK(ESPN_DEFAULT_COLOR, GColorBlack));
+    graphics_context_set_text_color(ctx, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR, GColorBlack));
     graphics_draw_text(ctx, "LIVE", font, broadcaster_box, GTextOverflowModeTrailingEllipsis,
                        GTextAlignmentCenter, NULL);
   }
@@ -726,7 +726,7 @@ static void down_up_click_handler(ClickRecognizerRef recognizer, void *context) 
 
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 // #ifdef LOW_MEM
-//   espn_set_buzz_on(!espn_get_buzz_on());
+//   sports_set_buzz_on(!sports_get_buzz_on());
 //   win_card_mark_dirty();
 //   vibes_short_pulse();
 // #else
@@ -796,7 +796,7 @@ static void window_load(Window *window) {
   s_progress_layer = progress_layer_create(progress_rect);
   progress_layer_set_progress(s_progress_layer, 20);
   progress_layer_set_corner_radius(s_progress_layer, 2);
-  progress_layer_set_foreground_color(s_progress_layer, COLOR_FALLBACK(ESPN_DEFAULT_COLOR,
+  progress_layer_set_foreground_color(s_progress_layer, COLOR_FALLBACK(SPORTS_DEFAULT_COLOR,
                                                                        GColorWhite));
   progress_layer_set_background_color(s_progress_layer, COLOR_FALLBACK(GColorLightGray,
                                                                        GColorBlack));
@@ -823,9 +823,9 @@ static void refresh_timer_callback(void *data) {
   if (!window_is_loaded(s_window)) return;
 
   if (launch_reason() == APP_LAUNCH_TIMELINE_ACTION) {
-    espn_request_card();
+    sports_request_card();
   } else {
-    espn_request_game();
+    sports_request_game();
   }
 
   s_refresh_timer = app_timer_register(REFRESH_TIME, refresh_timer_callback, NULL);

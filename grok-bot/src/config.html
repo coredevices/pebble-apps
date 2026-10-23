@@ -1,104 +1,147 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Grok Bot settings</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font:
-          16px system-ui,
-          sans-serif;
-      }
-      body {
-        max-width: 480px;
-        margin: 0 auto;
-        padding: 24px;
-      }
-      h1 {
-        font-size: 28px;
-      }
-      p {
-        line-height: 1.5;
-      }
-      label {
-        display: block;
-        font-weight: 600;
-        margin: 24px 0 8px;
-      }
-      select,
-      button {
-        font: inherit;
-        width: 100%;
-        box-sizing: border-box;
-        padding: 12px;
-        border-radius: 10px;
-        margin: 6px 0;
-      }
-      #status {
-        min-height: 48px;
-        margin-top: 20px;
-      }
-      button:disabled,
-      select:disabled {
-        opacity: 0.5;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Grok Bot</h1>
-    <p>Send messages from Pebble to your Grok Bot and hear its replies. Sign in with the Cursor account you use for Grok Bot.</p>
-    <button id="signin" disabled>Sign in to Grok Bot</button>
-    <label for="bot">Send messages to</label><select id="bot" disabled></select>
-    <button id="refresh" disabled>Refresh bots</button><button id="disconnect" disabled>Disconnect</button>
-    <p id="status" role="status" aria-live="polite">Starting Grok Bot…</p>
-    <script>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grok Bot settings</title>
+<style>
+:root { color-scheme:light dark; font:16px system-ui,sans-serif; --bg:#fff; --card:#f4f4f5; --ink:#18181b; --muted:#63636b; --line:#dcdce0; --accent:#18181b; --on-accent:#fff; }
+* { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px 16px; background:var(--bg); color:var(--ink); }
+h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
+.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } #account .card { margin:12px 0; } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+#selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; } #who { font-weight:600; margin:10px 0 4px; overflow-wrap:anywhere; }
+label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input { font:inherit; } select,input { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:var(--on-accent); border-color:var(--accent); font-weight:650; margin-top:16px; }
+.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; font-weight:600; }
+details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
+@media(prefers-color-scheme:dark) { :root { --bg:#111113; --card:#1c1c1f; --ink:#f4f4f5; --muted:#a1a1aa; --line:#3a3a40; --accent:#f4f4f5; --on-accent:#111113; } }
+</style>
+</head>
+<body>
+<h1>Grok Bot</h1>
+<p class="hint">Choose where your messages go.</p>
+<section id="signedIn" hidden>
+<div class="card" id="defaultCard">
+<div class="eyebrow">Your default bot</div>
+<p id="selected"></p>
+<div class="row"><input id="defaultFilter" type="search" aria-label="Find a bot" placeholder="Search by name or nickname"><button id="refresh" class="quiet">Refresh</button></div>
+<select id="defaultBots" aria-label="Default bot"></select>
+<button id="useDefault" class="primary">Use as default</button>
+</div>
+<p class="hint">Naming a bot or nickname always sends there instead.</p>
+</section>
+<p id="status" role="status" aria-live="polite">Starting Grok Bot…</p>
+<details id="nicknames" hidden><summary>Nicknames</summary>
+<p class="hint">Give a bot a short name you can say: “Send to work…”.</p>
+<input id="nickFilter" type="search" aria-label="Find a bot" placeholder="Search by name or nickname">
+<label for="nickBots">Bot</label><select id="nickBots"></select>
+<div id="editor" hidden>
+<label for="nickname">Nickname</label>
+<input id="nickname" maxlength="40" placeholder="e.g. work">
+<button id="saveNickname" class="primary">Save nickname</button>
+<p class="hint">Clear the field to remove a nickname. Another bot’s name can’t be used.</p>
+</div>
+</details>
+<details id="account" open><summary>Account &amp; connection</summary>
+<div class="card">
+<div class="eyebrow">Grok Bot</div>
+<section id="signedOut">
+<button id="signin" class="primary">Sign in to Grok Bot</button>
+<p class="hint">Sign in with the Cursor account you use for Grok Bot. Your sign-in is saved securely and lasts about 60 days.</p>
+</section>
+<section id="accountIn" hidden>
+<p id="who"></p>
+<p id="connection" class="hint"></p>
+<div class="row"><button id="signinAgain" class="quiet">Sign in again</button><button id="disconnect" class="quiet" style="margin-left:auto">Sign out of Grok Bot</button></div>
+<p class="hint">Signing in again with the same account keeps your default bot and nicknames. Signing out removes them.</p>
+</section>
+</div>
+</details>
+<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-plugins/tree/main/grok-bot" target="_blank" rel="noopener">Source code</a> is available.</em></p>
+<script>
       const $ = (id) => document.getElementById(id);
-      let configured = false,
-        busy = false,
-        selected = null;
-      const say = (text) => {
-        $("status").textContent = text;
-      };
-      function controls() {
-        for (const id of ["signin", "bot", "refresh", "disconnect"])
-          $(id).disabled = busy || (id !== "signin" && !configured);
-      }
+      let state = { configured: false }, bots = [], loaded = false, busy = false;
+      const say = (text) => { $("status").textContent = text; };
       async function send(message) {
         const result = await Pebble.sendMessage("plugin", message);
         if (result.error) throw new Error(result.error);
         return result;
       }
-      function render(result) {
-        configured = result.configured;
-        selected = result.selected;
-        if (result.bots)
-          $("bot").replaceChildren(
-            ...result.bots.map((b) => {
-              const o = document.createElement("option");
-              o.value = b.id;
-              o.textContent = b.title;
-              return o;
-            }),
-          );
-        if (!configured) $("bot").replaceChildren();
-        if (selected) $("bot").value = selected;
+      const botName = (b) => (b.nickname ? b.nickname + " — " : "") + b.name + (b.group ? " (group)" : "");
+      // Fills a <select> with the bots matching its search box, keeping the current pick.
+      function fill(sel, filter) {
+        const previous = sel.value, query = filter.value.toLowerCase();
+        sel.replaceChildren();
+        bots.filter((b) => botName(b).toLowerCase().includes(query)).forEach((b) => {
+          const option = document.createElement("option");
+          option.value = b.id;
+          option.textContent = botName(b) + (b.id === state.selected ? " (default)" : "");
+          sel.appendChild(option);
+        });
+        const has = (id) => [...sel.options].some((o) => o.value === id);
+        if (has(previous)) sel.value = previous;
+        else if (has(state.selected)) sel.value = state.selected;
+        if (!sel.options.length) {
+          const empty = document.createElement("option");
+          empty.value = "";
+          empty.textContent = bots.length ? "No matching bots" : "No bots loaded";
+          sel.appendChild(empty);
+        }
+      }
+      function controls() {
+        $("useDefault").disabled = busy || !$("defaultBots").value || $("defaultBots").value === state.selected;
+        $("saveNickname").disabled = busy || !$("nickBots").value;
+      }
+      function pickNick() {
+        const bot = bots.find((b) => b.id === $("nickBots").value);
+        $("editor").hidden = !bot;
+        $("nickname").value = bot ? bot.nickname : "";
         controls();
+      }
+      function lists() {
+        fill($("defaultBots"), $("defaultFilter"));
+        fill($("nickBots"), $("nickFilter"));
+        pickNick();
+      }
+      function connection() {
+        if (!loaded) return "";
+        if (!bots.length) return "Your Grok Bot computer has no bots yet. Create one in Grok Bot.";
+        const groups = bots.filter((b) => b.group).length, single = bots.length - groups;
+        const count = (n, word) => n + " " + word + (n === 1 ? "" : "s");
+        return "Your Grok Bot computer is reachable: " + count(single, "bot") + (groups ? " and " + count(groups, "group") : "") + ".";
+      }
+      function render(next) {
+        const wasConfigured = state.configured;
+        state = next;
+        if (next.bots) { bots = next.bots; loaded = true; }
+        if (!state.configured) { bots = []; loaded = false; }
+        $("signedIn").hidden = $("nicknames").hidden = $("accountIn").hidden = !state.configured;
+        $("signedOut").hidden = state.configured;
+        if (state.configured !== wasConfigured) $("account").open = !state.configured;
+        $("selected").textContent = state.defaultName || "Choose a bot below";
+        const since = state.signedInAt ? " on " + new Date(state.signedInAt).toLocaleDateString() : "";
+        $("who").textContent = "Signed in with Cursor" + since;
+        $("connection").textContent = connection();
+        lists();
       }
       async function run(fn) {
         if (busy) return;
         busy = true;
-        controls();
+        document.querySelectorAll("button,select,input").forEach((el) => { el.disabled = true; });
         try {
           await fn();
         } catch (e) {
           say(e.message || "Could not connect to Grok Bot.");
-          if (selected) $("bot").value = selected;
         } finally {
           busy = false;
+          document.querySelectorAll("button,select,input").forEach((el) => { el.disabled = false; });
           controls();
         }
+      }
+      const describe = () => (state.defaultName ? "Messages will go to " + state.defaultName + "." : "Choose a default bot.");
+      async function load() {
+        say("Loading bots…");
+        render(await send({ type: "listBots" }));
+        say(bots.length ? describe() : "You have no bots yet. Create one in Grok Bot.");
       }
       // The settings page isn't a secure context, so crypto.subtle and crypto.randomUUID are missing.
       function sha256(bytes) {
@@ -153,58 +196,46 @@
           "&uuid=" + uuid + "&mode=login&redirectTarget=sand";
         return { url, uuid, verifier };
       }
-      $("signin").onclick = () =>
+      $("signin").onclick = $("signinAgain").onclick = () =>
         run(async () => {
-          if (!Pebble.webSignIn) {
-            say("Grok Bot sign-in requires a newer version of the Pebble app.");
-            return;
-          }
+          if (!Pebble.webSignIn) throw new Error("Grok Bot sign-in requires a newer version of the Pebble app.");
           say("Opening Grok Bot sign-in…");
           const login = await cursorLogin();
-          const cookies = await Pebble.webSignIn({
-            url: login.url,
-            cookies: ["WorkosCursorSessionToken"],
-            domain: "cursor.com",
-          });
-          if (!cookies) {
-            say("Sign-in cancelled.");
-            return;
-          }
+          const cookies = await Pebble.webSignIn({ url: login.url, cookies: ["WorkosCursorSessionToken"], domain: "cursor.com" });
+          if (!cookies) { say("Sign-in cancelled."); return; }
           say("Connecting to your Grok Bot computer…");
           render(await send({ type: "finishSignIn", uuid: login.uuid, verifier: login.verifier }));
-          say(selected ? "Connected to Grok Bot." : "Connected, but you have no bots yet. Create one in Grok Bot.");
+          say(bots.length ? describe() : "Connected, but you have no bots yet. Create one in Grok Bot.");
         });
-      $("refresh").onclick = () =>
+      $("defaultFilter").oninput = () => { fill($("defaultBots"), $("defaultFilter")); controls(); };
+      $("nickFilter").oninput = () => { fill($("nickBots"), $("nickFilter")); pickNick(); };
+      $("defaultBots").onchange = controls;
+      $("nickBots").onchange = pickNick;
+      $("refresh").onclick = () => run(load);
+      $("useDefault").onclick = () =>
         run(async () => {
-          say("Loading bots…");
-          render(await send({ type: "listBots" }));
-          say("Bots refreshed.");
+          render(await send({ type: "selectBot", id: $("defaultBots").value }));
+          say(describe());
         });
-      $("bot").onchange = () => {
-        const id = $("bot").value;
+      $("saveNickname").onclick = () =>
         run(async () => {
-          say("Saving bot…");
-          render(await send({ type: "selectBot", id }));
-          say("Bot saved.");
+          const name = $("nickname").value.trim();
+          render(await send({ type: "saveNickname", id: $("nickBots").value, nickname: name }));
+          say(name ? "Saved. Say “" + name + "” to send to this bot." : "Nickname removed.");
         });
-      };
       $("disconnect").onclick = () =>
         run(async () => {
           render(await send({ type: "disconnect" }));
-          say("Disconnected. Saved sign-in removed from this plugin.");
+          say("Signed out. Saved sign-in removed from this plugin.");
         });
       Pebble.addEventListener("ready", (event) => {
         if (event.target !== "plugin") return;
         run(async () => {
-          const state = await send({ type: "status" });
-          render(state);
-          if (state.configured) {
-            say("Loading bots…");
-            render(await send({ type: "listBots" }));
-            say("Connected to Grok Bot.");
-          } else say("Sign in to connect your Grok Bot.");
+          render(await send({ type: "status" }));
+          if (state.configured) await load();
+          else say("Sign in to connect your Grok Bot.");
         });
       });
-    </script>
-  </body>
+</script>
+</body>
 </html>

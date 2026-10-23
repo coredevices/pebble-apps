@@ -1,10 +1,10 @@
 {
   "name": "grok-bot",
   "author": "Core Devices",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "scripts": {
-    "test": "node --test test/plugin.test.js"
+    "test": "node --test test/*.test.js"
   },
   "pebble": {
     "displayName": "Grok Bot",
@@ -25,13 +25,46 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your Grok Bot and read its replies. Sign in and choose the bot in settings.",
+      "description": "Send messages to your Grok Bots and read their replies. With no bot named, sends to the default bot chosen in settings. Supports bot nicknames. Sign in in settings.",
       "script": "src/plugin/index.js",
-      "sources": [],
+      "sources": [
+        {
+          "category": "agent",
+          "items": [
+            "chats"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 900
+        },
+        {
+          "category": "agent",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
       "actions": [
         {
-          "name": "send_to_grok_bot",
-          "description": "Send the user’s message to the Grok Bot selected in plugin settings. Returns a delivery receipt, not the bot's answer; use read_grok_bot later for its reply. Do not automatically retry an uncertain delivery.",
+          "name": "send_to_agent",
+          "description": "Send the user’s message to one of their Grok Bots. Use when the user says \"tell Grok Bot …\" or names a bot or nickname (e.g. \"send to work …\"). chat_id is an instanceId from agent/chats, a nickname or a bot name; omit it to use the default bot chosen in settings. Returns a delivery receipt, not the bot's answer; use read_grok_bot later for its reply. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -40,6 +73,13 @@
                 "description": "The message to send to Grok Bot.",
                 "minLength": 1,
                 "maxLength": 16000
+              },
+              "chat_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The bot's instanceId from agent/chats, its nickname, or its name. Omit to use the default bot."
               }
             },
             "required": [
@@ -47,12 +87,16 @@
             ],
             "additionalProperties": false
           },
+          "targets": [
+            "agent/chats"
+          ],
           "destructive": false,
-          "requiresConfirmation": false
+          "requiresConfirmation": false,
+          "callerPermissions": []
         },
         {
           "name": "read_grok_bot",
-          "description": "Read the latest replies from the Grok Bot selected in plugin settings, oldest first.",
+          "description": "Read the latest replies from one of the user's Grok Bots, oldest first. chat_id is an instanceId from agent/chats, a nickname or a bot name; omit it to use the default bot chosen in settings.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -61,6 +105,13 @@
                 "description": "How many recent replies to return (1-20, default 3).",
                 "minimum": 1,
                 "maximum": 20
+              },
+              "chat_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The bot's instanceId from agent/chats, its nickname, or its name. Omit to use the default bot."
               }
             },
             "additionalProperties": false

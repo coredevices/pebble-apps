@@ -1,7 +1,7 @@
 {
   "name": "location-sharing",
   "author": "Core Devices",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "pebble": {
     "displayName": "LocationSharing",
     "uuid": "3dab147e-32f5-4e48-b980-5a0de672e085",
@@ -72,7 +72,7 @@
         {
           "name": "find_person",
           "displayName": "Find a person",
-          "description": "Find someone who already shares their location with the user, and reply with a short answer ready to show as a notification. person can be a name or a nickname the user saved, such as \"my wife\". Leave person blank to list everyone sharing.",
+          "description": "Find someone who already shares their location with the user, and reply with a short answer ready to show as a notification. Give the user the returned text as it is: it already has where they are, travel time when the user turned that on, and how fresh the location is. person can be a name or a nickname the user saved, such as \"my wife\". Leave person blank to list everyone sharing.",
           "parameters": {
             "type": "object",
             "properties": {

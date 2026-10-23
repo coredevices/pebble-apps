@@ -119,13 +119,13 @@ function answerText(person, settings, routes, nowMs) {
   var place = placeAt(person, settings.places);
   var where = place ? place.label : person.address ? shortAddress(person.address) :
     person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4);
-  var text = name + (person.isOld ? " was last seen at " : " is at ") + where + " (" + ageText(person.timestampMs, nowMs) + ").";
+  var text = name + (person.isOld ? " was last seen at " : " is at ") + where;
   var trips = Object.keys(MODE_NAMES).filter(function(mode) { return routes[mode]; });
   if (trips.length) {
-    text += " " + trips.map(function(mode) { return routes[mode].duration + " " + MODE_NAMES[mode]; }).join(" · ") +
-      " (" + routes[trips[0]].distance + ")";
+    text += ", " + trips.map(function(mode) { return routes[mode].duration + " " + MODE_NAMES[mode]; }).join(" or ") +
+      " away (" + routes[trips[0]].distance + ")";
   }
-  return text;
+  return text + ". Updated " + ageText(person.timestampMs, nowMs) + ".";
 }
 function withProvider(person, providerId, providerName) {
   var result = Object.assign({}, person);
@@ -168,7 +168,7 @@ function configReply(controller, result) {
   });
   return Object.assign({
     ok: true,
-    pluginVersion: "0.13.0",
+    pluginVersion: "0.13.1",
     settings: controller.settings(),
     apple: status.apple,
     google: status.google,

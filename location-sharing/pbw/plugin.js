@@ -434,7 +434,7 @@ PERFORMANCE OF THIS SOFTWARE.
       var STORE_COOKIES = "location-sharing-google-cookies";
       var STORE_CACHE = "location-sharing-google-people-v1";
       var STORE_DIAGNOSTICS = "location-sharing-google-diagnostics-v1";
-      var PLUGIN_VERSION = "0.13.0";
+      var PLUGIN_VERSION = "0.13.1";
       var MAX_DIAGNOSTIC_EVENTS = 40;
       var MAPS_RPC_ID = "Qt4aBe";
       var MAPS_RPC_METHOD = "/MapsLocationSharingService.GetState";
@@ -1411,16 +1411,16 @@ PERFORMANCE OF THIS SOFTWARE.
         }
         var place = placeAt(person, settings.places);
         var where = place ? place.label : person.address ? shortAddress(person.address) : person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4);
-        var text = name + (person.isOld ? " was last seen at " : " is at ") + where + " (" + ageText(person.timestampMs, nowMs) + ").";
+        var text = name + (person.isOld ? " was last seen at " : " is at ") + where;
         var trips = Object.keys(MODE_NAMES).filter(function(mode) {
           return routes[mode];
         });
         if (trips.length) {
-          text += " " + trips.map(function(mode) {
+          text += ", " + trips.map(function(mode) {
             return routes[mode].duration + " " + MODE_NAMES[mode];
-          }).join(" · ") + " (" + routes[trips[0]].distance + ")";
+          }).join(" or ") + " away (" + routes[trips[0]].distance + ")";
         }
-        return text;
+        return text + ". Updated " + ageText(person.timestampMs, nowMs) + ".";
       }
       function withProvider(person, providerId, providerName) {
         var result = Object.assign({}, person);
@@ -1463,7 +1463,7 @@ PERFORMANCE OF THIS SOFTWARE.
         });
         return Object.assign({
           ok: true,
-          pluginVersion: "0.13.0",
+          pluginVersion: "0.13.1",
           settings: controller.settings(),
           apple: status.apple,
           google: status.google,

@@ -34,3 +34,12 @@ test('auto is on for new users and off for settings saved before it existed', ()
   assert.deepEqual(settingsFrom(null), { auto: true, drive: false, bike: false, walk: false });
   assert.deepEqual(settingsFrom(JSON.stringify({ show: { drive: true } })), { auto: false, drive: true, bike: false, walk: false });
 });
+
+test('answer puts the travel time in the sentence, not an aside', () => {
+  const { answerText } = require('../src/location-sharing/controller');
+  const person = { id: 'w', name: 'Wife', latitude: 37.3352, longitude: -121.8811, address: '1 Washington Sq, San Jose, CA', timestampMs: 0 };
+  const settings = { nicknames: {}, places: [] };
+  assert.equal(answerText(person, settings, { drive: route(30) }, 3 * 60000),
+    'Wife is at 1 Washington Sq, San Jose, 30 min drive away (1 mi). Updated 3 minutes ago.');
+  assert.equal(answerText(person, settings, {}, 3 * 60000), 'Wife is at 1 Washington Sq, San Jose. Updated 3 minutes ago.');
+});

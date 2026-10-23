@@ -1,7 +1,7 @@
 {
   "name": "claude",
   "author": "Core Devices",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js"
@@ -24,13 +24,33 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, sends to the default selected in settings. Supports chat nicknames. Sign in in settings.",
+      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, starts a new chat, or sends to the default chat chosen in settings. Supports chat nicknames. Sign in in settings.",
       "script": "src/plugin/index.js",
       "sources": [
         {
-          "category": "messaging",
+          "category": "agent",
           "items": [
-            "session"
+            "chats"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "title": [
+              "shortText"
+            ],
+            "url": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 900
+        },
+        {
+          "category": "agent",
+          "items": [
+            "configured"
           ],
           "properties": {
             "name": [
@@ -43,13 +63,13 @@
           },
           "supportsMultiple": false,
           "callerPermissions": [],
-          "suggestedRefreshIntervalSec": 3600
+          "suggestedRefreshIntervalSec": 60
         }
       ],
       "actions": [
         {
-          "name": "send_to_claude",
-          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. Use when the user says \"send … to Claude\", \"tell Claude …\", or names a chat or nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat picked in settings. \"Send to Claude - status\" sends the message \"status\" to that default; it does not search for a status chat. Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
+          "name": "send_to_agent",
+          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. chat_id is an instanceId from agent/chats, or a nickname; omit it to start a new chat, or to use the default chat when one is set in settings. Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -59,9 +79,12 @@
                 "maxLength": 16000,
                 "description": "What to tell Claude, without the \"tell Claude\" instruction itself."
               },
-              "chat": {
-                "type": "string",
-                "description": "The chat's nickname, its id from list_claude_chats, or part of its title. Omit to use the default chat."
+              "chat_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The chat's instanceId from agent/chats, its nickname, or part of its title. Omit to start a new chat (or use the default chat, when one is set)."
               }
             },
             "required": [
@@ -69,34 +92,9 @@
             ],
             "additionalProperties": false
           },
-          "targets": [],
-          "destructive": false,
-          "requiresConfirmation": false,
-          "callerPermissions": []
-        },
-        {
-          "name": "list_claude_chats",
-          "description": "List the user's Claude chats, most recent first, with nicknames, which is the default, and chat IDs. Includes regular Claude conversations and Claude Code sessions. Use when the user asks what chats they have, or when it is unclear which explicitly named chat they mean; then pass the nickname or chat ID to send_to_claude. No need to list when no destination is named: send_to_claude uses the saved default.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "chat",
-                  "code"
-                ],
-                "description": "Omit to browse both Claude chats and Claude Code. Set chat or code when following a next_cursors entry."
-              },
-              "cursor": {
-                "type": "string",
-                "description": "Cursor for the specified kind from next_cursors, to browse older chats."
-              }
-            },
-            "required": [],
-            "additionalProperties": false
-          },
-          "targets": [],
+          "targets": [
+            "agent/chats"
+          ],
           "destructive": false,
           "requiresConfirmation": false,
           "callerPermissions": []

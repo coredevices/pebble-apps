@@ -9,10 +9,10 @@
 h1 { font-size:24px; margin:0 0 6px; } h2 { font-size:18px; margin:0; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
 .card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } .default { background:var(--card); margin-top:16px; } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
 #selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; } .default p { margin-bottom:0; }
-label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input { font:inherit; } select,input:not([type=checkbox]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input { font:inherit; } select,input:not([type=checkbox]):not([type=radio]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
 button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; }
 .row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row select { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; } #more { display:block; margin:4px auto; font-size:14px; }
-.check { display:flex; gap:10px; align-items:center; font-weight:400; } input[type=checkbox] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; } #nicknameHelp { margin-top:6px; } details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
+.check { display:flex; gap:10px; align-items:center; font-weight:400; } input[type=checkbox],input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:0; } .modes .check { margin:10px 0 0; } #nicknameHelp { margin-top:6px; } details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
 @media(prefers-color-scheme:dark) { :root { --bg:#20201e; --card:#2b2a27; --ink:#f4f1ec; --muted:#bdb7af; --line:#49463f; --accent:#c76b46; } }
 </style>
 </head>
@@ -24,7 +24,13 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 <p class="hint">Choose “Continue with email” on Claude’s sign-in page. Google sign-in uses a popup that older app versions cannot complete. Your sign-in is saved securely.</p>
 </section>
 <section id="signedIn" hidden>
-<div class="card default">
+<div class="card modes">
+<div class="eyebrow">Where messages go</div>
+<label class="check"><input type="radio" name="mode" value="new_chat">Start a new chat each time</label>
+<label class="check"><input type="radio" name="mode" value="default_chat">Send to a default chat</label>
+<p class="hint" style="margin-bottom:0">Naming a chat or nickname always sends there instead.</p>
+</div>
+<div class="card default" id="defaultCard">
 <div class="eyebrow">Your default chat</div>
 <p id="selected"></p>
 <p class="hint">“Send to Claude” sends here unless you name another chat.</p>
@@ -102,6 +108,8 @@ function render(next) {
     $('organization').value = state.organization || '';
   }
   $('selected').textContent = state.selected ? sessionName(state.selected) : 'Choose a chat below';
+  document.querySelectorAll('input[name=mode]').forEach(input => { input.checked = input.value === state.mode; });
+  $('defaultCard').hidden = state.mode !== 'default_chat';
 }
 async function run(fn) {
   if (busy) return;
@@ -132,6 +140,12 @@ $('organization').onchange = () => run(async () => {
   rows = []; cursor = null; choices();
   render(await send({type:'organization',id:$('organization').value})); await list();
 });
+document.querySelectorAll('input[name=mode]').forEach(input => {
+  input.onchange = () => run(async () => {
+    render(await send({type:'mode',mode:input.value}));
+    say(state.mode === 'new_chat' ? 'Each message will start a new chat.' : (state.selected ? 'Messages will go to your default chat.' : 'Choose a default chat below.'));
+  });
+});
 $('kind').onchange = $('refresh').onclick = () => run(() => list());
 $('more').onclick = () => run(() => list(true));
 $('filter').oninput = choices;
@@ -145,7 +159,7 @@ async function saveSession(makeDefault) {
     if (row.session_id === id) row.nickname = name;
     row.isDefault = state.selected?.session_id === row.session_id;
   });
-  choices(); say('Saved. ' + (state.selected?.session_id === id ? 'Messages to Claude will go to this chat.' : 'You can now use this nickname when sending.'));
+  choices(); say('Saved. ' + (state.selected?.session_id === id && state.mode === 'default_chat' ? 'Messages to Claude will go to this chat.' : 'You can now use this nickname when sending.'));
 }
 $('select').onclick = () => run(() => saveSession($('makeDefault').checked));
 $('disconnect').onclick = () => run(async () => {
@@ -153,7 +167,7 @@ $('disconnect').onclick = () => run(async () => {
 });
 Pebble.addEventListener('ready', event => {
   if (event.target !== 'plugin') return;
-  run(async () => { render(await send({type:'status'})); if (state.configured && state.organization) { $('kind').value = state.selected?.session_id.startsWith('code:') ? 'code' : 'chat'; await list(); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
+  run(async () => { render(await send({type:'status'})); if (state.configured && state.organization) { $('kind').value = state.selected?.session_id?.startsWith('code:') ? 'code' : 'chat'; await list(); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
 });
 </script>
 </body>

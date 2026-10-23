@@ -8,6 +8,8 @@ const ORG='11111111-1111-4111-8111-111111111111', OTHER='22222222-2222-4222-8222
 const CHAT='33333333-3333-4333-8333-333333333333', HUMAN='44444444-4444-4444-8444-444444444444', LEAF='55555555-5555-4555-8555-555555555555';
 const CODE='cse_example123', BASE='/api/organizations/'+ORG, DETAIL=BASE+'/chat_conversations/'+CHAT+'?tree=True&rendering_mode=messages&render_all_tools=true';
 const POST=BASE+'/chat_conversations/'+CHAT+'/completion', CDETAIL='/v1/code/sessions/'+CODE, CPOST=CDETAIL+'/events';
+const CREATE='POST '+BASE+'/chat_conversations', ROOT='00000000-0000-4000-8000-000000000000';
+const completionStream=init=>({status:200,text:async()=> 'event: message_start\ndata: '+JSON.stringify({type:'message_start',message:{uuid:JSON.parse(init.body).turn_message_uuids.assistant_message_uuid}})+'\n\ndata: {"type":"message_stop"}\n\n'});
 const chat=()=>({uuid:CHAT,name:'Planning',model:'claude-test-model',current_leaf_message_uuid:LEAF,chat_messages:[
   {uuid:HUMAN,sender:'human',text:'first',parent_message_uuid:'00000000-0000-4000-8000-000000000000'},
   {uuid:LEAF,sender:'assistant',content:[{type:'text',text:'reply'}],parent_message_uuid:HUMAN},
@@ -21,21 +23,27 @@ function fixture(overrides={}) {
     'GET /v1/code/sessions?limit=100':()=>json({data:[{id:CODE,title:'CoreApp'}],next_cursor:null}),
     ['GET '+DETAIL]:()=>json(chat()),
     ['GET '+CDETAIL]:()=>json({id:CODE,title:'CoreApp',status:'active',environment_kind:'bridge',connection_status:'connected'}),
-    ['POST '+POST]:init=>({status:200,text:async()=> 'event: message_start\ndata: '+JSON.stringify({type:'message_start',message:{uuid:JSON.parse(init.body).turn_message_uuids.assistant_message_uuid}})+'\n\ndata: {"type":"message_stop"}\n\n'}),
+    ['POST '+POST]:completionStream,
     ['POST '+CPOST]:()=>json({results:[{event_id:'evt-1',sequence_num:'3',duplicate:false}]}),...overrides};
   const sandbox={Date,Uint8Array,Math,JSON,fetch:async(url,init)=>{
     assert.ok(url.startsWith('https://claude.ai/'));const key=init.method+' '+url.slice('https://claude.ai'.length);
-    calls.push({key,init});assert.ok(routes[key],'unexpected '+key);return routes[key](init);
+    calls.push({key,init});const handler=routes[key]||(routes.fallback&&routes.fallback(key,init));assert.ok(handler,'unexpected '+key);return handler(init);
   },Pebble:{secureStorage:{getItem:async k=>storage.get(k),setItem:async(k,v)=>storage.set(k,v),removeItem:async k=>storage.delete(k)},
     registerActionHandler:fn=>action=fn,registerConfigHandler:fn=>config=fn,registerSourceHandler:fn=>source=fn}};
   vm.runInNewContext(SOURCE,sandbox);
   const configCall=m=>new Promise(resolve=>config(m,resolve));
   return {calls,storage,routes,sandbox,config:configCall,connect:()=>configCall({type:'connect',session_key:'secret-cookie'}),
     action:(name,args={})=>new Promise(resolve=>action({action:name,args},{ok:r=>resolve({ok:true,...r}),error:(code,message)=>resolve({code,message})})),
-    source:()=>new Promise(resolve=>source({category:'messaging',item:'session'},{data:resolve,error:(code,message)=>resolve({code,message})}))};
+    source:(item='configured')=>new Promise(resolve=>source({category:'agent',item},{data:resolve,error:(code,message)=>resolve({code,message})}))};
 }
-const sendChat=f=>f.action('send_to_claude',{session_id:'chat:'+CHAT,message:'hello 世界'});
-const sendCode=f=>f.action('send_to_claude',{session_id:'code:'+CODE,message:'run tests'});
+const sendChat=f=>f.action('send_to_agent',{chat_id:'chat:'+CHAT,message:'hello 世界'});
+const useDefault=f=>f.config({type:'mode',mode:'default_chat'});
+// Routes for a conversation the plugin creates itself: its id is only known from the create body.
+function newChatRoutes(f){
+  f.routes[CREATE]=init=>json({uuid:JSON.parse(init.body).uuid,name:''});
+  f.routes.fallback=(key,init)=>key.startsWith('POST '+BASE+'/chat_conversations/')&&key.endsWith('/completion')?completionStream:null;
+}
+const sendCode=f=>f.action('send_to_agent',{chat_id:'code:'+CODE,message:'run tests'});
 const posts=f=>f.calls.filter(c=>c.key.startsWith('POST'));
 
 test('sign-in verifies membership and only secure storage contains credentials',async()=>{
@@ -45,7 +53,7 @@ test('sign-in verifies membership and only secure storage contains credentials',
 });
 test('multiple organizations require selection; switching clears default',async()=>{
   const f=fixture({'GET /api/organizations':()=>json([{uuid:ORG,name:'A'},{uuid:OTHER,name:'B'}])});assert.equal((await f.connect()).organization,null);
-  assert.equal((await f.action('list_claude_sessions')).code,'INVALID_ARGS');assert.ok((await f.config({type:'organization',id:CHAT})).error);
+  assert.equal((await f.source('chats')).code,'INVALID_ARGS');assert.ok((await f.config({type:'organization',id:CHAT})).error);
   await f.config({type:'organization',id:ORG});await f.config({type:'select',session_id:'chat:'+CHAT});assert.equal((await f.config({type:'organization',id:OTHER})).selected,null);
 });
 test('malformed cookies are rejected before network access',async()=>{
@@ -54,21 +62,21 @@ test('malformed cookies are rejected before network access',async()=>{
   }
 });
 test('list pages preserve cursors and distinguish chat from code',async()=>{
-  const f=fixture();await f.connect();assert.equal(JSON.parse((await f.action('list_claude_sessions')).text).sessions[0].session_id,'chat:'+CHAT);
+  const f=fixture();await f.connect();assert.equal((await f.config({type:'list'})).sessions[0].session_id,'chat:'+CHAT);
   f.routes['GET /v1/code/sessions?limit=100']=()=>json({data:[{id:CODE,title:'CoreApp'}],next_cursor:'next/page'});
   f.routes['GET /v1/code/sessions?limit=100&cursor=next%2Fpage']=()=>json({data:[],next_cursor:null});
-  const b=JSON.parse((await f.action('list_claude_sessions',{kind:'code'})).text);assert.equal(b.next_cursor,'next/page');
-  await f.action('list_claude_sessions',{kind:'code',cursor:b.next_cursor});const h=f.calls.at(-1).init.headers;
+  const b=await f.config({type:'list',kind:'code'});assert.equal(b.next_cursor,'next/page');
+  await f.config({type:'list',kind:'code',cursor:b.next_cursor});const h=f.calls.at(-1).init.headers;
   assert.equal(h['x-organization-uuid'],ORG);assert.equal(h['anthropic-client-platform'],'web_claude_ai');assert.equal(h.Cookie,'sessionKey=secret-cookie; lastActiveOrg='+ORG);
 });
 test('supports paginated chat list envelopes',async()=>{
   const f=fixture({['GET '+BASE+'/chat_conversations?limit=100']:()=>json({conversations:[chat()],cursor:'next'})});await f.connect();
-  assert.equal(JSON.parse((await f.action('list_claude_sessions')).text).next_cursor,'next');
+  assert.equal((await f.config({type:'list'})).next_cursor,'next');
 });
 test('chat send uses current branch and correlated UUIDs, not the last array message',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'select',session_id:'chat:'+CHAT});
+  const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
   assert.equal((await f.source()).instances[0].properties.name.shortText.text,'Planning');
-  const r=await f.action('send_to_claude',{message:'hello 世界'});assert.equal(r.ok,true);const b=JSON.parse(posts(f)[0].init.body);
+  const r=await f.action('send_to_agent',{message:'hello 世界'});assert.equal(r.ok,true);const b=JSON.parse(posts(f)[0].init.body);
   assert.equal(b.parent_message_uuid,LEAF);assert.equal(b.prompt,'hello 世界');assert.equal(b.turn_message_uuids.human_message_uuid,r.message_id);
   assert.notEqual(b.turn_message_uuids.human_message_uuid,b.turn_message_uuids.assistant_message_uuid);assert.equal(b.create_conversation_params,undefined);
   assert.equal(posts(f)[0].init.headers['Content-Type'],'application/json; charset=utf-8');
@@ -81,15 +89,6 @@ test('offline and archived Code sessions cannot receive messages',async()=>{
   for(const extra of [{connection_status:'disconnected'},{status:'archived'}]){
     const f=fixture({['GET '+CDETAIL]:()=>json({id:CODE,environment_kind:'bridge',connection_status:'connected',...extra})});await f.connect();assert.ok(!(await sendCode(f)).ok);assert.equal(posts(f).length,0);
   }
-});
-test('chat read follows selected branch',async()=>{
-  const f=fixture();await f.connect();const r=JSON.parse((await f.action('read_claude_session',{session_id:'chat:'+CHAT})).text);assert.deepEqual(r.messages.map(m=>m.text),['first','reply']);
-});
-test('Code read excludes thinking/tool content and restores chronological order',async()=>{
-  const f=fixture({['GET '+CPOST+'?limit=100&sort_order=desc']:()=>json({data:[
-    {payload:{type:'assistant',uuid:LEAF,message:{role:'assistant',content:[{type:'thinking',thinking:'private'},{type:'text',text:'done'}]}}},
-    {payload:{type:'system'}},{payload:{type:'user',uuid:HUMAN,message:{role:'user',content:'hello'}}}]})});await f.connect();
-  const r=JSON.parse((await f.action('read_claude_session',{session_id:'code:'+CODE})).text);assert.deepEqual(r.messages.map(m=>m.text),['hello','done']);
 });
 test('mismatched IDs, missing leaf and busy chat never produce a send',async()=>{
   for(const mutate of [c=>({...c,uuid:OTHER}),c=>({...c,current_leaf_message_uuid:HUMAN}),c=>({...c,is_streaming:true}),c=>({...c,current_leaf_message_uuid:null})]){
@@ -119,8 +118,8 @@ test('persisted human UUID confirms delivery when SSE shape changes',async()=>{
   };assert.equal((await sendChat(f)).ok,true);assert.equal(posts(f).length,1);
 });
 test('path injection, empty messages and oversized messages fail validation',async()=>{
-  const f=fixture();await f.connect();for(const args of [{session_id:'code:../../secret',message:'x'},{session_id:'https://evil.test',message:'x'},{message:''},{message:'   '},{message:'x'.repeat(16001)}]){
-    assert.equal((await f.action('send_to_claude',args)).code,'INVALID_ARGS');
+  const f=fixture();await f.connect();for(const args of [{chat_id:'code:../../secret',message:'x'},{chat_id:'chat:https://evil.test',message:'x'},{message:''},{message:'   '},{message:'x'.repeat(16001)}]){
+    assert.equal((await f.action('send_to_agent',args)).code,'INVALID_ARGS');
   }assert.equal(posts(f).length,0);
 });
 test('overlapping sends issue only one POST',async()=>{
@@ -150,13 +149,13 @@ test('Code detail accepts the current response_shape wrapper and still checks id
 });
 
 test('nicknames persist without changing the default and route case-insensitively',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'select',session_id:'chat:'+CHAT});
+  const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
   const r=await f.config({type:'save_session',session_id:'code:'+CODE,nickname:' Work ',makeDefault:false});
   assert.equal(r.selected.session_id,'chat:'+CHAT);
-  assert.equal((await f.action('send_to_claude',{chat:'wOrK',message:'hello'})).session_id,'code:'+CODE);
-  assert.equal(JSON.parse((await f.action('list_claude_sessions',{kind:'code'})).text).sessions[0].nickname,'Work');
+  assert.equal((await f.action('send_to_agent',{chat_id:'wOrK',message:'hello'})).session_id,'code:'+CODE);
+  assert.equal((await f.config({type:'list',kind:'code'})).sessions[0].nickname,'Work');
   await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'Work',makeDefault:true});
-  assert.equal((await f.action('send_to_claude',{message:'hello'})).session_id,'code:'+CODE);
+  assert.equal((await f.action('send_to_agent',{message:'hello'})).session_id,'code:'+CODE);
   assert.equal((await f.source()).instances[0].properties.name.shortText.text,'Work');
 });
 test('nicknames move between sessions, can be cleared, and reject oversized names',async()=>{
@@ -170,26 +169,26 @@ test('nicknames move between sessions, can be cleared, and reject oversized name
 });
 test('title routing searches both kinds and all pages; ambiguous matches never send',async()=>{
   const f=fixture();await f.connect();
-  assert.equal((await f.action('send_to_claude',{chat:'planning',message:'hello'})).session_id,'chat:'+CHAT);
+  assert.equal((await f.action('send_to_agent',{chat_id:'planning',message:'hello'})).session_id,'chat:'+CHAT);
   f.routes['GET /v1/code/sessions?limit=100']=()=>json({data:[],next_cursor:'next'});
   f.routes['GET /v1/code/sessions?limit=100&cursor=next']=()=>json({data:[{id:CODE,title:'Planning too'}]});
   const before=posts(f).length;
-  assert.equal((await f.action('send_to_claude',{chat:'planning',message:'hello'})).code,'INVALID_ARGS');
+  assert.equal((await f.action('send_to_agent',{chat_id:'planning',message:'hello'})).code,'INVALID_ARGS');
   assert.equal(posts(f).length,before);
-  assert.equal((await f.action('send_to_claude',{chat:'Planning too',message:'hello'})).session_id,'code:'+CODE);
+  assert.equal((await f.action('send_to_agent',{chat_id:'Planning too',message:'hello'})).session_id,'code:'+CODE);
 });
-test('nickname ambiguity and conflicting destination arguments fail without sending',async()=>{
+test('nickname ambiguity and malformed destinations fail without sending',async()=>{
   const f=fixture();await f.connect();
   await f.config({type:'save_session',session_id:'chat:'+CHAT,nickname:'work one'});
   await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'work two'});
-  for(const args of [{chat:'work'},{chat:5},{chat:'work one',session_id:'chat:'+CHAT}]) {
-    assert.equal((await f.action('send_to_claude',{...args,message:'hello'})).code,'INVALID_ARGS');
+  for(const args of [{chat_id:'work'},{chat_id:5}]) {
+    assert.equal((await f.action('send_to_agent',{...args,message:'hello'})).code,'INVALID_ARGS');
   }
   assert.equal(posts(f).length,0);
 });
 test('old connection state keeps sign-in and default; nicknames stay organization-scoped',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'select',session_id:'chat:'+CHAT});
-  assert.equal((await f.action('send_to_claude',{message:'hello'})).ok,true);
+  const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
+  assert.equal((await f.action('send_to_agent',{message:'hello'})).ok,true);
   await f.config({type:'save_session',session_id:'chat:'+CHAT,nickname:'personal'});
   f.routes['GET /api/organizations']=()=>json([{uuid:ORG,name:'Personal'},{uuid:OTHER,name:'Work'}]);
   await f.config({type:'organization',id:OTHER});
@@ -203,22 +202,75 @@ test('409 reports conflict and does not retry a send',async()=>{
 });
 
 test('generic send forwards status unchanged to saved default without listing or reading history',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'select',session_id:'code:'+CODE});f.calls.length=0;
-  const r=await f.action('send_to_claude',{message:'status'});
+  const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'code:'+CODE});f.calls.length=0;
+  const r=await f.action('send_to_agent',{message:'status'});
   assert.equal(r.session_id,'code:'+CODE);
   assert.deepEqual(f.calls.map(c=>c.key),['GET '+CDETAIL,'POST '+CPOST]);
   assert.equal(JSON.parse(posts(f)[0].init.body).events[0].payload.message.content[0].text,'status');
 });
-test('named-chat action requires a destination and resolves an explicit nickname',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'work'});
-  assert.equal((await f.action('send_to_named_claude_chat',{message:'status'})).code,'INVALID_ARGS');
-  assert.equal((await f.action('send_to_named_claude_chat',{chat:'work',message:'status'})).session_id,'code:'+CODE);
+test('unknown actions are rejected before touching the network',async()=>{
+  const f=fixture();await f.connect();f.calls.length=0;
+  for(const name of ['send_to_claude','list_claude_chats','read_claude_session']){
+    assert.equal((await f.action(name,{message:'hello'})).code,'INVALID_ARGS');
+  }
+  assert.equal(f.calls.length,0);
 });
-
-test('Codex-style chat browser includes both destinations and marks the default',async()=>{
-  const f=fixture();await f.connect();await f.config({type:'select',session_id:'code:'+CODE});
-  const r=JSON.parse((await f.action('list_claude_chats')).text);
-  assert.deepEqual(r.sessions.map(x=>x.kind),['chat','code']);
-  assert.equal(r.sessions.find(x=>x.kind==='code').isDefault,true);
-  assert.equal((await f.action('send_to_claude',{chat:'CoreApp',message:'status'})).session_id,'code:'+CODE);
+test('chats source lists both kinds with the nickname as name and the chat id as instanceId',async()=>{
+  const f=fixture();await f.connect();await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'work'});
+  const r=await f.source('chats');
+  assert.deepEqual(Array.from(r.instances,i=>i.instanceId),['chat:'+CHAT,'code:'+CODE]);
+  assert.deepEqual(Array.from(r.instances,i=>i.properties.name.shortText.text),['Planning','work']);
+  assert.deepEqual(Array.from(r.instances,i=>i.properties.title.shortText.text),['Planning','CoreApp']);
+  assert.equal(r.instances[1].properties.url.longText.text,'https://claude.ai/code/'+CODE);
+  assert.equal((await f.action('send_to_agent',{chat_id:r.instances[1].instanceId,message:'status'})).session_id,'code:'+CODE);
+});
+test('chats source needs sign-in and an organization; configured depends on the mode',async()=>{
+  const f=fixture();assert.equal((await f.source('chats')).code,'AUTH_REQUIRED');
+  assert.equal((await f.source()).instances[0].properties.configured.boolean.value,false);
+  await f.connect();
+  let c=(await f.source()).instances[0].properties;assert.equal(c.configured.boolean.value,true);assert.equal(c.name.shortText.text,'New chat');
+  await useDefault(f);assert.equal((await f.source()).instances[0].properties.configured.boolean.value,false);
+  await f.config({type:'select',session_id:'code:'+CODE});
+  c=(await f.source()).instances[0].properties;assert.equal(c.configured.boolean.value,true);assert.equal(c.name.shortText.text,'CoreApp');
+  assert.equal((await f.source('other')).code,'INVALID_ARGS');
+});
+test('new-chat mode needs an organization before it reads as configured',async()=>{
+  const f=fixture({'GET /api/organizations':()=>json([{uuid:ORG,name:'A'},{uuid:OTHER,name:'B'}])});await f.connect();
+  assert.equal((await f.source()).instances[0].properties.configured.boolean.value,false);
+  await f.config({type:'organization',id:ORG});
+  assert.equal((await f.source()).instances[0].properties.configured.boolean.value,true);
+});
+test('with no chat named a message starts a new conversation under the root message',async()=>{
+  const f=fixture();await f.connect();newChatRoutes(f);f.calls.length=0;
+  const r=await f.action('send_to_agent',{message:'hello 世界'});
+  assert.equal(r.ok,true);assert.match(r.text,/new chat/);
+  const create=f.calls.find(c=>c.key===CREATE),created=JSON.parse(create.init.body);
+  assert.equal(created.name,'');assert.equal(r.session_id,'chat:'+created.uuid);assert.equal(r.url,'https://claude.ai/chat/'+created.uuid);
+  const completion=JSON.parse(posts(f)[1].init.body);
+  assert.equal(posts(f)[1].key,'POST '+BASE+'/chat_conversations/'+created.uuid+'/completion');
+  assert.equal(completion.parent_message_uuid,ROOT);assert.equal(completion.prompt,'hello 世界');
+  assert.deepEqual(f.calls.map(c=>c.key.split(' ')[0]),['POST','POST']);
+});
+test('a null chat_id means no chat was named',async()=>{
+  const f=fixture();await f.connect();newChatRoutes(f);
+  const r=await f.action('send_to_agent',{chat_id:null,message:'hello'});
+  assert.equal(r.ok,true);assert.ok(f.calls.some(c=>c.key===CREATE));
+  await useDefault(f);await f.config({type:'select',session_id:'code:'+CODE});
+  assert.equal((await f.action('send_to_agent',{chat_id:null,message:'status'})).session_id,'code:'+CODE);
+});
+test('a chat the server did not create sends nothing and is not reported as uncertain',async()=>{
+  for(const handler of [()=>json({uuid:OTHER}),()=>json({},500),()=>{throw new Error('down');}]){
+    const f=fixture();await f.connect();f.routes[CREATE]=handler;
+    const r=await f.action('send_to_agent',{message:'hello'});
+    assert.equal(r.code,'PLUGIN_UNAVAILABLE');assert.doesNotMatch(r.message,/uncertain/);assert.equal(posts(f).length,1);
+  }
+});
+test('a named chat still goes to that chat in new-chat mode, and the mode persists',async()=>{
+  const f=fixture();await f.connect();await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'work'});
+  assert.equal((await f.action('send_to_agent',{chat_id:'work',message:'status'})).session_id,'code:'+CODE);
+  assert.equal((await f.config({type:'status'})).mode,'new_chat');
+  assert.ok((await f.config({type:'mode',mode:'sideways'})).error);
+  assert.equal((await useDefault(f)).mode,'default_chat');
+  assert.equal(JSON.parse(f.storage.get('claude.connection.v1')).mode,'default_chat');
+  assert.equal((await f.action('send_to_agent',{message:'status'})).code,'INVALID_ARGS');
 });

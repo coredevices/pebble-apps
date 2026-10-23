@@ -4,6 +4,9 @@ var KEY = 'claude.connection.v1';
 var ORIGIN = 'https://claude.ai';
 var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var CODE_ID = /^(?:cse_|session_)[A-Za-z0-9_-]{1,120}$/;
+// Parent of the first message in a conversation.
+var ROOT_MESSAGE = '00000000-0000-4000-8000-000000000000';
+var MODES = ['new_chat', 'default_chat'];
 
 function PluginError(code, message) {
   var error = new Error(message);
@@ -24,7 +27,7 @@ function sessionRef(value) {
   if (typeof value !== 'string') throw invalid('Choose a Claude session.');
   var parts = value.split(':');
   if (parts.length !== 2 || !((parts[0] === 'chat' && UUID.test(parts[1])) ||
-      (parts[0] === 'code' && CODE_ID.test(parts[1])))) throw invalid('Use a session ID returned by list_claude_sessions.');
+      (parts[0] === 'code' && CODE_ID.test(parts[1])))) throw invalid('Use a chat id from agent/chats.');
   return { kind: parts[0], id: parts[1], ref: value };
 }
 function requestId() {
@@ -35,12 +38,6 @@ function requestId() {
   bytes[8] = (bytes[8] & 63) | 128;
   var hex = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
-}
-function textBlocks(content) {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content.filter(function (b) { return b && b.type === 'text' && typeof b.text === 'string'; })
-    .map(function (b) { return b.text; }).join('\n');
 }
 function chatBranch(chat) {
   if (!chat || !Array.isArray(chat.chat_messages)) throw unavailable();
@@ -99,11 +96,15 @@ function createService(storage, fetch, now) {
     return state.nicknamesByOrg && state.nicknamesByOrg[state.org] || {};
   }
   function nickname(state, id) { return nicknames(state)[id] || ''; }
+  // Where a message with no chat named goes: a fresh conversation, or the chat saved as default.
+  function mode(state) { return state && state.mode === 'default_chat' ? 'default_chat' : 'new_chat'; }
   function status(state) {
-    return state ? { configured: true, organizations: state.organizations, organization: state.org,
+    return state ? { configured: true, organizations: state.organizations, organization: state.org, mode: mode(state),
       selected: state.selected ? Object.assign({}, state.selected, { nickname: nickname(state, state.selected.session_id) }) : null } : { configured: false };
   }
-  async function call(state, method, path, body) {
+  // A failed POST is reported as uncertain delivery unless the caller says the request sent nothing.
+  async function call(state, method, path, body, deliversMessage) {
+    var risky = deliversMessage === undefined ? method === 'POST' : deliversMessage;
     var headers = { Cookie: 'sessionKey=' + state.cookie, Accept: 'application/json',
       'Content-Type': 'application/json; charset=utf-8', Origin: ORIGIN, Referer: ORIGIN + '/' };
     if (state.org) headers.Cookie += '; lastActiveOrg=' + state.org;
@@ -120,7 +121,7 @@ function createService(storage, fetch, now) {
       response = await fetch(ORIGIN + path, { method: method, headers: headers,
         body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (_) {
-      if (method === 'POST') throw uncertain();
+      if (risky) throw uncertain();
       throw PluginError('PLUGIN_UNAVAILABLE', 'Could not reach Claude. Try opening Claude in your browser.');
     }
     if (response.status === 401) throw PluginError('AUTH_REQUIRED', 'Claude sign-in expired. Sign in again in settings.');
@@ -129,7 +130,7 @@ function createService(storage, fetch, now) {
     if (response.status === 429) throw PluginError('RATE_LIMITED', 'Claude is rate limiting requests. Wait before trying again.');
     if (response.status === 404) throw PluginError('NOT_FOUND', 'This Claude session is no longer available in the selected organization.');
     if (response.status < 200 || response.status >= 300) {
-      if (method === 'POST' && response.status >= 500) throw uncertain();
+      if (risky && response.status >= 500) throw uncertain();
       throw PluginError('PLUGIN_UNAVAILABLE', 'Claude rejected the request (HTTP ' + response.status + ').');
     }
     return response;
@@ -192,6 +193,13 @@ function createService(storage, fetch, now) {
         await save(state);
         return status(state);
       }
+      case 'mode': {
+        var state = await required();
+        if (MODES.indexOf(message.mode) < 0) throw invalid('Choose new_chat or default_chat.');
+        state.mode = message.mode;
+        await save(state);
+        return status(state);
+      }
       case 'organization': {
         var state = await required();
         var orgs = await organizations(state.cookie);
@@ -228,26 +236,45 @@ function createService(storage, fetch, now) {
       default: throw invalid('Unknown settings request.');
     }
   }
-  async function read(state, ref, args) {
-    var limit = args.limit === undefined ? 10 : args.limit;
-    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw invalid('Limit must be between 1 and 50.');
-    var data = await detail(state, ref), messages;
-    if (ref.kind === 'chat') {
-      messages = chatBranch(data).messages.map(function (m) {
-        return { id: m.uuid, role: m.sender, text: textBlocks(m.content) || m.text || '' };
-      });
-    } else {
-      var events = await json(state, '/v1/code/sessions/' + ref.id + '/events?limit=100&sort_order=desc');
-      if (!events || !Array.isArray(events.data)) throw unavailable();
-      messages = events.data.slice().reverse().map(function (event) {
-        var p = event.payload;
-        return p && (p.type === 'user' || p.type === 'assistant') && p.message ?
-          { id: p.uuid || '', role: p.message.role, text: textBlocks(p.message.content) } : null;
-      }).filter(function (m) { return m && m.text; });
+  async function createChat(state) {
+    var id = requestId();
+    var response = await call(state, 'POST', orgPath(state) + '/chat_conversations', { uuid: id, name: '' }, false);
+    var data;
+    try { data = await response.json(); } catch (_) { throw PluginError('PLUGIN_UNAVAILABLE', 'Could not start a new Claude chat. Nothing was sent.'); }
+    if (!data || data.uuid !== id) throw PluginError('PLUGIN_UNAVAILABLE', 'Could not start a new Claude chat. Nothing was sent.');
+    return data;
+  }
+  // Posts one human turn under [parent] and returns the delivered message id, or throws uncertain().
+  async function completeChat(state, chatId, data, parent, text) {
+    var id = requestId(), assistantId = requestId();
+    var body = { prompt: text, parent_message_uuid: parent,
+      turn_message_uuids: { human_message_uuid: id, assistant_message_uuid: assistantId },
+      timezone: 'UTC', locale: 'en-US', attachments: [], files: [], sync_sources: [], rendering_mode: 'messages' };
+    if (typeof data.model === 'string' && data.model) body.model = data.model;
+    var response = await call(state, 'POST', orgPath(state) + '/chat_conversations/' + chatId + '/completion', body);
+    var accepted = false;
+    try {
+      var serverId = completionReceipt(await response.text(), assistantId, id);
+      if (serverId) { id = serverId; accepted = true; }
+    } catch (_) { /* Verify persisted human message below. */ }
+    if (!accepted) {
+      try {
+        var after = await detail(state, sessionRef('chat:' + chatId));
+        accepted = Array.isArray(after.chat_messages) && after.chat_messages.some(function (m) {
+          return m.uuid === id && m.sender === 'human';
+        });
+      } catch (_) { /* A failed read cannot establish delivery. */ }
     }
-    return { session_id: ref.ref, messages: messages.slice(-limit) };
+    if (!accepted) throw uncertain();
+    return id;
   }
   async function send(state, ref, text) {
+    if (ref.isNew) {
+      var chat = await createChat(state);
+      var messageId = await completeChat(state, chat.uuid, chat, ROOT_MESSAGE, text);
+      return { text: 'Message submitted to Claude in a new chat.', session_id: 'chat:' + chat.uuid,
+        message_id: messageId, url: ORIGIN + '/chat/' + chat.uuid };
+    }
     var data = await detail(state, ref), id = requestId();
     if (ref.kind === 'code') {
       if (data.status === 'archived') throw invalid('This Code session is archived. Reopen it in Claude first.');
@@ -264,53 +291,31 @@ function createService(storage, fetch, now) {
     } else {
       var branch = chatBranch(data), leaf = branch.messages[branch.messages.length - 1];
       if (leaf.sender !== 'assistant' || data.is_streaming) throw invalid('Wait for Claude to finish the current reply before sending.');
-      var assistantId = requestId();
-      var body = { prompt: text, parent_message_uuid: branch.leaf,
-        turn_message_uuids: { human_message_uuid: id, assistant_message_uuid: assistantId },
-        timezone: 'UTC', locale: 'en-US', attachments: [], files: [], sync_sources: [], rendering_mode: 'messages' };
-      if (typeof data.model === 'string' && data.model) body.model = data.model;
-      var response = await call(state, 'POST', orgPath(state) + '/chat_conversations/' + ref.id + '/completion', body);
-      var accepted = false;
-      try {
-        var serverId = completionReceipt(await response.text(), assistantId, id);
-        if (serverId) { id = serverId; accepted = true; }
-      } catch (_) { /* Verify persisted human message below. */ }
-      if (!accepted) {
-        try {
-          var after = await detail(state, ref);
-          accepted = Array.isArray(after.chat_messages) && after.chat_messages.some(function (m) {
-            return m.uuid === id && m.sender === 'human';
-          });
-        } catch (_) { /* A failed read cannot establish delivery. */ }
-      }
-      if (!accepted) throw uncertain();
+      id = await completeChat(state, ref.id, data, branch.leaf, text);
     }
     return { text: 'Message submitted to Claude: ' + ((ref.kind === 'chat' ? data.name : data.title) || 'Untitled') + '.',
       session_id: ref.ref, message_id: id, url: ORIGIN + '/' + ref.kind + '/' + ref.id };
   }
-  async function resolve(state, args) {
-    if (args.session_id !== undefined) {
-      if (args.chat !== undefined) throw invalid('Provide either chat or session_id, not both.');
-      return sessionRef(args.session_id);
-    }
-    if (args.chat !== undefined && typeof args.chat !== 'string') throw invalid('Name a Claude session.');
-    var query = (args.chat || '').trim().toLowerCase();
+  async function resolve(state, chatId) {
+    if (chatId !== undefined && chatId !== null && typeof chatId !== 'string') throw invalid('Name a Claude chat.');
+    var query = (chatId || '').trim().toLowerCase();
     if (!query) {
-      if (!state.selected) throw invalid('No default Claude session yet. Pick one in settings, or name a session.');
+      if (mode(state) === 'new_chat') return { kind: 'chat', id: null, ref: 'chat:new', isNew: true };
+      if (!state.selected) throw invalid('No default Claude chat yet. Pick one in settings, or name a chat.');
       return sessionRef(state.selected.session_id);
     }
+    if (/^(chat|code):/.test(query)) return sessionRef(chatId.trim());
     var names = nicknames(state), ids = Object.keys(names);
     var exact = ids.filter(function (id) { return names[id].toLowerCase() === query; });
     if (exact.length === 1) return sessionRef(exact[0]);
-    if (/^(chat|code):/.test(query)) return sessionRef(args.chat.trim());
     var partial = ids.filter(function (id) { return names[id].toLowerCase().indexOf(query) >= 0; });
     if (partial.length === 1) return sessionRef(partial[0]);
-    if (partial.length > 1) throw invalid('Multiple Claude nicknames match. Use an exact nickname or session ID.');
+    if (partial.length > 1) throw invalid('Multiple Claude nicknames match. Use an exact nickname or chat id.');
     var matches = [];
     for (var kind of ['chat', 'code']) {
       var cursor = null, seen = Object.create(null), pages = 0;
       do {
-        if (++pages > 50 || (cursor && seen[cursor])) throw invalid('Could not search every session. Use an exact nickname or session ID.');
+        if (++pages > 50 || (cursor && seen[cursor])) throw invalid('Could not search every chat. Use an exact nickname or chat id.');
         if (cursor) seen[cursor] = true;
         var page = await list(state, { kind: kind, cursor: cursor });
         page.sessions.forEach(function (row) {
@@ -321,43 +326,47 @@ function createService(storage, fetch, now) {
         cursor = page.next_cursor;
       } while (cursor);
     }
-    if (matches.length !== 1) throw invalid(matches.length ? 'Multiple Claude sessions match. Use a nickname or exact session ID.' : 'No Claude session matches that name. List sessions or choose one in settings.');
+    if (matches.length !== 1) throw invalid(matches.length ? 'Multiple Claude chats match. Use a nickname or exact chat id.' : 'No Claude chat matches that name. Choose one from agent/chats or in settings.');
     return sessionRef(matches[0].session_id);
   }
   async function action(request) {
     var args = request && request.args || {};
-    if (!request || ['list_claude_sessions', 'read_claude_session', 'send_to_claude', 'send_to_named_claude_chat', 'list_claude_chats'].indexOf(request.action) < 0) throw invalid('Unknown action.');
-    if ((request.action === 'send_to_claude' || request.action === 'send_to_named_claude_chat') && (typeof args.message !== 'string' || !args.message.trim() || args.message.length > 16000)) {
+    if (!request || request.action !== 'send_to_agent') throw invalid('Unknown action.');
+    if (typeof args.message !== 'string' || !args.message.trim() || args.message.length > 16000) {
       throw invalid('Provide a message between 1 and 16,000 characters.');
     }
-    if (request.action === 'send_to_named_claude_chat' && (typeof args.chat !== 'string' || !args.chat.trim())) throw invalid('Name the destination chat, or use send_to_claude for the default.');
     var state = await required();
     orgPath(state);
-    if (request.action === 'list_claude_chats') {
-      if (args.cursor && !args.kind) throw invalid('Choose chat or code when loading an older page.');
-      var kinds = args.kind ? [args.kind] : ['chat', 'code'], sessions = [], cursors = {};
-      for (var kind of kinds) {
-        var page = await list(state, { kind: kind, cursor: args.cursor });
-        sessions = sessions.concat(page.sessions);
-        if (page.next_cursor) cursors[kind] = page.next_cursor;
-      }
-      sessions.sort(function (a, b) { return (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0); });
-      return { text: JSON.stringify({ sessions: sessions, next_cursors: cursors }) };
-    }
-    if (request.action === 'list_claude_sessions') return { text: JSON.stringify(await list(state, args)) };
-    var ref = await resolve(state, args);
-    if (request.action === 'read_claude_session') return { text: JSON.stringify(await read(state, ref, args)) };
+    var ref = await resolve(state, args.chat_id);
     if (sending) throw invalid('A Claude message is already being sent. Check it before sending another.');
     sending = true;
     try { return await send(state, ref, args.message); } finally { sending = false; }
   }
   async function source(request) {
-    if (!request || request.category !== 'messaging' || request.item !== 'session') throw invalid('Unsupported Claude source.');
-    var state = await load(), selected = state && state.selected;
-    return { validUntilMs: now() + 60000, instances: [{ instanceId: 'session', properties: {
-      name: { shortText: { text: selected ? nickname(state, selected.session_id) || selected.title : '' } },
-      configured: { boolean: { value: !!selected }, shortText: { text: selected ? 'Connected' : 'Choose a session in settings' } },
-    } }] };
+    if (!request || request.category !== 'agent') throw invalid('Unsupported Claude source.');
+    var state = await load(), selected = state && state.selected, newChat = mode(state) === 'new_chat';
+    if (request.item === 'configured') {
+      var ready = !!state && (newChat ? UUID.test(state.org) : !!selected);
+      var name = !state ? '' : newChat ? 'New chat' : selected ? nickname(state, selected.session_id) || selected.title : '';
+      var hint = ready ? 'Connected' : !state || newChat ? 'Sign in in settings' : 'Choose a chat in settings';
+      return { validUntilMs: now() + 60000, instances: [{ instanceId: 'claude', properties: {
+        name: { shortText: { text: name } },
+        configured: { boolean: { value: ready }, shortText: { text: hint } },
+      } }] };
+    }
+    if (request.item !== 'chats') throw invalid('Unsupported Claude source.');
+    state = await required();
+    orgPath(state);
+    var rows = [];
+    for (var kind of ['chat', 'code']) rows = rows.concat((await list(state, { kind: kind })).sessions);
+    rows.sort(function (a, b) { return (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0); });
+    return { validUntilMs: now() + 900000, instances: rows.map(function (row) {
+      return { instanceId: row.session_id, properties: {
+        name: { shortText: { text: row.nickname || row.title } },
+        title: { shortText: { text: row.title } },
+        url: { longText: { text: row.url } },
+      } };
+    }) };
   }
   return { config: config, action: action, source: source };
 }

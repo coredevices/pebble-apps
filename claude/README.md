@@ -2,76 +2,81 @@
 
 *Uses claude.ai's private, cookie-authenticated web APIs; not the Anthropic API.*
 
-Index/Pebble plugin for existing Claude chats and Claude Code sessions, using the
-same private, cookie-authenticated APIs as claude.ai. No desktop bridge or API key.
-The shared JavaScript and settings page use existing Android/iOS plugin APIs. The host must already support `web_sign_in` and secure storage; iOS has not been live-tested.
+Index/Pebble plugin that sends messages to existing Claude chats and Claude Code sessions, using
+the same private, cookie-authenticated APIs as claude.ai. No desktop bridge or API key. The host
+must support `web_sign_in` and secure storage; iOS has not been live-tested.
 
 ## Setup
 
-1. Run `pebble build` in `claude/`, then `pebble install --phone <ip>` (or sideload `build/claude.pbw` through Apps → Sideload App).
-2. Open Claude plugin settings and sign in with Claude. On hosts without sign-in popup support, choose **Continue with email**; the Google popup flow does not complete on those hosts. Existing saved plugin credentials remain usable.
+1. Run `pebble build` in `claude/`, then `pebble install --phone <ip>` (or sideload
+   `build/claude.pbw` through Apps → Sideload App). Web sign-in needs a store plugin or a
+   debug-build sideload.
+2. Open Claude plugin settings and sign in with Claude. On hosts without sign-in popup support,
+   choose **Continue with email**; the Google popup flow does not complete on those hosts.
 3. Select an organization (required when the account has multiple organizations).
-4. Load **Claude chats** or **Claude Code**, select a session, and save the default.
-   Load more follows the server's pagination cursor. Filtering searches loaded rows.
+4. Under **Where messages go**, keep **Start a new chat each time** (the default) or choose
+   **Send to a default chat** and pick one: load **Claude chats** or **Claude Code**, select a
+   chat, and save it as the default. Load more follows the server's pagination cursor. Filtering
+   searches loaded rows.
 
 Sign-in uses `Pebble.webSignIn` to capture `sessionKey`, verifies membership with
-`GET /api/organizations`, and stores the credential in `Pebble.secureStorage`.
-This grants account access, not a narrowly scoped messaging permission. Disconnect
-removes the plugin's saved credential; it does not revoke the browser session.
-Web sign-in requires an our-store plugin or a debug-build sideload, like ChatGPT Dots.
+`GET /api/organizations`, and stores the credential in `Pebble.secureStorage`. This grants
+account access, not a narrowly scoped messaging permission. Disconnect removes the plugin's saved
+credential; it does not revoke the browser session.
 
-## Actions
+## Contract
 
-- `send_to_claude({message, chat?})`: send to the saved default when no destination
-  is named. Optional `chat` resolves a nickname, ID, or part of a title. Requires
-  an explicit user request to message Claude and returns a submission receipt.
-- `list_claude_chats({kind?, cursor?})`: browse both chat types by default, with
-  nicknames, default markers, and `next_cursors` keyed by kind. Pass the kind and
-  its cursor to browse older chats when resolving an explicitly named destination.
+The plugin is an Index agent destination (see `agent` in [plugins.md](../plugins.md)).
 
-Legacy list/read and named-send handlers remain internally compatible but are not
-advertised as agent tools. The agent-facing interface follows the Codex plugin.
+- `send_to_agent({message, chat_id?})`: with `chat_id` omitted, starts a new Claude conversation
+  for the message, or sends to the saved default chat when settings say so. `chat_id` is an
+  `instanceId` from `agent/chats`; a nickname or part of a title also resolves. Exact nicknames
+  take priority; ambiguous matches fail without sending. Returns a submission receipt, not
+  Claude's answer.
+- `agent/chats`: one instance per chat across both kinds (first page of each, most recent first).
+  `instanceId` is the chat id (`chat:<uuid>` or `code:<cse_… or session_…>`), `name` is the
+  nickname when one is set and otherwise the title; `title` and `url` are also served.
+- `agent/configured`: true once signed in and an organization is chosen; in default-chat mode a
+  default chat must be saved too. `name` is "New chat" or the default chat's nickname or title.
 
-IDs are `chat:<uuid>` and `code:<cse_… or session_…>`. The plugin re-fetches the
-session in the chosen organization before sending. It never creates a conversation,
-changes the chat branch, changes permissions, or automatically retries a send.
-The `messaging/session` source exposes the selected default's name and setup state.
+The plugin re-fetches an existing chat in the chosen organization before sending. The only
+conversation it creates is the empty one a new-chat send starts with; it never changes a chat
+branch, changes permissions, or automatically retries a send.
+
+### Nicknames and defaults
+
+Select a chat in settings, enter a nickname (up to 40 characters), and save it, optionally as the
+default. Nicknames are case-insensitive and unique within the selected organization; assigning an
+existing nickname moves it to the selected chat. Clear the field to remove a nickname. Changing
+organization clears the default. Existing sign-in and default settings are preserved on upgrade.
 
 ## API behavior and limitations
 
-- Chat list: `/api/organizations/{org}/chat_conversations`.
+- Chat list: `/api/organizations/{org}/chat_conversations`; a new chat is POSTed there with a
+  fresh `uuid` and empty name, and the first message is sent under the root message id. A failed
+  create sends nothing and is reported as unavailable, not as uncertain delivery.
 - Chat detail: `/api/organizations/{org}/chat_conversations/{id}?tree=True&rendering_mode=messages&render_all_tools=true`.
-- Chat send: POST `…/{id}/completion`, with the current leaf and fresh human/assistant
-  UUIDs. A completed SSE response supplies the actual human message ID (Claude may
-  replace the requested UUIDs). A subsequent read can also verify the requested human
-  UUID. A bare HTTP 200 is insufficient.
-- Code list/detail/send: `/v1/code/sessions`, `…/{id}`, `…/{id}/events` on **claude.ai**.
-  Sends wrap stream-json user events in `{session_id, events:[{payload:…}]}` and
-  require an event acknowledgment. The web controller headers identify the user
-  action; no permission-changing control events are implemented.
-- Only Code sessions exposed through Claude's web service are reachable. Local-only
-  CLI sessions need Remote Control enabled; disconnected bridge sessions are rejected.
-  The plugin cannot promise access to every local session on every computer.
-- These APIs are unofficial and can change. Authentication, Cloudflare challenges,
-  organization policy, and rate limits are reported separately. No challenge bypass
-  or third-party credential relay is implemented.
-- CoreApp's fetch buffers the entire response and has no streaming body. Web chat
-  completions can outlast the host action timeout. A timeout or disconnected send
-  must be treated as **uncertain delivery**: read the chat before sending again.
-  The action description explicitly prohibits automatic retries. Code's event POST
-  returns a separate acknowledgment without waiting for generation.
-- Empty chats without a verifiable current leaf and chats with an unfinished human
-  turn are rejected; open/finish them in Claude before using this plugin.
-- Live browser verification on October 18 succeeded for organization discovery, chat
-  and Code listing, reading both kinds, and sending to an existing disposable chat.
-  The actual plugin service ran with a browser-cookie transport that also buffered
-  responses like CoreApp. Claude replied `PLUGIN_OK` and `RECEIPT_OK`; the corrected
-  receipt returned the server-assigned human ID. Code sending and physical Android/iOS
-  networking are **not yet live-verified**. Browser success does not establish that
-  native networking will pass Cloudflare.
-- The current web UI sends protobuf RPCs, while the older REST chat endpoint used
-  here still worked in the live check. Code detail returned a `response_shape` wrapper;
-  both wrapped and unwrapped responses are accepted with an exact session ID check.
+- Chat send: POST `…/{id}/completion`, with the current leaf and fresh human/assistant UUIDs. A
+  completed SSE response supplies the actual human message ID (Claude may replace the requested
+  UUIDs). A subsequent read can also verify the requested human UUID. A bare HTTP 200 is
+  insufficient.
+- Code list/detail/send: `/v1/code/sessions`, `…/{id}`, `…/{id}/events` on **claude.ai**. Sends
+  wrap stream-json user events in `{session_id, events:[{payload:…}]}` and require an event
+  acknowledgment. No permission-changing control events are implemented.
+- Only Code sessions exposed through Claude's web service are reachable. Local-only CLI sessions
+  need Remote Control enabled; disconnected bridge sessions are rejected.
+- These APIs are unofficial and can change. Authentication, Cloudflare challenges, organization
+  policy, and rate limits are reported separately. No challenge bypass or third-party credential
+  relay is implemented.
+- CoreApp's fetch buffers the entire response and has no streaming body. Web chat completions can
+  outlast the host action timeout. A timeout or disconnected send must be treated as **uncertain
+  delivery**: check the chat before sending again. The action description prohibits automatic
+  retries. Code's event POST returns a separate acknowledgment without waiting for generation.
+- Empty chats without a verifiable current leaf and chats with an unfinished human turn are
+  rejected; open/finish them in Claude before using this plugin.
+- HTTP 409 conflicts require inspecting the chat before another send; they are never retried.
+- Code sending and physical Android/iOS networking are not yet live-verified. Browser success does
+  not establish that native networking will pass Cloudflare.
 
 ## Build and test
 
@@ -117,8 +122,3 @@ existing web chats, Code sessions, cookie-only sign-in, and sending on mobile na
 HTTP. The references establish pieces; our live checks establish browser behavior
 for the operations listed above, not full mobile readiness.
 
-### Session nicknames and defaults
-
-Select a session in settings, enter a nickname (up to 40 characters), and choose **Save nickname** or **Use as default**. Nicknames are case-insensitive and unique within the selected organization; assigning an existing nickname moves it to the selected session. Clear the field to remove a nickname. Existing sign-in and default settings are preserved on upgrade.
-
-`send_to_claude` accepts `chat` as a nickname, session ID, or part of a title. Omit the destination to use the default. Exact nicknames take priority; ambiguous matches fail without sending. Title lookup searches both Claude chats and Code sessions, following pagination. Explicit `session_id` remains supported. HTTP 409 conflicts require inspecting the session before another send; they are never retried by the plugin.

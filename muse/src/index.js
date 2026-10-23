@@ -1,10 +1,23 @@
 import { MuseClient } from "../vendor/musemeow/client.js";
 import { secureCache } from "./secure-cache.js";
 import { KEY, createService, safeError } from "./service.js";
-const service = createService(secureCache([KEY]), MuseClient);
+const service = createService(
+  secureCache([KEY]),
+  MuseClient,
+  Date.now,
+  globalThis.localStorage,
+);
 Pebble.registerActionHandler(async (request, response) => {
   try {
     response.ok(await service.action(request));
+  } catch (error) {
+    const safe = safeError(error);
+    response.error(safe.code, safe.message);
+  }
+});
+Pebble.registerSourceHandler(async (request, response) => {
+  try {
+    response.data(await service.source(request));
   } catch (error) {
     const safe = safeError(error);
     response.error(safe.code, safe.message);

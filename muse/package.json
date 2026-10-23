@@ -1,7 +1,7 @@
 {
   "name": "muse",
   "author": "Core Devices",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -37,13 +37,46 @@
       }
     ],
     "plugin": {
-      "description": "Send a message to your chosen Muse chat. Sign in and choose the destination in settings.",
+      "description": "Send messages to your Muse chats. With no chat named, sends to the chat chosen in settings (Main chat by default). Sign in and choose the destination in settings.",
       "script": "plugin.js",
-      "sources": [],
+      "sources": [
+        {
+          "category": "agent",
+          "items": [
+            "chats"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 900
+        },
+        {
+          "category": "agent",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
       "actions": [
         {
-          "name": "send_to_muse",
-          "description": "Send a message to the Muse chat selected in plugin settings (Main chat by default). Do not use unless the user explicitly addresses Muse or asks to send something to it, e.g. \"message Muse …\", \"send to Muse …\", \"tell Muse …\", \"ask Muse …\" or \"Muse, …\". Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not Muse’s answer. Do not automatically retry an uncertain delivery.",
+          "name": "send_to_agent",
+          "description": "Send a message to one of the user's Muse chats. chat_id is an instanceId from agent/chats or a chat name; omit it to use the chat selected in plugin settings (Main chat by default). Do not use unless the user explicitly addresses Muse or asks to send something to it, e.g. \"message Muse …\", \"send to Muse …\", \"tell Muse …\", \"ask Muse …\" or \"Muse, …\". Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not Muse’s answer. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -52,6 +85,13 @@
                 "description": "The text to deliver to Muse, without the \"send to Muse\" instruction itself.",
                 "minLength": 1,
                 "maxLength": 16000
+              },
+              "chat_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The chat's instanceId from agent/chats, or its name (\"Main chat\" for the main chat). Omit to use the chat selected in settings."
               }
             },
             "required": [
@@ -59,8 +99,12 @@
             ],
             "additionalProperties": false
           },
+          "targets": [
+            "agent/chats"
+          ],
           "destructive": false,
-          "requiresConfirmation": false
+          "requiresConfirmation": false,
+          "callerPermissions": []
         }
       ]
     },

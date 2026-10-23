@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import crypto from "node:crypto";
 import { build } from "esbuild";
 test("bundle loads without Node or DOM globals and registers its handlers", async () => {
-  let action, config;
+  let action, config, source;
   const data = new Map();
   const context = vm.createContext({
     _HostTimer: {
@@ -20,6 +20,7 @@ test("bundle loads without Node or DOM globals and registers its handlers", asyn
       },
       registerActionHandler: (fn) => (action = fn),
       registerConfigHandler: (fn) => (config = fn),
+      registerSourceHandler: (fn) => (source = fn),
     },
   });
   vm.runInContext(readFileSync("plugin.js", "utf8"), context);
@@ -31,13 +32,17 @@ test("bundle loads without Node or DOM globals and registers its handlers", asyn
   assert.equal(status.selected, "main");
   let error;
   await action(
-    { action: "send_to_muse", args: { message: "test" } },
+    { action: "send_to_agent", args: { message: "test" } },
     {
       ok: () => assert.fail(),
       error: (code, message) => (error = { code, message }),
     },
   );
   assert.equal(error.code, "AUTH_REQUIRED");
+  const configured = await new Promise((resolve, reject) =>
+    source({ category: "agent", item: "configured" }, { data: resolve, error: reject }),
+  );
+  assert.equal(configured.instances[0].properties.configured.boolean.value, false);
 });
 test("portable X25519 and AES-GCM interoperate with native crypto and reject tampering", async () => {
   const r = await build({
@@ -166,6 +171,7 @@ test("bundle works with no host timers or crypto, as on stock CoreApp", async ()
       },
       registerActionHandler: () => {},
       registerConfigHandler: (fn) => (config = fn),
+      registerSourceHandler: () => {},
     },
   });
   vm.runInContext(readFileSync("plugin.js", "utf8"), plugin);

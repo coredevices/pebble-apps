@@ -38,6 +38,7 @@ const {
   decode,
 } = module.exports;
 function fixture({ drop = false, rv = false } = {}) {
+  let failWrites = false;
   let config,
     action,
     next = 0,
@@ -96,11 +97,15 @@ function fixture({ drop = false, rv = false } = {}) {
     Pebble: {
       secureStorage: {
         getItem: async (k) => (data.has(k) ? data.get(k) : null),
-        setItem: async (k, v) => { data.set(k, v); },
+        setItem: async (k, v) => {
+          if (failWrites) throw new Error("keystore");
+          data.set(k, v);
+        },
         removeItem: async (k) => { data.delete(k); },
       },
       registerActionHandler: (fn) => (action = fn),
       registerConfigHandler: (fn) => (config = fn),
+      registerSourceHandler: () => {},
     },
     _HostCrypto: {
       request: (raw) =>
@@ -239,10 +244,11 @@ function fixture({ drop = false, rv = false } = {}) {
   vm.runInContext(readFileSync("plugin.js", "utf8"), context);
   return {
     config: (m) => new Promise((r) => config(m, r)),
-    send: () =>
+    failWrites: () => (failWrites = true),
+    send: (chat_id) =>
       new Promise((resolve) =>
         action(
-          { action: "send_to_muse", args: { message: "¿Cómo estás?" } },
+          { action: "send_to_agent", args: { message: "¿Cómo estás?", chat_id } },
           {
             ok: (value) => resolve({ ok: true, ...value }),
             error: (code, message) => resolve({ code, message }),
@@ -290,5 +296,17 @@ test("confidential VM challenge is rejected before sending", async () => {
   });
   assert.ok(r.error);
   assert.equal(f.sends, 0);
+  assert.deepEqual(f.failures, []);
+});
+test("a failing credential store never turns a delivered send into an error", async () => {
+  const f = fixture();
+  await f.config({
+    type: "connect",
+    session: { cookie: "hatch_sess=fixture", vm_id: "vm-fixture" },
+  });
+  f.failWrites();
+  const result = await f.send("quiz");
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(f.sends, 1);
   assert.deepEqual(f.failures, []);
 });

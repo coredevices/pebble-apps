@@ -95,13 +95,14 @@ export class MuseClient {
     return this.#run(async signal => {
       const chat = await this.#chat(chatId, signal);
       if (!chat.can_send) throw new MuseError('this chat cannot receive messages through the Muse web client');
+      options?.beforeSend?.();
       return this.#send(text, chat.is_primary ? undefined : chat.session_id, signal);
     }, options);
   }
   /** Return the acceptance receipt, without waiting for the assistant's full reply. */
   sendMain(text, options) {
     try { this.#validateText(text); } catch (error) { return Promise.reject(error); }
-    return this.#run(signal => this.#send(text, undefined, signal), options);
+    return this.#run(signal => { options?.beforeSend?.(); return this.#send(text, undefined, signal); }, options);
   }
   #validateText(text) {
     if (typeof text !== 'string' || !text.trim()) throw new MuseError('message is empty');

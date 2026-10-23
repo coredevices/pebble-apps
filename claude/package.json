@@ -1,7 +1,7 @@
 {
   "name": "claude",
   "author": "Core Devices",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js"
@@ -24,7 +24,7 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, starts a new chat, or sends to the default chat chosen in settings. Supports chat nicknames. Sign in in settings.",
+      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, starts a new Claude chat, or sends to the default Claude chat or Claude Code session chosen in settings. Supports chat nicknames. Sign in in settings.",
       "script": "src/plugin/index.js",
       "sources": [
         {
@@ -69,7 +69,7 @@
       "actions": [
         {
           "name": "send_to_agent",
-          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. chat_id is an instanceId from agent/chats, or a nickname; omit it to start a new chat, or to use the default chat when one is set in settings. Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
+          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. chat_id is an instanceId from agent/chats, a nickname, or part of a title, to send there; \"new\" always starts a new regular Claude chat; omit it to follow settings (a new Claude chat or the default chat). Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -84,7 +84,7 @@
                   "string",
                   "null"
                 ],
-                "description": "The chat's instanceId from agent/chats, its nickname, or part of its title. Omit to start a new chat (or use the default chat, when one is set)."
+                "description": "Name a chat to send there: its instanceId from agent/chats, its nickname, or part of its title. Use \"new\" to start a new regular Claude chat. Omit to follow settings (a new Claude chat or the default chat)."
               }
             },
             "required": [

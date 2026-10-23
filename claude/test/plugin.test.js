@@ -274,3 +274,66 @@ test('a named chat still goes to that chat in new-chat mode, and the mode persis
   assert.equal(JSON.parse(f.storage.get('claude.connection.v1')).mode,'default_chat');
   assert.equal((await f.action('send_to_agent',{message:'status'})).code,'INVALID_ARGS');
 });
+
+const configured=async f=>(await f.source()).instances[0].properties;
+const legacy=(f,extra)=>f.storage.set('claude.connection.v1',JSON.stringify({cookie:'secret-cookie',organizations:[{id:ORG,name:'Personal'}],org:ORG,...extra}));
+test('Claude Code never starts a new session: with no default it fails without sending',async()=>{
+  const f=fixture();await f.connect();newChatRoutes(f);
+  const s=await f.config({type:'kind',kind:'code'});assert.equal(s.kind,'code');assert.equal(s.mode,'default_chat');
+  assert.equal((await f.config({type:'mode',mode:'new_chat'})).mode,'default_chat');
+  assert.match((await f.action('send_to_agent',{message:'hello'})).message,/Claude Code session/);assert.equal(f.calls.filter(c=>c.key.startsWith('POST')).length,0);
+  const c=await configured(f);assert.equal(c.configured.boolean.value,false);assert.match(c.configured.shortText.text,/Claude Code session/);
+  assert.ok((await f.config({type:'kind',kind:'cursor'})).error);
+});
+test('each kind only uses a default of its own kind',async()=>{
+  const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
+  assert.equal((await f.config({type:'kind',kind:'code'})).selected,null);
+  assert.equal((await configured(f)).configured.boolean.value,false);
+  assert.equal((await f.action('send_to_agent',{message:'hello'})).code,'INVALID_ARGS');assert.equal(posts(f).length,0);
+  assert.equal((await f.config({type:'list',kind:'chat'})).sessions[0].isDefault,false);
+  const s=await f.config({type:'select',session_id:'code:'+CODE});assert.equal(s.kind,'code');assert.equal(s.selected.session_id,'code:'+CODE);
+  let c=await configured(f);assert.equal(c.configured.boolean.value,true);assert.equal(c.name.shortText.text,'CoreApp');
+  assert.equal((await f.action('send_to_agent',{message:'status'})).session_id,'code:'+CODE);
+  // Back to Claude in new-chat mode: no default needed, and a named Code chat still routes there.
+  await f.config({type:'kind',kind:'claude'});await f.config({type:'mode',mode:'new_chat'});
+  c=await configured(f);assert.equal(c.configured.boolean.value,true);assert.equal(c.name.shortText.text,'New chat');
+  assert.equal((await f.action('send_to_agent',{chat_id:'code:'+CODE,message:'status'})).session_id,'code:'+CODE);
+  await f.config({type:'mode',mode:'default_chat'});assert.equal((await configured(f)).configured.boolean.value,false);
+});
+test('state saved before kinds existed infers the kind and keeps the mode',async()=>{
+  let f=fixture();legacy(f,{mode:'default_chat',selected:{session_id:'code:'+CODE,title:'CoreApp'}});
+  let s=await f.config({type:'status'});assert.equal(s.kind,'code');assert.equal(s.selected.session_id,'code:'+CODE);
+  assert.equal((await f.action('send_to_agent',{message:'status'})).session_id,'code:'+CODE);
+  f=fixture();legacy(f,{mode:'default_chat',selected:{session_id:'chat:'+CHAT,title:'Planning'}});
+  s=await f.config({type:'status'});assert.equal(s.kind,'claude');assert.equal(s.mode,'default_chat');assert.equal((await configured(f)).name.shortText.text,'Planning');
+  // New-chat mode with a Code default kept starting new Claude chats, and still does.
+  f=fixture();legacy(f,{selected:{session_id:'code:'+CODE,title:'CoreApp'}});newChatRoutes(f);
+  s=await f.config({type:'status'});assert.equal(s.kind,'claude');assert.equal(s.mode,'new_chat');
+  assert.match((await f.action('send_to_agent',{message:'hello'})).text,/new chat/);
+});
+test('chat_id "new" always starts a new Claude chat, whatever the kind and mode',async()=>{
+  const f=fixture();await f.connect();newChatRoutes(f);
+  await f.config({type:'select',session_id:'code:'+CODE});await useDefault(f);
+  for(const chat_id of ['new','New Chat','  NEW ']){
+    f.calls.length=0;const r=await f.action('send_to_agent',{chat_id,message:'hello'});
+    assert.match(r.text,/new chat/);assert.ok(r.session_id.startsWith('chat:'));assert.ok(f.calls.some(c=>c.key===CREATE));
+    assert.ok(!f.calls.some(c=>c.key.startsWith('GET')));
+  }
+  await f.config({type:'kind',kind:'claude'});
+  assert.match((await f.action('send_to_agent',{chat_id:'new',message:'hello'})).text,/new chat/);
+  assert.equal((await f.action('send_to_agent',{chat_id:'newsletter',message:'hello'})).code,'INVALID_ARGS');
+});
+test('"new" and "new chat" are reserved and cannot be nicknames',async()=>{
+  const f=fixture();await f.connect();
+  for(const nickname of ['new','New Chat']) assert.match((await f.config({type:'save_session',session_id:'chat:'+CHAT,nickname})).error,/reserved/);
+  assert.equal((await f.config({type:'list',kind:'chat'})).sessions[0].nickname,'');
+  assert.equal((await f.config({type:'save_session',session_id:'chat:'+CHAT,nickname:'newsletter'})).error,undefined);
+});
+test('choosing a default of a different kind than the page shows is rejected and changes nothing',async()=>{
+  const f=fixture();await f.connect();await useDefault(f);f.calls.length=0;
+  assert.match((await f.config({type:'select',session_id:'code:'+CODE,kind:'claude'})).error,/Claude chat/);
+  assert.match((await f.config({type:'select',session_id:'chat:'+CHAT,kind:'code'})).error,/Claude Code session/);
+  assert.equal(f.calls.length,0);
+  const s=await f.config({type:'status'});assert.equal(s.kind,'claude');assert.equal(s.selected,null);
+  assert.equal((await f.config({type:'select',session_id:'chat:'+CHAT,kind:'claude'})).selected.session_id,'chat:'+CHAT);
+});

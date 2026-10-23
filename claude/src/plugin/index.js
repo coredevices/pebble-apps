@@ -7,6 +7,9 @@ var CODE_ID = /^(?:cse_|session_)[A-Za-z0-9_-]{1,120}$/;
 // Parent of the first message in a conversation.
 var ROOT_MESSAGE = '00000000-0000-4000-8000-000000000000';
 var MODES = ['new_chat', 'default_chat'];
+var KINDS = ['claude', 'code'];
+// chat_id values that always start a new Claude chat; not usable as nicknames.
+var NEW_CHAT = ['new', 'new chat'];
 
 function PluginError(code, message) {
   var error = new Error(message);
@@ -96,11 +99,26 @@ function createService(storage, fetch, now) {
     return state.nicknamesByOrg && state.nicknamesByOrg[state.org] || {};
   }
   function nickname(state, id) { return nicknames(state)[id] || ''; }
-  // Where a message with no chat named goes: a fresh conversation, or the chat saved as default.
-  function mode(state) { return state && state.mode === 'default_chat' ? 'default_chat' : 'new_chat'; }
+  // Whether a message with no chat named goes to Claude chats or Claude Code. State saved before
+  // kinds existed only means Code when it was already sending to a default Code session.
+  function chosenKind(state) {
+    if (!state) return 'claude';
+    if (KINDS.indexOf(state.kind) >= 0) return state.kind;
+    return state.mode === 'default_chat' && state.selected && /^code:/.test(state.selected.session_id) ? 'code' : 'claude';
+  }
+  // Claude Code has no new-session option: a new Code session needs a repo and environment.
+  function mode(state) {
+    return chosenKind(state) === 'code' || (state && state.mode === 'default_chat') ? 'default_chat' : 'new_chat';
+  }
+  // The saved default, when it is of the chosen kind.
+  function defaultChat(state) {
+    var prefix = chosenKind(state) === 'code' ? 'code:' : 'chat:';
+    return state && state.selected && state.selected.session_id.indexOf(prefix) === 0 ? state.selected : null;
+  }
   function status(state) {
-    return state ? { configured: true, organizations: state.organizations, organization: state.org, mode: mode(state),
-      selected: state.selected ? Object.assign({}, state.selected, { nickname: nickname(state, state.selected.session_id) }) : null } : { configured: false };
+    var selected = defaultChat(state);
+    return state ? { configured: true, organizations: state.organizations, organization: state.org, kind: chosenKind(state), mode: mode(state),
+      selected: selected ? Object.assign({}, selected, { nickname: nickname(state, selected.session_id) }) : null } : { configured: false };
   }
   // A failed POST is reported as uncertain delivery unless the caller says the request sent nothing.
   async function call(state, method, path, body, deliversMessage) {
@@ -164,7 +182,7 @@ function createService(storage, fetch, now) {
       var id = kind === 'chat' ? row.uuid : row.id;
       sessionRef(kind + ':' + id);
       return { session_id: kind + ':' + id, kind: kind,
-        nickname: nickname(state, kind + ':' + id), isDefault: !!state.selected && state.selected.session_id === kind + ':' + id,
+        nickname: nickname(state, kind + ':' + id), isDefault: !!defaultChat(state) && state.selected.session_id === kind + ':' + id,
         title: (kind === 'chat' ? row.name : row.title) || 'Untitled',
         status: row.status || '', connection: row.connection_status || '',
         updated_at: row.updated_at || row.last_event_at || '',
@@ -200,6 +218,13 @@ function createService(storage, fetch, now) {
         await save(state);
         return status(state);
       }
+      case 'kind': {
+        var state = await required();
+        if (KINDS.indexOf(message.kind) < 0) throw invalid('Choose claude or code.');
+        state.kind = message.kind;
+        await save(state);
+        return status(state);
+      }
       case 'organization': {
         var state = await required();
         var orgs = await organizations(state.cookie);
@@ -214,11 +239,15 @@ function createService(storage, fetch, now) {
       case 'save_session':
       case 'select': {
         var state = await required(), ref = sessionRef(message.session_id);
+        if (message.kind !== undefined && message.kind !== (ref.kind === 'code' ? 'code' : 'claude')) {
+          throw invalid(message.kind === 'code' ? 'Choose a Claude Code session.' : 'Choose a Claude chat.');
+        }
         orgPath(state);
         var data = await detail(state, ref);
         if (message.type === 'save_session') {
           if (typeof message.nickname !== 'string' || message.nickname.trim().length > 40) throw invalid('Use a nickname of at most 40 characters.');
           var name = message.nickname.trim(), names = nicknames(state);
+          if (NEW_CHAT.indexOf(name.toLowerCase()) >= 0) throw invalid('“' + name + '” is reserved for starting a new chat. Choose another nickname.');
           Object.keys(names).forEach(function (id) {
             if (name && names[id].toLowerCase() === name.toLowerCase()) delete names[id];
           });
@@ -228,6 +257,7 @@ function createService(storage, fetch, now) {
         }
         if (message.type === 'select' || message.makeDefault === true) {
           state.selected = { session_id: ref.ref, title: (ref.kind === 'chat' ? data.name : data.title) || 'Untitled' };
+          state.kind = ref.kind === 'code' ? 'code' : 'claude';
         }
         await save(state);
         return status(state);
@@ -299,10 +329,12 @@ function createService(storage, fetch, now) {
   async function resolve(state, chatId) {
     if (chatId !== undefined && chatId !== null && typeof chatId !== 'string') throw invalid('Name a Claude chat.');
     var query = (chatId || '').trim().toLowerCase();
+    if (NEW_CHAT.indexOf(query) >= 0 || (!query && mode(state) === 'new_chat')) return { kind: 'chat', id: null, ref: 'chat:new', isNew: true };
     if (!query) {
-      if (mode(state) === 'new_chat') return { kind: 'chat', id: null, ref: 'chat:new', isNew: true };
-      if (!state.selected) throw invalid('No default Claude chat yet. Pick one in settings, or name a chat.');
-      return sessionRef(state.selected.session_id);
+      var selected = defaultChat(state);
+      if (!selected) throw invalid(chosenKind(state) === 'code' ? 'No default Claude Code session yet. Pick one in settings, or name a chat.' :
+        'No default Claude chat yet. Pick one in settings, or name a chat.');
+      return sessionRef(selected.session_id);
     }
     if (/^(chat|code):/.test(query)) return sessionRef(chatId.trim());
     var names = nicknames(state), ids = Object.keys(names);
@@ -344,11 +376,12 @@ function createService(storage, fetch, now) {
   }
   async function source(request) {
     if (!request || request.category !== 'agent') throw invalid('Unsupported Claude source.');
-    var state = await load(), selected = state && state.selected, newChat = mode(state) === 'new_chat';
+    var state = await load(), selected = defaultChat(state), newChat = mode(state) === 'new_chat';
     if (request.item === 'configured') {
       var ready = !!state && (newChat ? UUID.test(state.org) : !!selected);
       var name = !state ? '' : newChat ? 'New chat' : selected ? nickname(state, selected.session_id) || selected.title : '';
-      var hint = ready ? 'Connected' : !state || newChat ? 'Sign in in settings' : 'Choose a chat in settings';
+      var hint = ready ? 'Connected' : !state || newChat ? 'Sign in in settings' :
+        chosenKind(state) === 'code' ? 'Choose a Claude Code session in settings' : 'Choose a chat in settings';
       return { validUntilMs: now() + 60000, instances: [{ instanceId: 'claude', properties: {
         name: { shortText: { text: name } },
         configured: { boolean: { value: ready }, shortText: { text: hint } },

@@ -7,12 +7,12 @@
 :root { color-scheme:light dark; font:16px system-ui,sans-serif; --bg:#fff; --card:#f6f4f1; --ink:#242321; --muted:#696660; --line:#ddd9d2; --accent:#a64b2a; }
 * { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px; background:var(--bg); color:var(--ink); }
 h1 { font-size:24px; margin:0 0 6px; } h2 { font-size:18px; margin:0; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
-.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } .default { background:var(--card); margin-top:16px; } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-#selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; } .default p { margin-bottom:0; }
+.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
+#selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
 label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input { font:inherit; } select,input:not([type=checkbox]):not([type=radio]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
 button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; }
-.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row select { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; } #more { display:block; margin:4px auto; font-size:14px; }
-.check { display:flex; gap:10px; align-items:center; font-weight:400; } input[type=checkbox],input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:0; } .modes .check { margin:10px 0 0; } #nicknameHelp { margin-top:6px; } details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
+.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row select { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; } .more { display:block; margin:4px auto; font-size:14px; } .row input { flex:1; min-width:0; }
+.check { display:flex; gap:10px; align-items:center; font-weight:400; } input[type=checkbox],input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:0; } .modes .check { margin:10px 0 0; } details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
 @media(prefers-color-scheme:dark) { :root { --bg:#20201e; --card:#2b2a27; --ink:#f4f1ec; --muted:#bdb7af; --line:#49463f; --accent:#c76b46; } }
 </style>
 </head>
@@ -25,41 +25,52 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 </section>
 <section id="signedIn" hidden>
 <div class="card modes">
-<div class="eyebrow">Where messages go</div>
+<div class="eyebrow">Send messages to</div>
+<label class="check"><input type="radio" name="kind" value="claude">Claude</label>
+<label class="check"><input type="radio" name="kind" value="code">Claude Code</label>
+</div>
+<div class="card modes">
+<div class="eyebrow">When you don’t name a chat</div>
+<div id="modeChoices">
 <label class="check"><input type="radio" name="mode" value="new_chat">Start a new chat each time</label>
 <label class="check"><input type="radio" name="mode" value="default_chat">Send to a default chat</label>
-<p class="hint" style="margin-bottom:0">Naming a chat or nickname always sends there instead.</p>
 </div>
-<div class="card default" id="defaultCard">
-<div class="eyebrow">Your default chat</div>
+<p id="codeMode" class="hint" style="margin-bottom:0" hidden>Claude Code messages go to a session you choose below.</p>
+</div>
+<div class="card" id="defaultCard">
+<div class="eyebrow" id="defaultLabel">Your default chat</div>
 <p id="selected"></p>
-<p class="hint">“Send to Claude” sends here unless you name another chat.</p>
+<div class="row"><input id="defaultFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="defaultRefresh" class="quiet">Refresh</button></div>
+<select id="defaultSessions" aria-label="Default chat"></select>
+<button id="defaultMore" class="quiet more" hidden>Show older chats</button>
+<button id="useDefault" class="primary">Use as default</button>
 </div>
-<div class="card">
-<h2>Choose a chat</h2>
-<div class="row"><select id="kind" aria-label="Chat type"><option value="chat">Claude chats</option><option value="code">Claude Code</option></select><button id="refresh" class="quiet">Refresh</button></div>
-<input id="filter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname">
-<label for="sessions">Chat</label><select id="sessions"></select>
-<button id="more" class="quiet" hidden>Show older chats</button>
-<div id="editor" hidden>
-<label for="nickname">Nickname <span class="hint">(optional)</span></label>
-<input id="nickname" maxlength="40" placeholder="e.g. work" aria-describedby="nicknameHelp">
-<div id="nicknameHelp" class="hint">A short name you can say: “Send to work…”</div>
-<label class="check"><input id="makeDefault" type="checkbox">Use this as my default chat</label>
-<button id="select" class="primary">Save changes</button>
-</div>
-</div>
+<p class="hint">Naming a chat or nickname always sends there instead.</p>
 </section>
 <p id="status" role="status" aria-live="polite">Connecting…</p>
+<details id="nicknames" hidden><summary>Nicknames</summary>
+<p class="hint">Give a chat a short name you can say: “Send to work…”. Works whichever option you chose above.</p>
+<div class="row"><select id="nickKind" aria-label="Chat type"><option value="chat">Claude chats</option><option value="code">Claude Code</option></select><button id="nickRefresh" class="quiet">Refresh</button></div>
+<input id="nickFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname">
+<label for="nickSessions">Chat</label><select id="nickSessions"></select>
+<button id="nickMore" class="quiet more" hidden>Show older chats</button>
+<div id="editor" hidden>
+<label for="nickname">Nickname</label>
+<input id="nickname" maxlength="40" placeholder="e.g. work">
+<button id="saveNickname" class="primary">Save nickname</button>
+<p class="hint">Clear the field to remove a nickname.</p>
+</div>
+</details>
 <details id="account" hidden><summary>Account &amp; connection</summary>
 <label for="organization">Organization</label><select id="organization"></select>
 <p class="hint">Changing organization clears your default chat.</p>
 <p class="hint">Local Claude Code chats need Remote Control turned on and connected.</p>
 <button id="disconnect" class="quiet">Disconnect Claude</button>
 </details>
+<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-plugins/tree/main/claude" target="_blank" rel="noopener">Source code</a> is available.</em></p>
 <script>
 const $ = id => document.getElementById(id);
-let busy = false, state = {configured:false}, rows = [], cursor = null;
+let busy = false, state = {configured:false};
 const say = text => { $('status').textContent = text; };
 async function send(message) {
   const result = await Pebble.sendMessage('plugin', message);
@@ -67,34 +78,55 @@ async function send(message) {
   return result;
 }
 function sessionName(row) { return (row.nickname ? row.nickname + ' — ' : '') + row.title; }
-function showSelected() {
-  const row = rows.find(row => row.session_id === $('sessions').value);
+const defaultKind = () => state.kind === 'code' ? 'code' : 'chat';
+// A searchable, paginated chat list bound to the #<prefix>Filter/Sessions/More elements.
+function picker(prefix, kind, onPick) {
+  const p = {rows:[], cursor:null, sel:$(prefix + 'Sessions'), filter:$(prefix + 'Filter'), more:$(prefix + 'More')};
+  p.render = () => {
+    const previous = p.sel.value, query = p.filter.value.toLowerCase();
+    p.sel.replaceChildren();
+    p.rows.sort((a,b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0)).filter(row => sessionName(row).toLowerCase().includes(query)).forEach(row => {
+      const option = document.createElement('option');
+      option.value = row.session_id;
+      option.textContent = sessionName(row) + (row.isDefault ? ' (default)' : '');
+      p.sel.appendChild(option);
+    });
+    const has = id => [...p.sel.options].some(option => option.value === id);
+    if (has(previous)) p.sel.value = previous;
+    else if (state.selected && has(state.selected.session_id)) p.sel.value = state.selected.session_id;
+    if (!p.sel.options.length) { const empty = document.createElement('option'); empty.value = ''; empty.textContent = p.rows.length ? 'No matching chats' : 'No chats loaded'; p.sel.appendChild(empty); }
+    p.more.hidden = !p.cursor;
+    onPick();
+  };
+  p.load = async (more = false) => {
+    if (!state.organization) { say('Choose an organization first.'); return; }
+    if (!more) { p.rows = []; p.cursor = null; p.render(); }
+    say('Loading chats…');
+    const page = await send({type:'list',kind:kind(),cursor:more ? p.cursor : null});
+    const known = new Set(p.rows.map(row => row.session_id));
+    p.rows.push(...page.sessions.filter(row => !known.has(row.session_id)));
+    p.cursor = page.next_cursor;
+    p.render(); say(p.rows.length ? '' : 'No chats found in this organization.');
+  };
+  p.filter.oninput = p.render;
+  p.sel.onchange = onPick;
+  p.more.onclick = () => run(() => p.load(true));
+  return p;
+}
+function controls() {
+  $('useDefault').disabled = busy || !defaults.sel.value || defaults.sel.value === state.selected?.session_id;
+}
+const defaults = picker('default', defaultKind, controls);
+const nicks = picker('nick', () => $('nickKind').value, () => {
+  const row = nicks.rows.find(row => row.session_id === nicks.sel.value);
   $('editor').hidden = !row;
   $('nickname').value = row?.nickname || '';
-  $('makeDefault').checked = !!row && state.selected?.session_id === row.session_id;
-  $('makeDefault').disabled = $('makeDefault').checked;
-}
-function choices() {
-  const previous = $('sessions').value;
-  $('sessions').replaceChildren();
-  const query = $('filter').value.toLowerCase();
-  rows.sort((a,b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0)).filter(row => sessionName(row).toLowerCase().includes(query)).forEach(row => {
-    const option = document.createElement('option');
-    option.value = row.session_id;
-    option.textContent = sessionName(row) + (row.isDefault ? ' (default)' : '');
-    $('sessions').appendChild(option);
-  });
-  if ([...$('sessions').options].some(option => option.value === previous)) $('sessions').value = previous;
-  if (!previous && state.selected && [...$('sessions').options].some(option => option.value === state.selected.session_id)) $('sessions').value = state.selected.session_id;
-  if (!$('sessions').options.length) { const empty = document.createElement('option'); empty.value = ''; empty.textContent = rows.length ? 'No matching chats' : 'No chats loaded'; $('sessions').appendChild(empty); }
-  showSelected();
-  $('more').hidden = !cursor;
-}
+});
 function render(next) {
   state = next;
   $('signedIn').hidden = !state.configured;
   $('signedOut').hidden = state.configured;
-  $('account').hidden = !state.configured;
+  $('account').hidden = $('nicknames').hidden = !state.configured;
   if (state.configured && !state.organization) $('account').open = true;
   $('organization').replaceChildren();
   if (state.configured) {
@@ -107,26 +139,27 @@ function render(next) {
     });
     $('organization').value = state.organization || '';
   }
-  $('selected').textContent = state.selected ? sessionName(state.selected) : 'Choose a chat below';
+  const code = state.kind === 'code';
+  document.querySelectorAll('input[name=kind]').forEach(input => { input.checked = input.value === state.kind; });
   document.querySelectorAll('input[name=mode]').forEach(input => { input.checked = input.value === state.mode; });
+  $('modeChoices').hidden = code; $('codeMode').hidden = !code;
   $('defaultCard').hidden = state.mode !== 'default_chat';
+  $('defaultLabel').textContent = code ? 'Your default Claude Code session' : 'Your default chat';
+  $('selected').textContent = state.selected ? sessionName(state.selected) : (code ? 'Choose a session below' : 'Choose a chat below');
+  [defaults, nicks].forEach(p => p.rows.forEach(row => { row.isDefault = state.selected?.session_id === row.session_id; }));
 }
 async function run(fn) {
   if (busy) return;
   busy = true;
   document.querySelectorAll('button,select,input').forEach(el => { el.disabled = true; });
   try { await fn(); } catch (e) { say(e.message || 'Could not connect to Claude.'); }
-  finally { busy = false; document.querySelectorAll('button,select,input').forEach(el => { el.disabled = false; }); $('makeDefault').disabled = !!state.selected && state.selected.session_id === $('sessions').value; }
+  finally { busy = false; document.querySelectorAll('button,select,input').forEach(el => { el.disabled = false; }); controls(); }
 }
-async function list(more = false) {
-  if (!state.organization) { say('Choose an organization first.'); return; }
-  if (!more) { rows = []; cursor = null; choices(); }
-  say('Loading chats…');
-  const page = await send({type:'list',kind:$('kind').value,cursor:more ? cursor : null});
-  const known = new Set(rows.map(row => row.session_id));
-  rows.push(...page.sessions.filter(row => !known.has(row.session_id)));
-  cursor = page.next_cursor;
-  choices(); say(rows.length ? '' : 'No chats found in this organization.');
+// Loads whatever lists are on screen for the current settings.
+async function refresh() {
+  if (!state.organization) return;
+  if (state.mode === 'default_chat') await defaults.load();
+  if ($('nicknames').open) await nicks.load();
 }
 $('signin').onclick = () => run(async () => {
   if (!Pebble.webSignIn) throw new Error('Claude sign-in requires a newer Pebble app.');
@@ -134,40 +167,57 @@ $('signin').onclick = () => run(async () => {
   const cookies = await Pebble.webSignIn({url:'https://claude.ai/login',cookies:['sessionKey'],domain:'claude.ai'});
   if (!cookies) { say('Sign-in cancelled.'); return; }
   render(await send({type:'connect',session_key:cookies.sessionKey}));
-  if (state.organization) await list(); else say('Choose an organization.');
+  if (state.organization) await refresh(); else say('Choose an organization.');
 });
 $('organization').onchange = () => run(async () => {
-  rows = []; cursor = null; choices();
-  render(await send({type:'organization',id:$('organization').value})); await list();
+  defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render();
+  render(await send({type:'organization',id:$('organization').value})); await refresh();
+});
+function describe() {
+  if (state.mode === 'new_chat') return 'Each message will start a new Claude chat.';
+  if (state.selected) return 'Messages will go to ' + sessionName(state.selected) + '.';
+  return state.kind === 'code' ? 'Choose a default Claude Code session.' : 'Choose a default chat.';
+}
+document.querySelectorAll('input[name=kind]').forEach(input => {
+  input.onchange = () => run(async () => {
+    render(await send({type:'kind',kind:input.value}));
+    defaults.rows = []; defaults.cursor = null; defaults.render();
+    if (state.mode === 'default_chat') await defaults.load();
+    say(describe());
+  });
 });
 document.querySelectorAll('input[name=mode]').forEach(input => {
   input.onchange = () => run(async () => {
     render(await send({type:'mode',mode:input.value}));
-    say(state.mode === 'new_chat' ? 'Each message will start a new chat.' : (state.selected ? 'Messages will go to your default chat.' : 'Choose a default chat below.'));
+    if (state.mode === 'default_chat' && !defaults.rows.length) await defaults.load();
+    say(describe());
   });
 });
-$('kind').onchange = $('refresh').onclick = () => run(() => list());
-$('more').onclick = () => run(() => list(true));
-$('filter').oninput = choices;
-$('sessions').onchange = showSelected;
-async function saveSession(makeDefault) {
-  const id = $('sessions').value, name = $('nickname').value.trim();
-  if (!id) throw new Error('Choose a session first.');
-  render(await send({type:'save_session',session_id:id,nickname:name,makeDefault}));
-  rows.forEach(row => {
+$('defaultRefresh').onclick = () => run(() => defaults.load());
+$('useDefault').onclick = () => run(async () => {
+  if (!defaults.sel.value.startsWith(defaultKind() + ':')) throw new Error('Choose a chat first.');
+  render(await send({type:'select',session_id:defaults.sel.value,kind:state.kind}));
+  defaults.render(); nicks.render(); say(describe());
+});
+$('nicknames').ontoggle = () => { if ($('nicknames').open && !nicks.rows.length) run(() => nicks.load()); };
+$('nickKind').onchange = $('nickRefresh').onclick = () => run(() => nicks.load());
+$('saveNickname').onclick = () => run(async () => {
+  const id = nicks.sel.value, name = $('nickname').value.trim();
+  if (!id) throw new Error('Choose a chat first.');
+  render(await send({type:'save_session',session_id:id,nickname:name}));
+  [defaults, nicks].forEach(p => p.rows.forEach(row => {
     if (name && row.nickname.toLowerCase() === name.toLowerCase()) row.nickname = '';
     if (row.session_id === id) row.nickname = name;
-    row.isDefault = state.selected?.session_id === row.session_id;
-  });
-  choices(); say('Saved. ' + (state.selected?.session_id === id && state.mode === 'default_chat' ? 'Messages to Claude will go to this chat.' : 'You can now use this nickname when sending.'));
-}
-$('select').onclick = () => run(() => saveSession($('makeDefault').checked));
+  }));
+  defaults.render(); nicks.render();
+  say(name ? 'Saved. Say “' + name + '” to send to this chat.' : 'Nickname removed.');
+});
 $('disconnect').onclick = () => run(async () => {
-  render(await send({type:'disconnect'})); rows = []; cursor = null; choices(); say('Disconnected. Saved sign-in removed.');
+  render(await send({type:'disconnect'})); defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render(); say('Disconnected. Saved sign-in removed.');
 });
 Pebble.addEventListener('ready', event => {
   if (event.target !== 'plugin') return;
-  run(async () => { render(await send({type:'status'})); if (state.configured && state.organization) { $('kind').value = state.selected?.session_id?.startsWith('code:') ? 'code' : 'chat'; await list(); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
+  run(async () => { render(await send({type:'status'})); if (state.configured && state.organization) { await refresh(); say(describe()); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
 });
 </script>
 </body>

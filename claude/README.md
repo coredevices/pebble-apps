@@ -14,10 +14,13 @@ must support `web_sign_in` and secure storage; iOS has not been live-tested.
 2. Open Claude plugin settings and sign in with Claude. On hosts without sign-in popup support,
    choose **Continue with email**; the Google popup flow does not complete on those hosts.
 3. Select an organization (required when the account has multiple organizations).
-4. Under **Where messages go**, keep **Start a new chat each time** (the default) or choose
-   **Send to a default chat** and pick one: load **Claude chats** or **Claude Code**, select a
-   chat, and save it as the default. Load more follows the server's pagination cursor. Filtering
-   searches loaded rows.
+4. Under **Send messages to**, choose **Claude** (the default) or **Claude Code**.
+5. For Claude, keep **Start a new chat each time** (the default) or choose **Send to a default
+   chat**. Claude Code always sends to a default session: a new Code session needs a repository
+   and environment, which the plugin does not create.
+6. When sending to a default, pick one of the chosen kind and tap **Use as default**. Load more
+   follows the server's pagination cursor; filtering searches loaded rows.
+7. Optionally, under **Nicknames**, give any chat or Code session a short name to say.
 
 Sign-in uses `Pebble.webSignIn` to capture `sessionKey`, verifies membership with
 `GET /api/organizations`, and stores the credential in `Pebble.secureStorage`. This grants
@@ -28,16 +31,20 @@ credential; it does not revoke the browser session.
 
 The plugin is an Index agent destination (see `agent` in [plugins.md](../plugins.md)).
 
-- `send_to_agent({message, chat_id?})`: with `chat_id` omitted, starts a new Claude conversation
-  for the message, or sends to the saved default chat when settings say so. `chat_id` is an
+- `send_to_agent({message, chat_id?})`: with `chat_id` omitted, Claude + new chat starts a new
+  Claude conversation for the message; Claude + default chat sends to the default conversation;
+  Claude Code sends to the default Code session. Without a default of the chosen kind it fails
+  without sending. `chat_id` `"new"` or `"new chat"` (any case) always starts a new Claude
+  conversation, whatever the settings. `chat_id` is an
   `instanceId` from `agent/chats`; a nickname or part of a title also resolves. Exact nicknames
   take priority; ambiguous matches fail without sending. Returns a submission receipt, not
   Claude's answer.
 - `agent/chats`: one instance per chat across both kinds (first page of each, most recent first).
   `instanceId` is the chat id (`chat:<uuid>` or `code:<cse_… or session_…>`), `name` is the
   nickname when one is set and otherwise the title; `title` and `url` are also served.
-- `agent/configured`: true once signed in and an organization is chosen; in default-chat mode a
-  default chat must be saved too. `name` is "New chat" or the default chat's nickname or title.
+- `agent/configured`: true when a send without `chat_id` would work: for Claude + new chat, signed
+  in with an organization chosen; otherwise a default of the chosen kind is saved. `name` is
+  "New chat" or the default's nickname or title. Served from saved settings, without a network call.
 
 The plugin re-fetches an existing chat in the chosen organization before sending. The only
 conversation it creates is the empty one a new-chat send starts with; it never changes a chat
@@ -45,10 +52,16 @@ branch, changes permissions, or automatically retries a send.
 
 ### Nicknames and defaults
 
-Select a chat in settings, enter a nickname (up to 40 characters), and save it, optionally as the
-default. Nicknames are case-insensitive and unique within the selected organization; assigning an
-existing nickname moves it to the selected chat. Clear the field to remove a nickname. Changing
-organization clears the default. Existing sign-in and default settings are preserved on upgrade.
+Nicknames are set in their own settings section: pick a chat or Code session, enter a nickname
+(up to 40 characters), and save. Naming a nickname always sends to that chat, whatever the
+default settings. Nicknames are case-insensitive and unique within the selected organization;
+assigning an existing nickname moves it to the selected chat. Clear the field to remove one. "new" and "new chat" are
+reserved for starting a new chat and cannot be nicknames.
+
+One default is saved; choosing it also sets the kind. A default of the other kind is kept but
+unused until the kind is switched back or another default is chosen. Changing organization clears
+the default. On upgrade from 0.2, sign-in, nicknames, mode and default are kept; the kind is
+Claude Code only when the plugin was already sending to a default Code session.
 
 ## API behavior and limitations
 

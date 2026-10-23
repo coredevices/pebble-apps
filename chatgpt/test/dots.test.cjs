@@ -81,8 +81,12 @@ function fixture({ now = 1_000_000_000_000, expiresIn = 3600_000, routes = {}, s
       data: (value) => resolve(value),
       error: (code, message) => resolve({ code, message }),
     })),
+    action: (name, args, resolve) => action(
+      { action: name, args },
+      { ok: (value) => resolve({ ok: true, ...value }), error: (code, message) => resolve({ code, message }) },
+    ),
     send: (args = { message: 'hello Dot' }) => new Promise((resolve) => action(
-      { action: 'send_to_dot', args },
+      { action: 'send_to_agent', args },
       { ok: (value) => resolve({ ok: true, ...value }), error: (code, message) => resolve({ code, message }) },
     )),
   };
@@ -183,7 +187,8 @@ test('invalid sessions, actions and messages are rejected without network calls'
   const f = fixture();
   await assert.rejects(() => f.connect('bad;cookie'), /invalid session/);
   assert.equal(f.calls.length, 0);
-  assert.equal((await f.send()).code, 'AUTH_REQUIRED');
+  assert.equal((await f.send()).code, 'INVALID_ARGS');
+  assert.equal((await f.send({ message: 'hi', chat_id: 'dot' })).code, 'AUTH_REQUIRED');
   await f.connect();
   const before = f.calls.length;
   assert.equal((await f.send({ message: '  ' })).code, 'INVALID_ARGS');
@@ -242,12 +247,37 @@ test('a fresh plugin session sends with the saved connection', async () => {
   assert.deepEqual(second.calls.map((c) => c.key), ['POST /messaging/rooms/room-1/messages']);
 });
 
-test('the Dot source reports the Dot name for the agent', async () => {
+test('agent/configured turns true once the Dot is connected, and names it', async () => {
   const f = fixture();
-  const before = await f.source({ category: 'messaging', item: 'dot' });
+  const before = await f.source({ category: 'agent', item: 'configured' });
   assert.equal(before.instances[0].properties.configured.boolean.value, false);
   await f.connect();
-  const after = await f.source({ category: 'messaging', item: 'dot' });
+  const after = await f.source({ category: 'agent', item: 'configured' });
+  assert.equal(after.instances.length, 1);
+  assert.equal(after.instances[0].properties.configured.boolean.value, true);
   assert.equal(after.instances[0].properties.name.shortText.text, 'Sol');
-  assert.equal((await f.source({ category: 'notes', item: 'x' })).code, 'INVALID_ARGS');
+  assert.equal((await f.source({ category: 'messaging', item: 'dot' })).code, 'INVALID_ARGS');
+});
+
+test('agent/chats lists the Dot, and its id, "dot" or its name send to it', async () => {
+  const f = fixture();
+  assert.equal((await f.source({ category: 'agent', item: 'chats' })).instances.length, 0);
+  await f.connect();
+  const chats = await f.source({ category: 'agent', item: 'chats' });
+  assert.deepEqual(Array.from(chats.instances, (i) => [i.instanceId, i.properties.name.shortText.text]), [['dot', 'Sol']]);
+  for (const chat_id of [chats.instances[0].instanceId, 'DOT', 'sol', null]) {
+    assert.equal((await f.send({ message: 'hi', chat_id })).text, 'Message sent to Sol.');
+  }
+});
+
+test('unknown and removed actions are rejected before touching the network', async () => {
+  const f = fixture();
+  await f.connect();
+  const before = f.calls.length;
+  for (const name of ['send_to_dot', 'send_to_codex', 'list_codex_chats']) {
+    const result = await new Promise((resolve) => f.action(name, { message: 'hi' }, resolve));
+    assert.equal(result.code, 'INVALID_ARGS');
+  }
+  assert.equal((await f.send({ message: 'hi', chat_id: 5 })).code, 'INVALID_ARGS');
+  assert.equal(f.calls.length, before);
 });

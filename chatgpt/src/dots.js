@@ -198,26 +198,9 @@ function createDotsService(storage, fetch, now) {
     return { text: 'Message sent to ' + state.dotName + '.' };
   }
 
-  async function source(request) {
-    if (!request || request.category !== 'messaging' || request.item !== 'dot') {
-      throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
-    }
-    var state = await load();
-    return {
-      validUntilMs: now() + 60 * 1000,
-      instances: [{
-        instanceId: 'dot',
-        properties: {
-          name: { shortText: { text: state ? state.dotName : '' } },
-          configured: { boolean: { value: !!state }, shortText: { text: state ? 'Connected' : 'Not connected' } },
-        },
-      }],
-    };
-  }
-
   return {
     status: async function () { return status(await load()); },
-    connect: connect, disconnect: disconnect, send: send, source: source,
+    connect: connect, disconnect: disconnect, send: send,
   };
 }
 

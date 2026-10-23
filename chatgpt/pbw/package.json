@@ -1,7 +1,7 @@
 {
   "name": "chatgpt",
   "author": "Core Devices",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "build": "npm --prefix .. run build",
@@ -26,13 +26,30 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your ChatGPT Dot, to Codex sessions running on your computers, and to Codex Cloud tasks. Sign in in settings.",
+      "description": "Send messages to your ChatGPT Dot, to Codex sessions running on your computers, and to Codex Cloud tasks. With no chat named, sends to your Dot or your default Codex chat, as chosen in settings. Supports Codex chat nicknames. Sign in in settings.",
       "script": "plugin.js",
       "sources": [
         {
-          "category": "messaging",
+          "category": "agent",
           "items": [
-            "dot"
+            "chats"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "title": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 900
+        },
+        {
+          "category": "agent",
+          "items": [
+            "configured"
           ],
           "properties": {
             "name": [
@@ -45,36 +62,13 @@
           },
           "supportsMultiple": false,
           "callerPermissions": [],
-          "suggestedRefreshIntervalSec": 3600
+          "suggestedRefreshIntervalSec": 60
         }
       ],
       "actions": [
         {
-          "name": "send_to_dot",
-          "description": "Send a message to the user's ChatGPT Dot (their existing primary Dot in ChatGPT). Do not use unless the user explicitly addresses their Dot or asks to send something to it, as \"Dot\" or \"my Dot\" or by the Dot's own name, e.g. \"message my Dot …\", \"tell Dot …\", \"ask my Dot …\" or \"tell Taz …\" when the Dot is named Taz. The Dot's name is in the 'ChatGPT: messaging/dot' source; when the user messages a name that is not clearly one of their contacts, read that source to check whether it is their Dot. Never use it for notes, reminders, or messages meant for anyone else. Returns a delivery receipt, not the Dot's answer. Do not automatically retry an uncertain delivery.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string",
-                "description": "The text to deliver to the Dot, without the \"send to my Dot\" instruction itself.",
-                "minLength": 1,
-                "maxLength": 16000
-              }
-            },
-            "required": [
-              "message"
-            ],
-            "additionalProperties": false
-          },
-          "targets": [],
-          "destructive": false,
-          "requiresConfirmation": false,
-          "callerPermissions": []
-        },
-        {
-          "name": "send_to_codex",
-          "description": "Send a message to one of the user's Codex chats: a Codex session running on their computer, or a Codex Cloud task. Use when the user says \"send … to Codex\", \"tell Codex …\", or names one of their Codex chats or its nickname (e.g. \"tell the BLE chat to run the tests\"). With no chat named it goes to the default chat the user picked in settings. Returns a receipt, not Codex's answer. Do not automatically retry an uncertain delivery.",
+          "name": "send_to_agent",
+          "description": "Send a message to the user's ChatGPT Dot or one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats, or a Codex chat nickname or part of its title; omit it to send to the user's Dot or their default Codex chat, whichever settings choose. Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -82,11 +76,14 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 16000,
-                "description": "What to tell Codex, without the \"tell Codex\" instruction itself."
+                "description": "What to tell the Dot or Codex, without the \"tell my Dot\" or \"tell Codex\" instruction itself."
               },
-              "chat": {
-                "type": "string",
-                "description": "The chat's nickname, its id from list_codex_chats, or part of its title. Omit to use the default chat."
+              "chat_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The chat's instanceId from agent/chats, or a Codex chat's nickname or part of its title. Omit to send to the Dot or the default Codex chat, as chosen in settings."
               }
             },
             "required": [
@@ -94,26 +91,9 @@
             ],
             "additionalProperties": false
           },
-          "targets": [],
-          "destructive": false,
-          "requiresConfirmation": false,
-          "callerPermissions": []
-        },
-        {
-          "name": "list_codex_chats",
-          "description": "List the user's Codex chats, most recent first: sessions on their online computers and their Codex Cloud tasks, with nicknames, which is the default, and chat ids. Use when the user asks what Codex chats they have, or when it is unclear which chat they mean; then pass the nickname or chat id to send_to_codex.",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "computer": {
-                "type": "string",
-                "description": "Only this computer's sessions. Omit for every online computer and Codex Cloud."
-              }
-            },
-            "required": [],
-            "additionalProperties": false
-          },
-          "targets": [],
+          "targets": [
+            "agent/chats"
+          ],
           "destructive": false,
           "requiresConfirmation": false,
           "callerPermissions": []

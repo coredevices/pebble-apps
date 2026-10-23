@@ -320,30 +320,13 @@
           }
           return { text: "Message sent to " + state.dotName + "." };
         }
-        async function source(request) {
-          if (!request || request.category !== "messaging" || request.item !== "dot") {
-            throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
-          }
-          var state = await load();
-          return {
-            validUntilMs: now() + 60 * 1e3,
-            instances: [{
-              instanceId: "dot",
-              properties: {
-                name: { shortText: { text: state ? state.dotName : "" } },
-                configured: { boolean: { value: !!state }, shortText: { text: state ? "Connected" : "Not connected" } }
-              }
-            }]
-          };
-        }
         return {
           status: async function() {
             return status(await load());
           },
           connect,
           disconnect,
-          send,
-          source
+          send
         };
       }
       module.exports = { createDotsService };
@@ -5633,11 +5616,11 @@
             return !thread.ephemeral;
           });
         }
-        async function chats(args) {
+        async function chats() {
           var account = await auth.current();
           var session = await current(account);
           var all = await environments(account, session);
-          var online = args && args.computer ? [pickComputer(all, args.computer)] : all.filter(function(env) {
+          var online = all.filter(function(env) {
             return env.online;
           });
           if (!online.length) pickComputer(all);
@@ -5847,50 +5830,106 @@
       var util = require_util();
       var PluginError = util.PluginError;
       var PREFS_KEY = "chatgpt.codex.chats.v1";
+      var CACHE_KEY = "chatgpt.codex.chats.cache.v1";
       var MAX_NICKNAME = 40;
       function keyOf(chat) {
         return chat.kind + ":" + chat.id;
       }
-      function where(chat) {
-        return chat.kind === "task" ? "Codex Cloud" : chat.computer;
+      function accountKey(a) {
+        return a ? a.account + ":" + a.user : null;
       }
-      function createCodexChats(storage, remote, cloud) {
-        async function prefs() {
+      function sameAccount(a, b) {
+        return !!a && !!b && a.account === b.account && a.user === b.user;
+      }
+      function createCodexChats(storage, remote, cloud, auth, now) {
+        var started = 0;
+        var landed = 0;
+        async function stored() {
           var raw = await storage.getItem(PREFS_KEY);
-          var saved = raw ? JSON.parse(raw) : null;
-          return { defaultChat: saved && saved.defaultChat || null, nicknames: saved && saved.nicknames || {} };
+          return raw ? JSON.parse(raw) : {};
         }
-        function savePrefs(value) {
-          return storage.setItem(PREFS_KEY, JSON.stringify(value));
-        }
-        async function list(args) {
-          var saved = await prefs();
-          var chats = [];
-          var errors = [];
-          try {
-            chats = chats.concat(await remote.chats(args));
-          } catch (error) {
-            errors.push({ part: "computers", error });
-          }
-          if (!args || !args.computer) {
+        async function prefs() {
+          var saved = await stored();
+          var key = accountKey(await auth.load());
+          if (key && !saved.accounts && (saved.defaultChat || saved.nicknames)) {
+            var accounts = {};
+            accounts[key] = { defaultChat: saved.defaultChat || null, nicknames: saved.nicknames || {} };
+            saved = { destination: saved.destination || null, accounts };
             try {
-              chats = chats.concat((await cloud.tasks()).map(function(task) {
-                return { kind: "task", id: task.id, label: task.title.slice(0, 80), state: "cloud", updatedAt: task.updatedAt };
-              }));
-            } catch (error) {
-              errors.push({ part: "cloud", error });
+              await storage.setItem(PREFS_KEY, JSON.stringify(saved));
+            } catch (_) {
             }
           }
+          var mine = key && saved.accounts && saved.accounts[key] || {};
+          return { defaultChat: mine.defaultChat || null, nicknames: mine.nicknames || {}, destination: saved.destination || null };
+        }
+        async function savePrefs(value) {
+          var saved = await stored();
+          var key = accountKey(await auth.load());
+          var next = Object.assign({}, saved, { destination: value.destination || null });
+          if (key) {
+            next.accounts = Object.assign({}, saved.accounts);
+            next.accounts[key] = { defaultChat: value.defaultChat || null, nicknames: value.nicknames };
+            delete next.defaultChat;
+            delete next.nicknames;
+          }
+          return storage.setItem(PREFS_KEY, JSON.stringify(next));
+        }
+        async function named(chats) {
+          var saved = await prefs();
           var defaultKey = saved.defaultChat && keyOf(saved.defaultChat);
           chats.forEach(function(chat) {
             var nick = saved.nicknames[keyOf(chat)];
             chat.nickname = nick ? nick.nickname : "";
             chat.isDefault = keyOf(chat) === defaultKey;
           });
-          chats.sort(function(a, b) {
+          return chats.sort(function(a, b) {
             return (b.updatedAt || 0) - (a.updatedAt || 0);
           });
-          return { chats, errors };
+        }
+        async function cached() {
+          try {
+            var raw = await storage.getItem(CACHE_KEY);
+            var entry = raw ? JSON.parse(raw) : null;
+            if (!entry || !sameAccount(entry, await auth.load())) return null;
+            return { chats: await named(entry.chats), at: entry.at };
+          } catch (_) {
+            return null;
+          }
+        }
+        async function remember(owner, seq, chats) {
+          try {
+            if (seq <= landed || !sameAccount(owner, await auth.load())) return;
+            landed = seq;
+            await storage.setItem(CACHE_KEY, JSON.stringify({ account: owner.account, user: owner.user, at: now(), chats }));
+          } catch (_) {
+          }
+        }
+        async function list() {
+          var seq = ++started;
+          var owner = null;
+          try {
+            owner = await auth.load();
+          } catch (_) {
+          }
+          var errors = [];
+          function part(name, promise) {
+            return promise.catch(function(error) {
+              errors.push({ part: name, error });
+              return [];
+            });
+          }
+          var halves = await Promise.all([
+            part("computers", remote.chats()),
+            part("cloud", cloud.tasks().then(function(tasks) {
+              return tasks.map(function(task) {
+                return { kind: "task", id: task.id, label: task.title.slice(0, 80), state: "cloud", updatedAt: task.updatedAt };
+              });
+            }))
+          ]);
+          var chats = halves[0].concat(halves[1]);
+          if (errors.length < 2) await remember(owner, seq, chats);
+          return { chats: await named(chats), errors };
         }
         async function update(chat, nickname, makeDefault) {
           if (!chat || chat.kind !== "session" && chat.kind !== "task" || typeof chat.id !== "string" || !chat.id) {
@@ -5899,13 +5938,15 @@
           var name = typeof nickname === "string" ? nickname.trim().slice(0, MAX_NICKNAME) : "";
           var saved = await prefs();
           var entry = { kind: chat.kind, id: chat.id, computer: chat.computer || "", label: String(chat.label || "").slice(0, 80) };
-          Object.keys(saved.nicknames).forEach(function(key) {
-            if (name && key !== keyOf(entry) && saved.nicknames[key].nickname.toLowerCase() === name.toLowerCase()) {
-              delete saved.nicknames[key];
-            }
-          });
-          if (name) saved.nicknames[keyOf(entry)] = Object.assign({ nickname: name }, entry);
-          else delete saved.nicknames[keyOf(entry)];
+          if (nickname !== void 0) {
+            Object.keys(saved.nicknames).forEach(function(key) {
+              if (name && key !== keyOf(entry) && saved.nicknames[key].nickname.toLowerCase() === name.toLowerCase()) {
+                delete saved.nicknames[key];
+              }
+            });
+            if (name) saved.nicknames[keyOf(entry)] = Object.assign({ nickname: name }, entry);
+            else delete saved.nicknames[keyOf(entry)];
+          }
           if (makeDefault) saved.defaultChat = entry;
           await savePrefs(saved);
           return saved;
@@ -5913,13 +5954,20 @@
         async function resolve(query) {
           var saved = await prefs();
           var wanted = typeof query === "string" ? query.trim().toLowerCase() : "";
-          if (!wanted) {
-            if (saved.defaultChat) return saved.defaultChat;
-            throw PluginError("INVALID_ARGS", "No default Codex chat yet. Pick one in plugin settings, or name the chat.");
-          }
+          if (!wanted) throw PluginError("INVALID_ARGS", "Name the Codex chat.");
           var nicknamed = Object.keys(saved.nicknames).map(function(key) {
             return saved.nicknames[key];
           });
+          function byId(chats) {
+            return chats.filter(function(c) {
+              return c.id.toLowerCase() === wanted;
+            })[0];
+          }
+          var known = byId(nicknamed.concat((await cached() || { chats: [] }).chats));
+          if (known) return known;
+          var found = await list();
+          var listed = byId(found.chats);
+          if (listed) return listed;
           var exact = nicknamed.filter(function(n) {
             return n.nickname.toLowerCase() === wanted;
           });
@@ -5928,7 +5976,6 @@
             return n.nickname.toLowerCase().indexOf(wanted) >= 0;
           });
           if (partial.length === 1) return partial[0];
-          var found = await list();
           return util.pick(found.chats, query, function(chat) {
             return chat.nickname || chat.label;
           }, "Codex chat");
@@ -5938,11 +5985,36 @@
           if (typeof text !== "string" || !text.trim() || text.length > 16e3) {
             throw PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
           }
-          var chat = await resolve(args.chat);
+          return deliver(await resolve(args.chat), text);
+        }
+        function deliver(chat, text) {
           if (chat.kind === "task") return cloud.followUp({ message: text, task: chat.id });
           return remote.send({ message: text, session: chat.id, computer: chat.computer });
         }
-        return { list, update, resolve, send, prefs, keyOf, where };
+        async function setDestination(value) {
+          if (value !== "dot" && value !== "codex") throw PluginError("INVALID_ARGS", "Choose the Dot or the Codex default chat.");
+          var saved = await prefs();
+          saved.destination = value;
+          await savePrefs(saved);
+        }
+        async function forget() {
+          try {
+            await storage.removeItem(CACHE_KEY);
+          } catch (_) {
+          }
+        }
+        return {
+          list,
+          cached,
+          forget,
+          update,
+          resolve,
+          send,
+          deliver,
+          setDestination,
+          prefs,
+          keyOf
+        };
       }
       module.exports = { createCodexChats };
     }
@@ -5958,24 +6030,55 @@
       var createCodexRemote = require_codex_remote().createCodexRemote;
       var createCodexCloud = require_codex_cloud().createCodexCloud;
       var createCodexChats = require_codex_chats().createCodexChats;
+      var DOT_ID = "dot";
+      var CHATS_FRESH_MS = 5 * 60 * 1e3;
+      function chatInstance(id, name, title) {
+        return { instanceId: id, properties: { name: { shortText: { text: name } }, title: { shortText: { text: title } } } };
+      }
       function createPlugin(storage, fetch2, now, WebSocketImpl) {
         var dots = createDotsService(storage, fetch2, now);
         var auth = createCodexAuth(storage, fetch2, now);
         var remote = createCodexRemote(storage, fetch2, now, WebSocketImpl, auth);
         var cloud = createCodexCloud(fetch2, auth);
-        var chats = createCodexChats(storage, remote, cloud);
+        var chats = createCodexChats(storage, remote, cloud, auth, now);
         async function codexStatus() {
           var account = await auth.load();
           var connected = await remote.load();
+          var saved = await chats.prefs();
+          var chosen = saved.defaultChat;
+          var nick = chosen && saved.nicknames[chats.keyOf(chosen)];
           return {
             signedIn: !!account,
             email: account ? account.email : "",
             remoteControl: !!connected,
-            paired: !!(connected && connected.paired)
+            paired: !!(connected && connected.paired),
+            defaultChat: chosen ? Object.assign({}, chosen, { nickname: nick ? nick.nickname : "" }) : null
+          };
+        }
+        async function destination() {
+          var dot = await dots.status();
+          var saved = await chats.prefs();
+          var account = await auth.load();
+          var codex = account && saved.defaultChat;
+          var dotTarget = dot.configured ? { kind: "dot", name: dot.dotName } : null;
+          var nick = codex && saved.nicknames[chats.keyOf(codex)];
+          var codexTarget = codex ? { kind: "codex", chat: codex, name: nick ? nick.nickname : codex.label } : null;
+          var target = saved.destination === "codex" ? codexTarget || dotTarget : dotTarget || codexTarget;
+          return {
+            target,
+            // What settings show as picked: the saved choice, else the one a send would use.
+            chosen: saved.destination || (dot.configured || !account ? "dot" : "codex"),
+            choosable: !!(dotTarget && codexTarget),
+            hint: target ? "Connected" : account ? "Choose a Codex chat in settings" : "Sign in in settings"
           };
         }
         async function status() {
-          return { dots: await dots.status(), codex: await codexStatus() };
+          var where = await destination();
+          return {
+            dots: await dots.status(),
+            codex: await codexStatus(),
+            destination: { kind: where.target ? where.target.kind : null, chosen: where.chosen, choosable: where.choosable }
+          };
         }
         async function config(message) {
           switch (message && message.type) {
@@ -5987,9 +6090,12 @@
             case "dots_disconnect":
               await dots.disconnect();
               return status();
-            case "codex_connect":
-              await auth.connect(message.session_token);
+            case "codex_connect": {
+              var before = await auth.load();
+              var after = await auth.connect(message.session_token);
+              if (!before || before.account !== after.account || before.user !== after.user) await chats.forget();
               return status();
+            }
             case "codex_enroll_begin":
               return auth.beginEnroll(message.entropy);
             case "codex_enroll_finish": {
@@ -6009,6 +6115,12 @@
             case "codex_chat_save":
               await chats.update(message.chat, message.nickname, !!message.makeDefault);
               return { ok: true };
+            case "codex_default":
+              await chats.update(message.chat, void 0, true);
+              return status();
+            case "destination":
+              await chats.setDestination(message.destination);
+              return status();
             case "codex_pair":
               return { computers: await remote.pair(message.code) };
             case "codex_computers":
@@ -6016,35 +6128,72 @@
             case "codex_disconnect":
               await remote.disconnect();
               await auth.signOut();
+              await chats.forget();
               return status();
             default:
               throw PluginError("INVALID_ARGS", "Unknown settings request.");
           }
         }
         var actions = {
-          send_to_dot: dots.send,
-          send_to_codex: chats.send,
-          list_codex_chats: listChats,
+          send_to_agent: sendToAgent,
           start_codex_cloud_task: cloud.create
         };
-        async function listChats(args) {
-          var found = await chats.list(args);
-          var lines = found.chats.slice(0, 15).map(function(chat) {
-            var name = chat.nickname ? chat.nickname + ' = "' + chat.label.slice(0, 60) + '"' : '"' + chat.label.slice(0, 60) + '"';
-            return name + " (" + chats.where(chat) + ", " + chat.state + (chat.isDefault ? ", default" : "") + ", chat " + chat.id + ")";
-          });
-          if (!found.chats.length) lines.push("No Codex chats found.");
-          found.errors.forEach(function(e) {
-            lines.push((e.part === "cloud" ? "Codex Cloud: " : "Computers: ") + safeError(e.error).message);
-          });
-          return { text: lines.join("\n") };
+        async function sendToAgent(args) {
+          var text = args.message;
+          if (typeof text !== "string" || !text.trim() || text.length > 16e3) {
+            throw PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
+          }
+          if (args.chat_id !== void 0 && args.chat_id !== null && typeof args.chat_id !== "string") {
+            throw PluginError("INVALID_ARGS", "Name a ChatGPT chat.");
+          }
+          var wanted = (args.chat_id || "").trim().toLowerCase();
+          if (!wanted) {
+            var target = (await destination()).target;
+            if (!target) {
+              throw PluginError("INVALID_ARGS", "Nowhere to send yet. Sign in to your Dot, or pick a default Codex chat, in plugin settings.");
+            }
+            return target.kind === "dot" ? dots.send({ message: text }) : chats.deliver(target.chat, text);
+          }
+          var dot = await dots.status();
+          if (wanted === DOT_ID || dot.configured && wanted === dot.dotName.toLowerCase()) {
+            return dots.send({ message: text });
+          }
+          return chats.send({ message: text, chat: args.chat_id });
         }
         async function action(request) {
           var handler = request && actions[request.action];
           if (!handler) throw PluginError("INVALID_ARGS", "Unknown action.");
           return handler(request.args || {});
         }
-        return { config, action, source: dots.source };
+        async function source(request) {
+          if (!request || request.category !== "agent") throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          if (request.item === "configured") {
+            var where = await destination();
+            return { validUntilMs: now() + 60 * 1e3, instances: [{ instanceId: "chatgpt", properties: {
+              name: { shortText: { text: where.target ? where.target.name : "" } },
+              configured: { boolean: { value: !!where.target }, shortText: { text: where.hint } }
+            } }] };
+          }
+          var dot = await dots.status();
+          if (request.item !== "chats") throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          var instances = dot.configured ? [chatInstance(DOT_ID, dot.dotName, dot.dotName)] : [];
+          (await codexChats()).forEach(function(chat) {
+            instances.push(chatInstance(chat.id, chat.nickname || chat.label, chat.label));
+          });
+          return { validUntilMs: now() + 900 * 1e3, instances };
+        }
+        async function codexChats() {
+          var cache = await chats.cached();
+          if (cache && now() - cache.at < CHATS_FRESH_MS) return cache.chats;
+          var stale = cache ? cache.chats : [];
+          try {
+            var fresh = await chats.list();
+            return fresh.errors.length < 2 ? fresh.chats : stale;
+          } catch (_) {
+            return stale;
+          }
+        }
+        return { config, action, source };
       }
       function safeError(error) {
         if (error && error.code) return { code: error.code, message: error.message };

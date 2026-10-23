@@ -38,9 +38,12 @@ at `chatgpt.com/api/auth/session`), and that access token is the bearer for both
   envelopes: `initialize`, `thread/list`, then `thread/queue/add`, which runs at once on an idle
   session. The computer needs remote control on: the Codex app, or `codex remote-control start`.
 
-Both kinds show up as one list of Codex chats (`codex-chats.js`), most recent first. In settings the
-user picks a default chat and gives chats nicknames; `send_to_codex` takes a nickname, a chat id from
-`list_codex_chats`, or part of a title, and with none goes to the default.
+Both kinds show up as one list of Codex chats (`codex-chats.js`), most recent first, served with the
+Dot as `agent/chats`. In settings the user gives Codex chats nicknames and picks a default chat;
+`send_to_agent` takes a chat id from `agent/chats`, a nickname, or part of a title, and with none goes
+to the Dot or the default Codex chat, whichever settings choose (falling back to whichever is set up).
+The default chat and nicknames belong to the Codex account they were set under (v0.2.0's untagged
+ones go to the first account that reads them); another account starts without them.
 
 Protocol references: [openai/codex](https://github.com/openai/codex) (`codex-rs/app-server-protocol`,
 `app-server-transport/src/transport/remote_control`), and

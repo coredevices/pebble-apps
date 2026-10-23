@@ -261,11 +261,12 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
   }
 
   /** Each online computer's recent sessions, as chats: id, computer, label, state and last activity. */
-  async function chats(args) {
+  // ponytail: one computer at a time; run them in parallel if multi-computer listing outgrows agent/chats' timeout.
+  async function chats() {
     var account = await auth.current();
     var session = await current(account);
     var all = await environments(account, session);
-    var online = args && args.computer ? [pickComputer(all, args.computer)] : all.filter(function (env) { return env.online; });
+    var online = all.filter(function (env) { return env.online; });
     if (!online.length) pickComputer(all);
     var found = [];
     var unpaired = null;

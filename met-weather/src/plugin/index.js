@@ -260,10 +260,18 @@ Pebble.registerSourceHandler(async function (request, respond) {
   try {
     coords = await currentPosition();
   } catch (e) {
+    console.error('No location: ' + ((e && e.message) || e));
     respond.error('PERMISSION_DENIED', (e && e.message) || 'no location');
     return;
   }
-  var forecast = await forecastFor(coords);
+  var forecast;
+  try {
+    forecast = await forecastFor(coords);
+  } catch (e) {
+    console.error('Fetching the MET forecast failed: ' + e);
+    respond.error('PLUGIN_UNAVAILABLE', 'Could not reach MET Norway.');
+    return;
+  }
   var series = forecast.body.properties.timeseries;
   var hourStart = Date.now() - 60 * 60 * 1000;
   series = series.filter(function (entry) { return Date.parse(entry.time) > hourStart; });

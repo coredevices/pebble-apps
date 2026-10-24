@@ -135,13 +135,17 @@ function createService(storage, fetch, now) {
     }
     if (path.endsWith('/completion')) headers.Accept = 'text/event-stream';
     var response;
+    // Org, chat and session ids identify the user's chats.
+    var route = path.split('?')[0].replace(/\/(organizations|chat_conversations|sessions)\/[^/]+/g, '/$1/:id');
     try {
       response = await fetch(ORIGIN + path, { method: method, headers: headers,
         body: body === undefined ? undefined : JSON.stringify(body) });
-    } catch (_) {
+    } catch (e) {
+      console.error('Claude ' + method + ' ' + route + ' failed: ' + String(e).split(path).join(route));
       if (risky) throw uncertain();
       throw PluginError('PLUGIN_UNAVAILABLE', 'Could not reach Claude. Try opening Claude in your browser.');
     }
+    if (response.status < 200 || response.status >= 300) console.error('Claude ' + method + ' ' + route + ': HTTP ' + response.status);
     if (response.status === 401) throw PluginError('AUTH_REQUIRED', 'Claude sign-in expired. Sign in again in settings.');
     if (response.status === 403) throw PluginError('PERMISSION_DENIED', 'Claude blocked this request. Open Claude to check sign-in, browser verification, or organization access.');
     if (response.status === 409) throw PluginError('PLUGIN_UNAVAILABLE', 'Claude reported a session conflict (HTTP 409). Read the session to check its current state before sending again; do not automatically retry.');
@@ -404,6 +408,7 @@ function createService(storage, fetch, now) {
   return { config: config, action: action, source: source };
 }
 function safeError(error) {
+  console.error('Claude request failed: ' + (error && error.code ? error.code + ': ' + error.message : error && error.name || error));
   return error && error.code ? { code: error.code, message: error.message } :
     { code: 'PLUGIN_UNAVAILABLE', message: 'Claude request failed. If sending, delivery may be uncertain; check Claude before retrying.' };
 }

@@ -235,10 +235,17 @@ class ChatController {
         const result = await this.request('approved.list');
         return respond.ok({ text: result.chats.length + ' allowed chats', data: result });
       }
-      if (request.action !== 'send_message') return respond.error('INVALID_ACTION', 'Unknown Chat action');
+      if (request.action !== 'send_message') {
+        console.error('Unsupported action: ' + request.action);
+        return respond.error('INVALID_ACTION', 'Unknown Chat action');
+      }
       const result = await this.request('send', request.args || {});
       respond.ok({ text: 'Sent to ' + result.recipient_name, data: result });
-    } catch (error) { respond.error('CHAT_SEND_FAILED', String(error.message || error)); }
+    } catch (error) {
+      // Not the message: it can name chats and contacts.
+      console.error((request && request.action) + ' failed');
+      respond.error('CHAT_SEND_FAILED', String(error.message || error));
+    }
   }
 
   async handleConfig(message, respond) {

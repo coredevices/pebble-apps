@@ -82,6 +82,7 @@ function createDotsService(storage, fetch, now) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (response.status < 200 || response.status >= 300) {
+      console.error('ChatGPT ' + method + ' ' + path.replace(/\/(by-thread|rooms)\/[^/]+/g, '/$1/:id') + ': HTTP ' + response.status);
       var error = await failure(response, path);
       error.status = response.status;
       throw error;

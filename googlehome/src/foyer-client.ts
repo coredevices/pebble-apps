@@ -262,6 +262,7 @@ export class FoyerClient {
       response = await this.post(url, bodyJson, await this.auth.bearer());
     }
     if (response.status < 200 || response.status > 299) {
+      console.error(`Google Home POST ${service}/${method}: HTTP ${response.status}`);
       throw new FoyerHttpError(
         response.status,
         `foyer ${service}/${method} -> HTTP ${response.status}: ${response.body.substring(0, 300)}`,
@@ -279,6 +280,9 @@ export class FoyerClient {
         'Content-Type': CONTENT_TYPE,
       },
       body: bodyJson,
+    }).catch((e) => {
+      console.error(`Google Home POST ${url} failed: ${e}`);
+      throw e;
     });
     return { status: resp.status, body: await resp.text() };
   }

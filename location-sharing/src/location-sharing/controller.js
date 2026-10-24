@@ -275,13 +275,16 @@ LocationSharingController.prototype.refreshProviders = async function(providers,
         return withProvider(person, provider.id, provider.name);
       }));
     } catch (error) {
-      failures.push(providerFailure(error, provider.name));
+      var failure = providerFailure(error, provider.name);
+      console.error(provider.name + " refresh failed: " + failure.code);
+      failures.push(failure);
     }
   }
   return { people, failures };
 };
 LocationSharingController.prototype.handleSource = async function(request, respond) {
   if (!request || request.category !== "people" || request.item !== "location") {
+    console.error("Unsupported source: " + (request && request.category) + "/" + (request && request.item));
     respond.error("PLUGIN_UNAVAILABLE", "Unsupported Location Sharing source.");
     return;
   }
@@ -304,6 +307,7 @@ LocationSharingController.prototype.handleSource = async function(request, respo
 };
 LocationSharingController.prototype.handleAction = async function(request, respond) {
   if (!request || request.action !== "find_person") {
+    console.error("Unsupported action: " + (request && request.action));
     respond.error("PLUGIN_UNAVAILABLE", "Unknown Location Sharing action.");
     return;
   }
@@ -434,11 +438,13 @@ LocationSharingController.prototype.handleConfig = async function(message) {
         return configReply(this);
       }
       default:
+        console.error("Unsupported settings request: " + (message && message.type));
         return { ok: false, code: "INVALID_REQUEST", message: "Unknown Location Sharing settings request." };
     }
   } catch (error) {
     var provider = message && String(message.type || "").toLowerCase().indexOf("google") !== -1 ? "Google Maps" : "Apple Find My";
     var failure = providerFailure(error, provider);
+    console.error("Settings " + (message && message.type) + " failed: " + failure.code);
     return Object.assign(configReply(this), { ok: false, code: failure.code, message: failure.message });
   }
 };

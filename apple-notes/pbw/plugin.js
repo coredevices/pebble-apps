@@ -8336,6 +8336,7 @@
         return normalizeSession(parsed && parsed.session ? parsed.session : parsed);
       }
       function http(method, url, headers, body) {
+        var path = url.split("?")[0];
         return fetch(url, {
           method,
           headers: headers || {},
@@ -8347,6 +8348,7 @@
             json = JSON.parse(text);
           } catch (e) {
           }
+          if (!response.ok) console.error("Apple Notes " + method + " " + path + ": HTTP " + response.status);
           return {
             ok: response.ok,
             status: response.status,
@@ -8354,7 +8356,8 @@
             text,
             setCookie: response.headers.get("set-cookie")
           };
-        }, function() {
+        }, function(e) {
+          console.error("Apple Notes " + method + " " + path + " failed: " + (e && e.name || "network error"));
           return { ok: false, status: 0, json: null, text: "", setCookie: null };
         });
       }
@@ -9034,6 +9037,7 @@
         };
       }
       function pluginError(result) {
+        console.error("Apple Notes request failed: HTTP " + result.status);
         if (result.status === 401 || result.status === 403 || result.status === 421 || /AUTH|NOT_AUTHENTICATED|SESSION/i.test(String(result.serverErrorCode || ""))) {
           return { code: "AUTH_REQUIRED", message: result.error || "Apple authorization expired." };
         }
@@ -9066,6 +9070,7 @@
       Pebble.registerSourceHandler(function(request, respond) {
         var isConfiguredSource = request.category === "notes" && request.item === "configured";
         if (!isConfiguredSource && (request.category !== "notes" || request.item !== "destination")) {
+          console.error("Unsupported source: " + request.category + "/" + request.item);
           respond.error("PLUGIN_UNAVAILABLE", "Unknown source " + request.category + "/" + request.item + ".");
           return;
         }
@@ -9096,6 +9101,7 @@
       });
       Pebble.registerActionHandler(async function(request, respond) {
         if (request.action !== "create_note") {
+          console.error("Unsupported action: " + request.action);
           respond.error("PLUGIN_UNAVAILABLE", "Unknown action " + request.action + ".");
           return;
         }

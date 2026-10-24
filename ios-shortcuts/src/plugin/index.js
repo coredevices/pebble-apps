@@ -273,7 +273,10 @@
     if (!host) throw pluginError('PLUGIN_UNAVAILABLE', 'Running Apple Shortcuts requires CoreApp on iPhone or iPad.');
     var input = serializeShortcutInput(args);
     var result = await host.run({ name: item.name, input: input, timeoutMs: 60000 });
-    if (!result || result.status !== 'success') throw hostError(result);
+    if (!result || result.status !== 'success') {
+      console.error('Running a shortcut failed: ' + (result && result.status));
+      throw hostError(result);
+    }
     var output = boundedText(result.output, MAX_RESULT_TEXT_CHARS);
     return {
       text: output ? '“' + item.label + '” returned: ' + output : 'Ran “' + item.label + '”.'
@@ -289,6 +292,7 @@
       else throw invalidArgs('Unknown shortcuts source item.');
       respond.data({ validUntilMs: Date.now() + 60000, instances: instances });
     } catch (error) {
+      console.error('Reading ' + (request && request.category) + '/' + (request && request.item) + ' failed: ' + ((error && error.pluginCode) || 'UNKNOWN'));
       respond.error(error.pluginCode || 'UNKNOWN', error.message || String(error));
     }
   });
@@ -313,6 +317,7 @@
       }
       throw invalidArgs('Unknown action: ' + request.action);
     } catch (error) {
+      console.error((request && request.action) + ' failed: ' + ((error && error.pluginCode) || 'UNKNOWN'));
       respond.error(error.pluginCode || 'UNKNOWN', error.message || String(error));
     }
   });
@@ -341,8 +346,10 @@
         respond({ ok: true, recentInputs: [] });
         return;
       }
+      console.error('Unsupported config request: ' + type);
       respond({ error: 'Unknown config request.' });
     } catch (error) {
+      console.error('Config ' + (message && message.type) + ' failed: ' + ((error && error.pluginCode) || 'UNKNOWN'));
       respond({ error: error.message || String(error), code: error.pluginCode || 'UNKNOWN' });
     }
   });

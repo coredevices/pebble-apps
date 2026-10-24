@@ -18,7 +18,10 @@ function get(http, url) {
     body: new Uint8Array(0),
     maxResponseBytes: 4 * 1024 * 1024
   }).then(function (response) {
-    if (response.status < 200 || response.status >= 300) throw new Error('Google Maps returned HTTP ' + response.status + '.');
+    if (response.status < 200 || response.status >= 300) {
+      console.error('Google Maps GET failed: HTTP ' + response.status);
+      throw new Error('Google Maps returned HTTP ' + response.status + '.');
+    }
     return bytes.bytesToUtf8(response.body);
   });
 }

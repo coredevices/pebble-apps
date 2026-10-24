@@ -12,7 +12,11 @@
   function bool(value) { return { boolean: { value: value === true } }; }
   function normalized(value) { return typeof value === 'string' ? value.trim().toLowerCase() : ''; }
   function has(object, key) { return Object.prototype.hasOwnProperty.call(object, key); }
-  function errorReply(respond, error) { respond.error(error.code || 'PLUGIN_UNAVAILABLE', error.message || 'Apple Home request failed.'); }
+  function errorReply(respond, error, operation) {
+    // Not the message: it can name the home and its devices.
+    console.error(operation + ' failed: ' + (error.code || 'PLUGIN_UNAVAILABLE'));
+    respond.error(error.code || 'PLUGIN_UNAVAILABLE', error.message || 'Apple Home request failed.');
+  }
   function keys(args, permitted) {
     Object.keys(args).forEach(function (key) {
       if (permitted.indexOf(key) < 0) fail('INVALID_ARGS', 'Unknown argument: ' + key);
@@ -211,7 +215,7 @@
         });
       }
       respond.data({ validUntilMs: Date.now() + 30000, instances: instances });
-    } catch (error) { errorReply(respond, error); }
+    } catch (error) { errorReply(respond, error, 'Reading ' + (request && request.category) + '/' + (request && request.item)); }
   });
   Pebble.registerActionHandler(async function (request, respond) {
     try {
@@ -258,7 +262,7 @@
       }
       respond.ok({ text: successText,
         data: { devices: results }, refreshed: ['home/device'] });
-    } catch (error) { errorReply(respond, error); }
+    } catch (error) { errorReply(respond, error, request && request.action); }
   });
   Pebble.registerConfigHandler(async function (message, respond) {
     try {
@@ -266,6 +270,9 @@
       var result = await native(message.type, message.type === 'selectHome' ? { homeId: message.homeId } : {});
       if (message.type === 'selectHome' || message.type === 'disconnect') Pebble.refreshSources(sourceKeys);
       respond(result);
-    } catch (error) { respond({ error: error.message || 'Apple Home setup failed.', code: error.code || 'PLUGIN_UNAVAILABLE' }); }
+    } catch (error) {
+      console.error('Config ' + (message && message.type) + ' failed: ' + (error.code || 'PLUGIN_UNAVAILABLE'));
+      respond({ error: error.message || 'Apple Home setup failed.', code: error.code || 'PLUGIN_UNAVAILABLE' });
+    }
   });
 })();

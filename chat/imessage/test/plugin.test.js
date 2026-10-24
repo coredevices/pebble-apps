@@ -27,7 +27,7 @@ function load(options = {}) {
     BigInt,
     TextEncoder,
     TextDecoder,
-    console: { info(prefix, kind) { traces.push([prefix, kind]); } },
+    console: { info(prefix, kind) { traces.push([prefix, kind]); }, error() {} },
     _HostCrypto: { request() { throw new Error('crypto must not run in validation tests'); } },
     _HostX86: { request() { throw new Error('x86 emulation must not run in validation tests'); } },
     _HostTimer: options.hostTimer || {

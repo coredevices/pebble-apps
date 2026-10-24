@@ -165,6 +165,7 @@ async function automationInstances(foyer: FoyerClient) {
 Pebble.registerSourceHandler(async function (request: any, respond: any) {
   try {
     if (request.category !== 'home') {
+      console.error(`Unsupported source: ${request.category}/${request.item}`);
       respond.error('PLUGIN_UNAVAILABLE', `Unknown category ${request.category}.`);
       return;
     }
@@ -181,12 +182,15 @@ Pebble.registerSourceHandler(async function (request: any, respond: any) {
         instances = await automationInstances(foyer);
         break;
       default:
+        console.error(`Unsupported source: home/${request.item}`);
         respond.error('PLUGIN_UNAVAILABLE', `Unknown item ${request.item}.`);
         return;
     }
     respond.data({ validUntilMs: Date.now() + 60 * 1000, instances });
   } catch (error) {
     const failure = pluginError(error);
+    // Messages can name the user's devices and automations.
+    console.error(`Reading home/${request?.item} failed: ${failure.code}`);
     respond.error(failure.code, failure.message);
   }
 });
@@ -232,7 +236,10 @@ function actionResult(action: string, result: any): { ok: true; text: string } |
 
 Pebble.registerActionHandler(async function (request: any, respond: any) {
   try {
-    if (!ACTIONS.has(request.action)) throw new Error(`Unknown action: ${request.action}`);
+    if (!ACTIONS.has(request.action)) {
+      console.error(`Unsupported action: ${request.action}`);
+      throw new Error(`Unknown action: ${request.action}`);
+    }
     const args = request.args ?? {};
     if (DEVICE_ACTIONS.has(request.action) && !hasSelector(args)) {
       throw new Error('Provide at least one device selector: name, room, or type.');
@@ -240,12 +247,14 @@ Pebble.registerActionHandler(async function (request: any, respond: any) {
     const result = await callServerTool(await client(), passcodeStore, request.action, args);
     const outcome = actionResult(request.action, result);
     if (!outcome.ok) {
+      console.error(`${request.action} failed: ${outcome.code}`);
       respond.error(outcome.code, outcome.message);
       return;
     }
     respond.ok({ text: outcome.text, refreshed: SOURCES });
   } catch (error) {
     const failure = pluginError(error);
+    console.error(`${request?.action} failed: ${failure.code}`);
     respond.error(failure.code, failure.message);
   }
 });

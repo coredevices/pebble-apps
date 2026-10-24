@@ -471,10 +471,14 @@ PERFORMANCE OF THIS SOFTWARE.
               const result2 = await this.request("approved.list");
               return respond.ok({ text: result2.chats.length + " allowed chats", data: result2 });
             }
-            if (request.action !== "send_message") return respond.error("INVALID_ACTION", "Unknown Chat action");
+            if (request.action !== "send_message") {
+              console.error("Unsupported action: " + request.action);
+              return respond.error("INVALID_ACTION", "Unknown Chat action");
+            }
             const result = await this.request("send", request.args || {});
             respond.ok({ text: "Sent to " + result.recipient_name, data: result });
           } catch (error) {
+            console.error((request && request.action) + " failed");
             respond.error("CHAT_SEND_FAILED", String(error.message || error));
           }
         }
@@ -16431,6 +16435,7 @@ PERFORMANCE OF THIS SOFTWARE.
         return Object.freeze(reply);
       }
       function safeFailure(error, operation) {
+        console.error("iMessage " + operation + " failed: " + (error && (error.code || error.name)));
         if (error instanceof RuntimeError) {
           if (operation === "configure" && error.code === "APS_ACTIVATION_INVALID_INPUT") {
             return { code: "INVALID_ARGS", message: "The Mac + RustPush token cannot be used for Apple Push setup." };
@@ -16502,6 +16507,7 @@ PERFORMANCE OF THIS SOFTWARE.
       };
       PluginController.prototype.handleAction = async function(request, respond) {
         if (!request || request.action !== "send_message") {
+          console.error("Unsupported action: " + (request && request.action));
           respond.error("PLUGIN_UNAVAILABLE", "Unknown iMessage action.");
           return;
         }
@@ -17734,7 +17740,15 @@ PERFORMANCE OF THIS SOFTWARE.
         this.trace = trace;
       }
       TlsRoutingHttpProvider.prototype.request = function(request) {
-        return Array.isArray(request && request.trustAnchors) && request.trustAnchors.length > 0 ? requestOverTls(this.tls, this.timer, request, this.trace) : this.fallback.request(request);
+        var target = request && request.method + " " + String(request.url).split("?")[0];
+        var response = Array.isArray(request && request.trustAnchors) && request.trustAnchors.length > 0 ? requestOverTls(this.tls, this.timer, request, this.trace) : this.fallback.request(request);
+        return Promise.resolve(response).then(function(value) {
+          if (value && (value.status < 200 || value.status >= 300)) console.error(target + ": HTTP " + value.status);
+          return value;
+        }, function(error) {
+          console.error(target + " failed: " + (error && error.message));
+          throw error;
+        });
       };
       module.exports = {
         TlsRoutingHttpProvider,

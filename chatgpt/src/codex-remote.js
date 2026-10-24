@@ -44,6 +44,7 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
       headers: headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (response.status < 200 || response.status >= 300) console.error('Codex remote ' + method + ' ' + path + ': HTTP ' + response.status);
     if (response.status === 401) throw notConnected();
     if (response.status === 403) {
       throw PluginError('PERMISSION_DENIED', 'Codex remote control is not enabled for this ChatGPT account or workspace.');

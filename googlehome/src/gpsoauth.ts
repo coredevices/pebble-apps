@@ -143,7 +143,11 @@ export class GpsOAuth {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: formEncode(form),
+    }).catch((e) => {
+      console.error(`Google auth POST ${AUTH_URL} failed: ${e}`);
+      throw e;
     });
+    if (!resp.ok) console.error(`Google auth POST ${AUTH_URL}: HTTP ${resp.status}`);
     return parseAuthResponse(await resp.text());
   }
 }

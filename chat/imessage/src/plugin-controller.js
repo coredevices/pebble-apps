@@ -34,6 +34,8 @@ function configReply(status, preferences) {
 }
 
 function safeFailure(error, operation) {
+  // Not the message: it can carry account material.
+  console.error('iMessage ' + operation + ' failed: ' + (error && (error.code || error.name)));
   if (error instanceof RuntimeError) {
     if (operation === 'configure' && error.code === 'APS_ACTIVATION_INVALID_INPUT') {
       return { code: 'INVALID_ARGS', message: 'The Mac + RustPush token cannot be used for Apple Push setup.' };
@@ -140,6 +142,7 @@ PluginController.prototype._configReply = function (status) {
 
 PluginController.prototype.handleAction = async function (request, respond) {
   if (!request || request.action !== 'send_message') {
+    console.error('Unsupported action: ' + (request && request.action));
     respond.error('PLUGIN_UNAVAILABLE', 'Unknown iMessage action.');
     return;
   }

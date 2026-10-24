@@ -417,12 +417,14 @@ async function collectMarkdown(dir, prefix, out) {
 async function requireRoot(respond, write) {
   var status = await rootStatus();
   if (!status.configured) {
+    console.error('Folder unavailable: ' + (status.withdrawn ? 'access withdrawn' : 'not chosen'));
     respond.error('AUTH_REQUIRED', status.withdrawn
       ? 'Access to the Obsidian/Markdown folder was withdrawn. Choose it again in plugin settings.'
       : 'Choose an Obsidian/Markdown folder in plugin settings first.');
     return null;
   }
   if (write && !status.writable) {
+    console.error('Folder is read-only');
     respond.error('PERMISSION_DENIED', 'The Obsidian/Markdown folder is read-only. Allow this plugin to change files, or choose the folder again in plugin settings.');
     return null;
   }
@@ -430,6 +432,8 @@ async function requireRoot(respond, write) {
 }
 
 function failWrite(respond, where, error) {
+  // Not `where` or the message: both can carry vault file names.
+  console.error('Saving the note failed: ' + (error && error.name));
   if (isNotAllowed(error)) {
     respond.error('PERMISSION_DENIED', 'Could not save to ' + where + ': access to the folder was withdrawn.');
     return;
@@ -508,6 +512,7 @@ Pebble.registerSourceHandler(async function (request, respond) {
     });
     return;
   }
+  console.error('Unsupported source: ' + request.category + '/' + request.item);
   respond.error('INVALID_REQUEST', 'Unsupported Obsidian/Markdown Notes source.');
 });
 
@@ -688,6 +693,7 @@ Pebble.registerActionHandler(async function (request, respond) {
   var args = request.args || {};
   if (request.action === 'create_note') return createNote(args, respond);
   if (request.action === 'create_reminder') return createReminder(args, respond);
+  console.error('Unsupported action: ' + request.action);
   respond.error('INVALID_REQUEST', 'Unsupported Obsidian/Markdown Notes action.');
 });
 
@@ -709,7 +715,10 @@ Pebble.registerConfigHandler(async function (message, respond) {
     if (!id) { respond({ error: 'No folder was chosen.' }); return; }
     var handle;
     try { handle = await Pebble.fileSystem.getHandle(id); }
-    catch (error) { respond({ error: 'Could not open the chosen folder: ' + fileError(error) }); return; }
+    catch (error) {
+      console.error('Opening the chosen folder failed: ' + (error && error.name));
+      respond({ error: 'Could not open the chosen folder: ' + fileError(error) }); return;
+    }
     if (handle.kind !== 'directory') { respond({ error: 'Choose a folder, not a file.' }); return; }
     var previousId = config().folderId;
     setFolder(id, handle.name || (typeof message.name === 'string' ? message.name : ''));
@@ -728,7 +737,10 @@ Pebble.registerConfigHandler(async function (message, respond) {
       if (!listRoot.configured) { respond({ error: 'Choose a folder first.' }); return; }
       respond(await listRecentNotes(listRoot.handle, message.query));
     }
-    catch (error) { respond({ error: 'Could not list Markdown notes: ' + fileError(error) }); }
+    catch (error) {
+      console.error('Listing Markdown notes failed: ' + (error && error.name));
+      respond({ error: 'Could not list Markdown notes: ' + fileError(error) });
+    }
     return;
   }
   if (message.type === 'save') {
@@ -740,6 +752,7 @@ Pebble.registerConfigHandler(async function (message, respond) {
       if (!saveRoot.configured) { respond({ error: 'Choose a folder first.' }); return; }
       try { await readExisting(saveRoot.handle, path); }
       catch (error) {
+        console.error('Verifying the selected note failed: ' + (error && error.name));
         respond({ error: isNotFound(error) ? 'That note was moved or deleted. Refresh the list and choose it again.' : 'Could not verify the selected note: ' + fileError(error) });
         return;
       }

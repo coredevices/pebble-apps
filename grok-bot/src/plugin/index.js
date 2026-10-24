@@ -161,11 +161,20 @@ function createService(storage, fetch, cache) {
 
   async function post(url, headers, body, deadline) {
     var text, response;
-    await within(deadline, (async function () {
-      response = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body || {}) });
-      text = await response.text();
-    })());
-    if (!response.ok) throw new PluginError("HTTP", "HTTP " + response.status, response.status);
+    var path = url.replace(/^https:\/\/[^/]+/, "");
+    try {
+      await within(deadline, (async function () {
+        response = await fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body || {}) });
+        text = await response.text();
+      })());
+    } catch (e) {
+      console.error("Grok Bot POST " + path + " failed: " + ((e && e.message) || e));
+      throw e;
+    }
+    if (!response.ok) {
+      console.error("Grok Bot POST " + path + " failed: HTTP " + response.status);
+      throw new PluginError("HTTP", "HTTP " + response.status, response.status);
+    }
     try {
       return text ? JSON.parse(text) : {};
     } catch (e) {
@@ -554,6 +563,7 @@ if (typeof Pebble !== "undefined") {
       respond.ok(await service.action(request));
     } catch (error) {
       var safe = safeError(error);
+      console.error("Grok Bot " + (request && request.action) + " failed: " + safe.code);
       respond.error(safe.code, safe.message);
     }
   });
@@ -562,6 +572,7 @@ if (typeof Pebble !== "undefined") {
       respond.data(await service.source(request));
     } catch (error) {
       var safe = safeError(error);
+      console.error("Grok Bot source " + (request && request.item) + " failed: " + safe.code);
       respond.error(safe.code, safe.message);
     }
   });
@@ -569,6 +580,7 @@ if (typeof Pebble !== "undefined") {
     try {
       respond(await service.config(message));
     } catch (error) {
+      console.error("Grok Bot settings " + (message && message.type) + " failed: " + safeError(error).code);
       respond({ error: safeError(error).message });
     }
   });

@@ -102,7 +102,11 @@ function createCodexChats(storage, remote, cloud, auth, now) {
     try { owner = await auth.load(); } catch (_) { /* then nothing is cached */ }
     var errors = [];
     function part(name, promise) {
-      return promise.catch(function (error) { errors.push({ part: name, error: error }); return []; });
+      return promise.catch(function (error) {
+        console.error('Listing Codex ' + name + ' chats failed: ' + ((error && error.code) || (error && error.name) || error));
+        errors.push({ part: name, error: error });
+        return [];
+      });
     }
     var halves = await Promise.all([
       part('computers', remote.chats()),

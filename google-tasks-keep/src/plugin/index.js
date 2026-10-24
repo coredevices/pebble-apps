@@ -512,8 +512,10 @@ function http(method, url, headers, body) {
     headers: headers || {},
     body: body === undefined || body === null ? undefined : body,
   }).then(async function (response) {
+    if (!response.ok) console.error('Google ' + method + ' ' + url.split('?')[0] + ': HTTP ' + response.status);
     return { ok: response.ok, status: Number(response.status), text: String(await response.text() || '') };
-  }, function () {
+  }, function (error) {
+    console.error('Google ' + method + ' ' + url.split('?')[0] + ' failed: ' + errorText(error));
     return { ok: false, status: 0, text: '' };
   });
 }
@@ -996,9 +998,11 @@ Pebble.registerSourceHandler(async function (request, respond) {
       });
       return;
     }
+    console.error('Unsupported source: ' + request.category + '/' + request.item);
     respond.error('INVALID_REQUEST', 'Unsupported Google Tasks & Keep source.');
   } catch (error) {
     var sourceFailure = classifyError(error);
+    console.error('Reading ' + (request && request.category) + '/' + (request && request.item) + ' failed: ' + sourceFailure.message);
     respond.error(sourceFailure.code, sourceFailure.message);
   }
 });
@@ -1055,9 +1059,11 @@ Pebble.registerActionHandler(async function (request, respond) {
       return;
     }
 
+    console.error('Unsupported action: ' + request.action);
     respond.error('INVALID_REQUEST', 'Unsupported Google Tasks & Keep action.');
   } catch (error) {
     var failure = classifyError(error);
+    console.error((request && request.action) + ' failed: ' + failure.message);
     respond.error(failure.code, failure.message);
   }
 });

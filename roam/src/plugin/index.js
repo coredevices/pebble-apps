@@ -115,11 +115,14 @@ async function appendBlocks(config, location, strings) {
     }
     return { ok: response.status === 200 && captureSuccessful, status: response.status, text: text };
   } catch (error) {
+    // Not the error itself: it can include the URL, whose path names the graph.
+    console.error('Roam append-blocks request failed: ' + (error && error.name));
     return { ok: false, status: 0, text: '' };
   }
 }
 
 function actionFailure(response) {
+  console.error('Roam capture failed: HTTP ' + response.status);
   if (response.status === 401 || response.status === 403) {
     return { code: 'AUTH_REQUIRED', message: 'Roam authorization is invalid or no longer available.' };
   }
@@ -173,6 +176,7 @@ function destinationLabel(config) {
 
 Pebble.registerSourceHandler(async function (request, respond) {
   if (request.category !== 'notes' || request.item !== 'destination') {
+    console.error('Unsupported source: ' + request.category + '/' + request.item);
     respond.error('PLUGIN_UNAVAILABLE', 'Unsupported Roam source.');
     return;
   }
@@ -193,6 +197,7 @@ Pebble.registerSourceHandler(async function (request, respond) {
 
 Pebble.registerActionHandler(async function (request, respond) {
   if (request.action !== 'create_note') {
+    console.error('Unsupported action: ' + request.action);
     respond.error('PLUGIN_UNAVAILABLE', 'Unsupported Roam action.');
     return;
   }

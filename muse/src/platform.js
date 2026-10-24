@@ -30,12 +30,16 @@ export async function rest(origin, cookie, path, body, signal) {
           "User-Agent": "Mozilla/5.0 musemeow",
         },
         body: JSON.stringify(body),
-      }).catch(() => {
+      }).catch((error) => {
+        console.error(`Muse POST /api/hatch/${path} failed: ${error?.message || error}`);
         throw failed();
       }),
       interrupted,
     ]);
-    if (response.status !== 200) throw new HTTPError(path, response.status);
+    if (response.status !== 200) {
+      console.error(`Muse POST /api/hatch/${path} failed: HTTP ${response.status}`);
+      throw new HTTPError(path, response.status);
+    }
     const text = String(await Promise.race([response.text(), interrupted]));
     if (text.length > MAX_RESPONSE_CHARS)
       throw new MuseError("REST response too large");

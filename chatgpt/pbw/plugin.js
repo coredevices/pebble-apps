@@ -219,6 +219,7 @@
             body: body === void 0 ? void 0 : JSON.stringify(body)
           });
           if (response.status < 200 || response.status >= 300) {
+            console.error("ChatGPT " + method + " " + path.replace(/\/(by-thread|rooms)\/[^/]+/g, "/$1/:id") + ": HTTP " + response.status);
             var error = await failure(response, path);
             error.status = response.status;
             throw error;
@@ -5414,6 +5415,7 @@
             headers,
             body: body === void 0 ? void 0 : JSON.stringify(body)
           });
+          if (response.status < 200 || response.status >= 300) console.error("Codex remote " + method + " " + path + ": HTTP " + response.status);
           if (response.status === 401) throw notConnected();
           if (response.status === 403) {
             throw PluginError("PERMISSION_DENIED", "Codex remote control is not enabled for this ChatGPT account or workspace.");
@@ -5754,6 +5756,9 @@
             headers: codexHeaders(account),
             body: body === void 0 ? void 0 : JSON.stringify(body)
           });
+          if (response.status < 200 || response.status >= 300) {
+            console.error("Codex Cloud " + method + " " + path.split("?")[0].replace(/\/tasks\/(?!list$)[^/]+/, "/tasks/:id") + ": HTTP " + response.status);
+          }
           if (response.status === 401) throw PluginError("AUTH_REQUIRED", "Codex sign-in expired. Sign in to Codex again in plugin settings.");
           if (response.status === 403) throw PluginError("PERMISSION_DENIED", "Codex Cloud is not enabled for this ChatGPT account or workspace.");
           if (response.status === 404) throw PluginError("INVALID_ARGS", "Codex Cloud could not find that task.");
@@ -5915,6 +5920,7 @@
           var errors = [];
           function part(name, promise) {
             return promise.catch(function(error) {
+              console.error("Listing Codex " + name + " chats failed: " + (error && error.code || error && error.name || error));
               errors.push({ part: name, error });
               return [];
             });
@@ -6162,11 +6168,17 @@
         }
         async function action(request) {
           var handler = request && actions[request.action];
-          if (!handler) throw PluginError("INVALID_ARGS", "Unknown action.");
+          if (!handler) {
+            console.error("Unsupported action: " + (request && request.action));
+            throw PluginError("INVALID_ARGS", "Unknown action.");
+          }
           return handler(request.args || {});
         }
         async function source(request) {
-          if (!request || request.category !== "agent") throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          if (!request || request.category !== "agent") {
+            console.error("Unsupported source: " + (request && request.category));
+            throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          }
           if (request.item === "configured") {
             var where = await destination();
             return { validUntilMs: now() + 60 * 1e3, instances: [{ instanceId: "chatgpt", properties: {
@@ -6175,7 +6187,10 @@
             } }] };
           }
           var dot = await dots.status();
-          if (request.item !== "chats") throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          if (request.item !== "chats") {
+            console.error("Unsupported source: agent/" + request.item);
+            throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
+          }
           var instances = dot.configured ? [chatInstance(DOT_ID, dot.dotName, dot.dotName)] : [];
           (await codexChats()).forEach(function(chat) {
             instances.push(chatInstance(chat.id, chat.nickname || chat.label, chat.label));
@@ -6196,6 +6211,7 @@
         return { config, action, source };
       }
       function safeError(error) {
+        console.error("ChatGPT request failed: " + (error && error.code || error && error.name || error));
         if (error && error.code) return { code: error.code, message: error.message };
         return {
           code: "PLUGIN_UNAVAILABLE",

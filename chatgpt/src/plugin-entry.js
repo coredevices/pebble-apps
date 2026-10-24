@@ -152,12 +152,18 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
 
   async function action(request) {
     var handler = request && actions[request.action];
-    if (!handler) throw PluginError('INVALID_ARGS', 'Unknown action.');
+    if (!handler) {
+      console.error('Unsupported action: ' + (request && request.action));
+      throw PluginError('INVALID_ARGS', 'Unknown action.');
+    }
     return handler(request.args || {});
   }
 
   async function source(request) {
-    if (!request || request.category !== 'agent') throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
+    if (!request || request.category !== 'agent') {
+      console.error('Unsupported source: ' + (request && request.category));
+      throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
+    }
     if (request.item === 'configured') {
       var where = await destination();
       return { validUntilMs: now() + 60 * 1000, instances: [{ instanceId: 'chatgpt', properties: {
@@ -166,7 +172,10 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
       } }] };
     }
     var dot = await dots.status();
-    if (request.item !== 'chats') throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
+    if (request.item !== 'chats') {
+      console.error('Unsupported source: agent/' + request.item);
+      throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
+    }
     var instances = dot.configured ? [chatInstance(DOT_ID, dot.dotName, dot.dotName)] : [];
     (await codexChats()).forEach(function (chat) {
       instances.push(chatInstance(chat.id, chat.nickname || chat.label, chat.label));
@@ -192,6 +201,8 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
 
 /** Never forward responses, tokens or exception text from ChatGPT or Codex. */
 function safeError(error) {
+  // Coded messages can quote chat names; uncaught ones can quote responses.
+  console.error('ChatGPT request failed: ' + ((error && error.code) || (error && error.name) || error));
   if (error && error.code) return { code: error.code, message: error.message };
   return {
     code: 'PLUGIN_UNAVAILABLE',

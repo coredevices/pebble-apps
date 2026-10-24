@@ -100,12 +100,14 @@ async function request(effects, method, url, headers, body) {
       body: requestBody(body),
       maxResponseBytes: 4 * 1024 * 1024
     });
-  } catch (_) {
+  } catch (error) {
+    console.error("Google " + method + " " + url.split("?")[0] + " failed: " + ((error && error.message) || error));
     throw googleError("GOOGLE_LOCATION_NETWORK_ERROR", "Could not reach Google location sharing.");
   }
   if (!response || !Number.isInteger(response.status) || !(response.body instanceof Uint8Array)) {
     throw googleError("GOOGLE_LOCATION_PROTOCOL_ERROR", "Google returned a malformed response.");
   }
+  if (response.status >= 400) console.error("Google " + method + " " + url.split("?")[0] + " failed: HTTP " + response.status);
   return {
     status: response.status,
     text: bytes.bytesToUtf8(response.body),

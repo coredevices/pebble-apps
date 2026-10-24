@@ -34,6 +34,8 @@ function bridgeErrorCode(error) {
 
 function userFacingError(error, operation) {
   var code = bridgeErrorCode(error);
+  // Bridge messages can echo task titles, so only the code is logged for them.
+  console.error('Tasks.org could not ' + operation + ': ' + (code || (error && error.message) || error));
   if (code === 'AUTH_REQUIRED' || code === 'PERMISSION_DENIED') {
     return { code: 'AUTH_REQUIRED', message: 'Allow Pebble to access tasks.org.' };
   }
@@ -118,6 +120,7 @@ async function configurationStatus() {
   try {
     status = await readStatus();
   } catch (error) {
+    console.error('Reading tasks.org status failed: ' + (bridgeErrorCode(error) || (error && error.message) || error));
     return { configured: false, ready: false, supported: false, authorization: 'restricted' };
   }
   var response = {
@@ -150,6 +153,7 @@ async function configurationStatus() {
 
 Pebble.registerSourceHandler(async function (request, respond) {
   if (request.category !== 'reminders' || request.item !== 'list') {
+    console.error('Unsupported source: ' + request.category + '/' + request.item);
     respond.error('INVALID_REQUEST', 'Unsupported tasks.org source.');
     return;
   }
@@ -185,6 +189,7 @@ Pebble.registerSourceHandler(async function (request, respond) {
 
 Pebble.registerActionHandler(async function (request, respond) {
   if (request.action !== 'create_reminder') {
+    console.error('Unsupported action: ' + request.action);
     respond.error('INVALID_REQUEST', 'Unsupported tasks.org action.');
     return;
   }

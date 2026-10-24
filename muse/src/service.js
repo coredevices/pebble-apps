@@ -17,7 +17,10 @@ export class PluginError extends Error {
 async function accountVm(cookie) {
   if (typeof cookie !== "string" || !cookie || /[\r\n]/.test(cookie)) return null;
   const response = await fetch("https://muse.ai/api/session", { headers: { Cookie: cookie } });
-  if (response.status !== 200) return null;
+  if (response.status !== 200) {
+    console.error(`Muse GET /api/session failed: HTTP ${response.status}`);
+    return null;
+  }
   const session = await response.json();
   return typeof session?.vm_id === "string" ? session.vm_id : null;
 }

@@ -31,6 +31,9 @@ function createCodexCloud(fetch, auth) {
       headers: codexHeaders(account),
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (response.status < 200 || response.status >= 300) {
+      console.error('Codex Cloud ' + method + ' ' + path.split('?')[0].replace(/\/tasks\/(?!list$)[^/]+/, '/tasks/:id') + ': HTTP ' + response.status);
+    }
     if (response.status === 401) throw PluginError('AUTH_REQUIRED', 'Codex sign-in expired. Sign in to Codex again in plugin settings.');
     if (response.status === 403) throw PluginError('PERMISSION_DENIED', 'Codex Cloud is not enabled for this ChatGPT account or workspace.');
     if (response.status === 404) throw PluginError('INVALID_ARGS', 'Codex Cloud could not find that task.');

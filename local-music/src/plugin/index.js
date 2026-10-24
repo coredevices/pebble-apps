@@ -174,6 +174,7 @@
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.onload = function () {
       if (xhr.status < 200 || xhr.status >= 300) {
+        console.error('YouTube Music search POST failed: HTTP ' + xhr.status);
         callback('YouTube Music search failed.');
         return;
       }
@@ -188,8 +189,14 @@
         callback('YouTube Music returned an unreadable search result.');
       }
     };
-    xhr.onerror = function () { callback('Could not reach YouTube Music.'); };
-    xhr.ontimeout = function () { callback('YouTube Music search timed out.'); };
+    xhr.onerror = function () {
+      console.error('YouTube Music search POST failed: network error');
+      callback('Could not reach YouTube Music.');
+    };
+    xhr.ontimeout = function () {
+      console.error('YouTube Music search POST timed out');
+      callback('YouTube Music search timed out.');
+    };
     var date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     var body = {
       context: {
@@ -257,11 +264,13 @@
 
   Pebble.registerActionHandler(function (request, respond) {
     if (request.action !== 'play') {
+      console.error('Unsupported action: ' + request.action);
       respond.error('PLUGIN_UNAVAILABLE', 'Unknown Android Music action.');
       return;
     }
     play(request.args || {}, function (result) {
       if (!result.ok) {
+        console.error('play failed: ' + (result.code || 'UNKNOWN'));
         respond.error(result.code || 'UNKNOWN', result.message || 'Could not start music.');
         return;
       }
@@ -305,6 +314,7 @@
         package_id: testPackage
       }, function (outcome) {
         if (!outcome.ok) {
+          console.error('Test play failed: ' + (outcome.code || 'UNKNOWN'));
           respond({ error: outcome.message || 'Could not start music.' });
           return;
         }
@@ -317,6 +327,7 @@
       });
       return;
     }
+    console.error('Unsupported config request: ' + message.type);
     respond({ error: 'Unknown request.' });
   });
 })();

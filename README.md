@@ -62,7 +62,6 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `obsidian` | Obsidian/Markdown Notes |
 | `plugin-test` | Plugin Demo: Dashboard (watchapp; needs the Pebble SDK) |
 | `roam` | Roam Research |
-| `spotify` | Spotify |
 | `stocks` | Stocks |
 | `tasks-org` | Tasks.org |
 | `ticktick` | TickTick |

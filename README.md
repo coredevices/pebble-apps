@@ -47,7 +47,6 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 
 | Directory | Name |
 |---|---|
-| `apple-home` | Apple Home Control |
 | `apple-notes` | Apple Notes |
 | `chat` | Chat |
 | `chatgpt` | ChatGPT (Dot, Codex sessions, Codex Cloud) |
@@ -56,8 +55,6 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `googlehome` | GoogleHome |
 | `grok-bot` | Grok Bot |
 | `hue` | Hue |
-| `ios-shortcuts` | iOS Shortcuts |
-| `local-music` | Android Music |
 | `location-sharing` | LocationSharing |
 | `met-weather` | MET Norway Weather |
 | `muse` | Muse |

@@ -19,6 +19,15 @@ Each plugin's real source is in `src/`. Hand-written plugins are the project its
 source and build at the directory root and the SDK project (built script, settings page) in `pbw/`:
 build, then run `pebble build` in `pbw/`.
 
+Released `pebble-tool` can't build plugin-only projects yet, so until it can, package them with
+`python3 scripts/pack-plugin-pbw.py <project>` (the project is `<dir>` or `<dir>/pbw`).
+
+## Publishing
+
+Pushing to `main` publishes every plugin whose `package.json` version isn't in the App Store yet
+(`.github/workflows/publish.yml`), with the subject of the commit that set that version as the release
+notes. Bump the version to release. A plugin's first listing is created by hand.
+
 | Plugin | Build | Test |
 |---|---|---|
 | `apple-notes` | `npm ci && npm run build` | `npm test` |

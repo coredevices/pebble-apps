@@ -1,0 +1,102 @@
+name: Publish plugins
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+concurrency:
+  group: publish-plugins
+  cancel-in-progress: false
+
+env:
+  API_BASE: https://appstore-api.repebble.com
+  # Public Firebase web key (same default pebble-tool ships with).
+  FIREBASE_API_KEY: AIzaSyBZ9Cdvwwv9At2lPmc8TxyyEqSXGXejGvc
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Firebase ID token
+        env:
+          FIREBASE_REFRESH_TOKEN: ${{ secrets.FIREBASE_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_REFRESH_TOKEN" ]; then
+            echo "::notice::FIREBASE_REFRESH_TOKEN is not set; nothing published"
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          token=$(curl -fsS "https://securetoken.googleapis.com/v1/token?key=$FIREBASE_API_KEY" \
+            -d grant_type=refresh_token -d "refresh_token=$FIREBASE_REFRESH_TOKEN" | jq -r .id_token)
+          echo "::add-mask::$token"
+          echo "ID_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Find plugins whose version is not in the store
+        id: plan
+        if: env.SKIP != '1'
+        run: |
+          curl -fsS -H "Authorization: Bearer $ID_TOKEN" "$API_BASE/api/v1/developer/me" > /tmp/me.json
+          : > /tmp/plan.tsv
+          for dir in */; do
+            dir=${dir%/}
+            proj=$dir; [ -f "$dir/pbw/package.json" ] && proj=$dir/pbw
+            [ -f "$proj/package.json" ] || continue
+            uuid=$(jq -r '.pebble.uuid // empty | ascii_downcase' "$proj/package.json")
+            version=$(jq -r .version "$proj/package.json")
+            [ -n "$uuid" ] || continue
+            app=$(jq -c --arg u "$uuid" '.apps[] | select((.app_uuid // "") | ascii_downcase == $u)' /tmp/me.json)
+            if [ -z "$app" ]; then
+              echo "::warning::$dir ($uuid) is not in the store; create the listing once by hand"
+              continue
+            fi
+            if jq -e --arg v "$version" '.versions | index($v)' <<<"$app" >/dev/null; then
+              echo "$dir $version already published"
+              continue
+            fi
+            printf '%s\t%s\t%s\t%s\n' "$dir" "$proj" "$version" "$(jq -r .app_id <<<"$app")" >> /tmp/plan.tsv
+          done
+          cat /tmp/plan.tsv
+          if cut -f2 /tmp/plan.tsv | while read -r p; do [ -d "$p/src/c" ] && echo yes; done | grep -q yes; then
+            echo "sdk=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Pebble SDK
+        if: steps.plan.outputs.sdk == 'true'
+        run: |
+          pipx install pebble-tool
+          pebble sdk install latest
+
+      - name: Build, test, publish
+        if: env.SKIP != '1'
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r dir proj version app_id; do
+            echo "::group::$dir $version"
+            case $dir in
+              location-sharing) (npm ci --prefix chat/imessage && cd "$dir" && npm ci && node scripts/build-plugin.mjs && node --test plugin.test.cjs test/*.test.cjs) ;;
+              chat) (cd "$dir" && npm ci --prefix imessage && node scripts/build-plugin.mjs && node --test *.test.cjs) ;;
+              *) (cd "$dir"
+                  [ -f package-lock.json ] && npm ci
+                  npm run build --if-present
+                  npm test --if-present) ;;
+            esac
+            python3 scripts/pack-plugin-pbw.py "$proj"
+            pbw="$proj/build/$(jq -r .name "$proj/package.json").pbw"
+            notes=$(git log -1 --format=%s -- "$proj/package.json")
+            curl -fsS -H "Authorization: Bearer $ID_TOKEN" \
+              -F "version=$version" -F "releaseNotes=$notes" -F isPublished=true \
+              -F "pbwFile=@$pbw;type=application/octet-stream" \
+              "$API_BASE/api/dashboard/apps/$app_id/releases"
+            echo
+            echo "::endgroup::"
+          done < /tmp/plan.tsv

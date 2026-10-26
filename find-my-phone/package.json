@@ -1,7 +1,7 @@
 {
   "name": "find-my-phone",
   "author": "Core Devices",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "keywords": [
     "pebble-app"
   ],
@@ -29,7 +29,14 @@
       "MESSAGE"
     ],
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png",
+          "menuIcon": true
+        }
+      ]
     },
     "usesPermissions": [
       "FindMyPhone"

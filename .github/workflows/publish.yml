@@ -13,34 +13,33 @@ concurrency:
 env:
   API_BASE: https://appstore-api.repebble.com
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
+# Only plan and publish may mint App Store tokens; they run nothing but curl and jq. Plugin code and
+# its npm dependencies run in build, which has no id-token permission.
 jobs:
-  publish:
+  plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      sdk: ${{ steps.plan.outputs.sdk }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Store token from GitHub
-        run: |
-          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$API_BASE" | jq -r .value)
-          echo "::add-mask::$token"
-          echo "ID_TOKEN=$token" >> "$GITHUB_ENV"
-
       - name: Find plugins whose version is not in the store
         id: plan
         run: |
-          curl -fsS -H "Authorization: Bearer $ID_TOKEN" "$API_BASE/api/v1/developer/me" > /tmp/me.json
-          : > /tmp/plan.tsv
+          set -euo pipefail
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$API_BASE" | jq -r .value)
+          echo "::add-mask::$token"
+          curl -fsS -H "Authorization: Bearer $token" "$API_BASE/api/v1/developer/me" > /tmp/me.json
+          : > /tmp/plan.jsonl
           for dir in */; do
             dir=${dir%/}
             proj=$dir; [ -f "$dir/pbw/package.json" ] && proj=$dir/pbw
@@ -57,24 +56,46 @@ jobs:
               echo "$dir $version already published"
               continue
             fi
-            printf '%s\t%s\t%s\t%s\n' "$dir" "$proj" "$version" "$(jq -r .app_id <<<"$app")" >> /tmp/plan.tsv
+            jq -cn --arg dir "$dir" --arg proj "$proj" --arg version "$version" \
+              --arg app_id "$(jq -r .app_id <<<"$app")" \
+              --arg notes "$(git log -1 --format=%s -- "$proj/package.json")" \
+              '{dir: $dir, proj: $proj, version: $version, app_id: $app_id, notes: $notes}' >> /tmp/plan.jsonl
           done
-          cat /tmp/plan.tsv
-          if cut -f2 /tmp/plan.tsv | while read -r p; do [ -d "$p/src/c" ] && echo yes; done | grep -q yes; then
-            echo "sdk=true" >> "$GITHUB_OUTPUT"
-          fi
+          plan=$(jq -sc . /tmp/plan.jsonl)
+          echo "$plan" | jq -r '.[] | "\(.dir) \(.version) to publish"'
+          echo "plan=$plan" >> "$GITHUB_OUTPUT"
+          sdk=false
+          for proj in $(jq -r '.[].proj' <<<"$plan"); do [ -d "$proj/src/c" ] && sdk=true; done
+          echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.plan != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Install Pebble SDK
-        if: steps.plan.outputs.sdk == 'true'
+        if: needs.plan.outputs.sdk == 'true'
         run: |
           pipx install pebble-tool
           pebble sdk install latest
 
-      - name: Build, test, publish
+      - name: Build and test
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
         run: |
           set -euo pipefail
-          while IFS=$'\t' read -r dir proj version app_id; do
-            echo "::group::$dir $version"
+          mkdir -p dist
+          jq -c '.[]' <<<"$PLAN" | while read -r item; do
+            dir=$(jq -r .dir <<<"$item"); proj=$(jq -r .proj <<<"$item")
+            echo "::group::$dir"
             case $dir in
               location-sharing) (npm ci --prefix chat/imessage && cd "$dir" && npm ci && node scripts/build-plugin.mjs && node --test plugin.test.cjs test/*.test.cjs) ;;
               chat) (cd "$dir" && npm ci --prefix imessage && node scripts/build-plugin.mjs && node --test *.test.cjs) ;;
@@ -84,12 +105,45 @@ jobs:
                   npm test --if-present) ;;
             esac
             python3 scripts/pack-plugin-pbw.py "$proj"
-            pbw="$proj/build/$(jq -r .name "$proj/package.json").pbw"
-            notes=$(git log -1 --format=%s -- "$proj/package.json")
-            curl -fsS -H "Authorization: Bearer $ID_TOKEN" \
-              -F "version=$version" -F "releaseNotes=$notes" -F isPublished=true \
-              -F "pbwFile=@$pbw;type=application/octet-stream" \
-              "$API_BASE/api/dashboard/apps/$app_id/releases"
+            cp "$proj/build/$(jq -r .name "$proj/package.json").pbw" "dist/$dir.pbw"
+            echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pbws
+          path: dist/
+          retention-days: 1
+
+  publish:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pbws
+          path: dist
+
+      - name: Publish
+        env:
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: |
+          set -euo pipefail
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$API_BASE" | jq -r .value)
+          echo "::add-mask::$token"
+          jq -c '.[]' <<<"$PLAN" | while read -r item; do
+            dir=$(jq -r .dir <<<"$item")
+            [[ $dir =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad plugin directory $dir"; exit 1; }
+            echo "::group::$dir $(jq -r .version <<<"$item")"
+            curl -fsS -H "Authorization: Bearer $token" \
+              --form-string "version=$(jq -r .version <<<"$item")" \
+              --form-string "releaseNotes=$(jq -r .notes <<<"$item")" \
+              --form-string isPublished=true \
+              -F "pbwFile=@dist/$dir.pbw;type=application/octet-stream" \
+              "$API_BASE/api/dashboard/apps/$(jq -r .app_id <<<"$item")/releases"
             echo
             echo "::endgroup::"
-          done < /tmp/plan.tsv
+          done

@@ -34,7 +34,7 @@ code of [icloud-md](https://github.com/coddingtonbear/icloud-md) (see `apple-not
 `googlehome` shares its Google Home client with
 [googlehome-mcp](https://github.com/ericmigi/googlehome-mcp).
 
-`hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
+`find-my-phone`, `hue`, `stocks`, `notion`, `ticktick`, `todoist`, `met-weather`, `plugin-test` and `weather-face`
 are also bundled into the app, which still builds them from its own `test-apps/` copies.
 
 ## Icons
@@ -51,6 +51,7 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `chat` | Chat |
 | `chatgpt` | ChatGPT (Dot, Codex sessions, Codex Cloud) |
 | `claude` | Claude |
+| `find-my-phone` | Find My Phone (watchapp; needs the Pebble SDK) |
 | `google-tasks-keep` | Google Tasks & Keep |
 | `googlehome` | GoogleHome |
 | `grok-bot` | Grok Bot |

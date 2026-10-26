@@ -53,7 +53,7 @@
     "configPage": "config.html",
     "plugin": {
       "uuid": "8b1c6b0e-7d6a-4cf2-a9b2-2c3f8b1c6b0e",
-      "name": "Plugin Demo: Dashboard",
+      "name": "Dashboard (Plugin Demo)",
       "description": "Demo plugin: serves a demo/message source whose text is set from the config page, and a confirmation-gated action that resets it.",
       "script": "plugin.js",
       "sources": [

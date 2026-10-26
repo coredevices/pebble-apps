@@ -26,6 +26,7 @@ jobs:
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
       sdk: ${{ steps.plan.outputs.sdk }}
+      unbumped: ${{ steps.plan.outputs.unbumped }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +34,8 @@ jobs:
 
       - name: Find plugins whose version is not in the store
         id: plan
+        env:
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: |
           set -euo pipefail
           token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -54,6 +57,11 @@ jobs:
             fi
             if jq -e --arg v "$version" '.versions | index($v)' <<<"$app" >/dev/null; then
               echo "$dir $version already published"
+              if [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
+                && git diff --quiet "$BEFORE" HEAD -- "$dir" ':(exclude)**/*.md'; then :
+              elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+                unbumped="${unbumped:+$unbumped }$dir"
+              fi
               continue
             fi
             jq -cn --arg dir "$dir" --arg proj "$proj" --arg version "$version" \
@@ -67,6 +75,21 @@ jobs:
           sdk=false
           for proj in $(jq -r '.[].proj' <<<"$plan"); do [ -d "$proj/src/c" ] && sdk=true; done
           echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
+          echo "unbumped=${unbumped:-}" >> "$GITHUB_OUTPUT"
+
+  require-version-bump:
+    needs: plan
+    if: needs.plan.outputs.unbumped != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Changed plugins must bump their version
+        env:
+          UNBUMPED: ${{ needs.plan.outputs.unbumped }}
+        run: |
+          for dir in $UNBUMPED; do
+            echo "::error::$dir changed but its package.json version is already in the store; bump the version to publish it"
+          done
+          exit 1
 
   build:
     needs: plan

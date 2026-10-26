@@ -1,7 +1,7 @@
 {
   "name": "find-my-phone",
   "author": "Core Devices",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "keywords": [
     "pebble-app"
   ],
@@ -24,7 +24,10 @@
     "watchapp": {
       "watchface": false
     },
-    "messageKeys": [],
+    "messageKeys": [
+      "RESULT",
+      "MESSAGE"
+    ],
     "resources": {
       "media": []
     },

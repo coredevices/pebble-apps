@@ -70,7 +70,7 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `muse` | Muse |
 | `notion` | Notion |
 | `obsidian` | Obsidian/Markdown Notes |
-| `plugin-test` | Plugin Demo: Dashboard (watchapp; needs the Pebble SDK) |
+| `plugin-test` | Dashboard (Plugin Demo) (watchapp; needs the Pebble SDK) |
 | `roam` | Roam Research |
 | `stocks` | Stocks |
 | `tasks-org` | Tasks.org |

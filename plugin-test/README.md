@@ -1,4 +1,4 @@
-# Plugin Demo: Dashboard
+# Dashboard (Plugin Demo)
 
 Demo plugin: serves a demo/message source whose text is set from the config page, and a confirmation-gated action that resets it.
 

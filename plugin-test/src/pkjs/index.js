@@ -46,19 +46,27 @@ var WATCH_CATEGORY = 'Clock';
 // optionally the title it wears (a property name, or `custom` with the text) and what a tap
 // does. Left out, the title is the thing's name and a tap invokes whichever action the plugin
 // binds to the reading. An entry with only an `action` is an action tile.
+//
+// The user's preferred readings (`preferences/complications`) come first, and these follow in
+// order. Its defaults are battery, temperature, the next event and a stock, so those come last
+// here, where they only show if the user's list is short.
 var DEFAULTS = [
+  { source: 'music/track/artwork', title: { mode: 'title' }, action: 'set_playing' },
+  { source: 'music/track/title', title: { mode: 'artist' } },
+  { source: 'notifications/notification/app_icon', action: CYCLE_INSTANCE },
+  { action: 'launch_previous_app', title: { mode: 'custom', text: 'Back' } },
   { source: 'weather/location/temperature', action: CYCLE_INSTANCE },
   {
     source: 'phone/phone_state/battery_level',
     title: { mode: 'custom', text: 'Phone Battery' },
   },
-  { source: 'finance/stock/day_change_percent', action: CYCLE_INSTANCE  },
-  { source: 'music/track/artwork', title: { mode: 'title' }, action: 'set_playing' },
   { source: 'calendar/event/name', title: { mode: 'starts_at' } },
-  { source: 'notifications/notification/app_icon', action: CYCLE_INSTANCE },
-  { action: 'launch_previous_app', title: { mode: 'custom', text: 'Back' } },
-  { source: 'weather/location/temperature', title: { mode: 'reading_name' }, action: CYCLE_PROPERTY },
+  { source: 'finance/stock/day_change_percent', action: CYCLE_INSTANCE  },
 ];
+
+// The user's preferred readings, from `preferences/complications`.
+var preferred = [];
+var preferredSubscription = null;
 
 var subscriptions = [];
 // What each quadrant is subscribed as. Live rather than a snapshot: a tap that cycles the
@@ -151,7 +159,10 @@ function titles() {
   var saved;
   try { saved = JSON.parse(localStorage.getItem(TITLES_KEY)); } catch (e) { saved = null; }
   if (saved && saved.length === QUADRANTS) return saved;
-  return DEFAULTS.map(function (wanted) { return wanted.title || {}; });
+  var fromPreferred = preferredChoices(catalogue()).length;
+  return DEFAULTS.map(function (unused, index) {
+    return index < fromPreferred ? {} : DEFAULTS[index - fromPreferred].title || {};
+  });
 }
 
 /** Nothing stored: the name, which is what a title is for, when the thing has one. */
@@ -349,7 +360,10 @@ function chosen() {
   if (saved && saved.length === QUADRANTS) return saved;
 
   var entries = catalogue();
-  return DEFAULTS.map(function (wanted) {
+  var fromPreferred = preferredChoices(entries);
+  return DEFAULTS.map(function (unused, index) {
+    if (index < fromPreferred.length) return fromPreferred[index];
+    var wanted = DEFAULTS[index - fromPreferred.length];
     if (!wanted.source) {
       var button = entries.filter(function (entry) {
         return entry.category === ACTION_CATEGORY && entry.item === wanted.action;
@@ -363,6 +377,32 @@ function chosen() {
     // instance 0, the named property, whichever shape suits it, and the tap the default asks for.
     return match ? [match.value, 0, parts[2], '', wanted.action || ''].join('|') : '';
   });
+}
+
+/** The user's preferred readings this app can show, as stored choices, in their order. */
+function preferredChoices(entries) {
+  return preferred.map(function (slot) {
+    var match = entries.filter(function (entry) {
+      return entry.category === slot.category && entry.item === slot.item;
+    })[0];
+    return match ? [match.value, slot.index, slot.property, '', ''].join('|') : '';
+  }).filter(function (value) { return value; }).slice(0, QUADRANTS);
+}
+
+function onPreferred(envelope) {
+  preferred = envelope.instances.map(function (instance) {
+    var p = instance.properties;
+    return {
+      category: readingOf(p.category),
+      item: readingOf(p.item),
+      index: p.index && p.index.numericValue ? p.index.numericValue.value : 0,
+      property: readingOf(p.property),
+    };
+  });
+  var saved;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { saved = null; }
+  // Only the defaults follow the user's list: a dashboard they've set up stays as it is.
+  if (!saved) subscribeAll();
 }
 
 // ---------------------------------------------------------------- sources
@@ -762,6 +802,13 @@ Pebble.addEventListener('ready', function () {
   sendSettings();
   hello();
   subscribeAll();
+  if (preferredSubscription) preferredSubscription.unsubscribe();
+  preferredSubscription = Pebble.subscribeToSource({
+    category: 'preferences',
+    item: 'complications',
+    onData: onPreferred,
+    onError: function (err) { log('preferences/complications: ' + err.code); },
+  });
 });
 
 /** Ask the watch for its artwork size, which is all a restarted PKJS doesn't already know. */

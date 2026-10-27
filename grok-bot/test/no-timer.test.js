@@ -4,7 +4,7 @@ const vm = require("node:vm");
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
-// Stock CoreApp: no _HostTimer, and Android's lockdown makes touching setTimeout throw.
+// Plugins get no timers, and Android's lockdown makes touching setTimeout throw.
 function load() {
   const module = { exports: {} };
   const context = { module, Date, Math, JSON, Promise, encodeURIComponent };

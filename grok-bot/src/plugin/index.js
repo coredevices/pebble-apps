@@ -27,31 +27,11 @@ class PluginError extends Error {
   }
 }
 
-var timers = new Map();
-globalThis.__hostTimerDispatch = function (id) {
-  var callback = timers.get(id);
-  timers.delete(id);
-  if (callback) callback();
-};
-// Stock CoreApp gives plugins no timers: Android blocks setTimeout and iOS has none.
-var hasTimer = typeof _HostTimer !== "undefined";
-
-/** Without a host timer this doesn't wait, so callers poll back to back. */
-function sleep(ms) {
-  if (!hasTimer) return Promise.resolve();
-  return new Promise(function (resolve) { timers.set(_HostTimer.schedule(ms), resolve); });
-}
-
-/**
- * The host's fetch has no timeout or AbortSignal, so race it against the request's deadline. With
- * no host timer the host's own action limit bounds the request instead.
- */
 function within(deadline, promise) {
-  var left = deadline - Date.now();
-  var late = new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot took too long to respond. Try again shortly.");
-  if (left <= 0) return Promise.reject(late);
-  if (!hasTimer) return promise;
-  return Promise.race([promise, sleep(left).then(function () { throw late; })]);
+  if (deadline - Date.now() <= 0) {
+    return Promise.reject(new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot took too long to respond. Try again shortly."));
+  }
+  return promise;
 }
 
 function nonce() {
@@ -358,7 +338,6 @@ function createService(storage, fetch, cache) {
         var body = await response.json();
         if (body && typeof body.accessToken === "string") return body.accessToken;
       }
-      await sleep(1000);
     }
     throw new PluginError("AUTH_REQUIRED", "Grok Bot sign-in did not finish. Please try again.");
   }

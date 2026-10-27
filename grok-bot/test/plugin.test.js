@@ -1,15 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-// Poll-sized host timers fire at once so tests run fast; deadline-sized ones never fire.
-let nextTimer = 0;
-globalThis._HostTimer = {
-  schedule(ms) {
-    const id = ++nextTimer;
-    if (ms <= 3000) setImmediate(() => globalThis.__hostTimerDispatch(id));
-    return id;
-  },
-};
 const { createService, safeError } = require("../src/plugin/index.js");
 
 const BOX = "https://abc-pod-def.us12.cursorvm.com";

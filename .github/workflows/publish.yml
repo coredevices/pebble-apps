@@ -58,8 +58,8 @@ jobs:
             if jq -e --arg v "$version" '.versions | index($v)' <<<"$app" >/dev/null; then
               echo "$dir $version already published"
               if [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] \
-                && git diff --quiet "$BEFORE" HEAD -- "$dir" ':(exclude)**/*.md'; then :
-              elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+                && ! git diff --quiet "$BEFORE" HEAD -- "$dir" ':(exclude)**/*.md' \
+                && [ "$(git show "$BEFORE:$proj/package.json" 2>/dev/null | jq -r .version)" = "$version" ]; then
                 unbumped="${unbumped:+$unbumped }$dir"
               fi
               continue
@@ -87,7 +87,7 @@ jobs:
           UNBUMPED: ${{ needs.plan.outputs.unbumped }}
         run: |
           for dir in $UNBUMPED; do
-            echo "::error::$dir changed but its package.json version is already in the store; bump the version to publish it"
+            echo "::error::$dir changed without a package.json version bump, so it was not published; bump the version to release it"
           done
           exit 1
 

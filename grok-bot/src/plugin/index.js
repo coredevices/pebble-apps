@@ -17,7 +17,6 @@ var SEND_BUDGET_MS = 18000;
 var READ_BUDGET_MS = 18000;
 // Below this much time left, a send is refused rather than risk an unknown delivery.
 var SEND_MIN_LEFT_MS = 8000;
-var SIGN_IN_POLL_MS = 15000;
 
 class PluginError extends Error {
   constructor(code, message, status) {
@@ -326,20 +325,18 @@ function createService(storage, fetch, cache) {
     return settings(state, list);
   }
 
-  /** Cursor's PKCE login: once the browser side finishes, the poll hands over the access token. */
+  /**
+   * Cursor's PKCE login: once the browser side finishes, the poll hands over the access token. One
+   * poll per call; the settings page, which has timers, asks again until it does.
+   */
   async function pollSignIn(uuid, verifier) {
     if (!/^[0-9a-f-]{36}$/i.test(String(uuid)) || !/^[A-Za-z0-9_-]{43,128}$/.test(String(verifier)))
       throw new PluginError("INVALID_ARGS", "Grok Bot sign-in was not started correctly. Please try again.");
     var url = POLL_URL + "?uuid=" + encodeURIComponent(uuid) + "&verifier=" + encodeURIComponent(verifier);
-    var deadline = Date.now() + SIGN_IN_POLL_MS;
-    while (Date.now() < deadline) {
-      var response = await fetch(url, { method: "GET" });
-      if (response.status === 200) {
-        var body = await response.json();
-        if (body && typeof body.accessToken === "string") return body.accessToken;
-      }
-    }
-    throw new PluginError("AUTH_REQUIRED", "Grok Bot sign-in did not finish. Please try again.");
+    var response = await fetch(url, { method: "GET" });
+    if (response.status !== 200) return null;
+    var body = await response.json();
+    return body && typeof body.accessToken === "string" ? body.accessToken : null;
   }
 
   async function config(message) {
@@ -349,8 +346,10 @@ function createService(storage, fetch, cache) {
         return settings(load());
       case "connect":
         return connectWith(message.accessToken);
-      case "finishSignIn":
-        return connectWith(await pollSignIn(message.uuid, message.verifier));
+      case "finishSignIn": {
+        var token = await pollSignIn(message.uuid, message.verifier);
+        return token ? connectWith(token) : { pending: true };
+      }
       case "listBots": {
         var current = required();
         return settings(current, await bots(await box(current.accessToken, deadline), current));

@@ -13,20 +13,12 @@ function load() {
   return module.exports;
 }
 
-test("sign-in polling works without host timers", async () => {
-  const { createService, safeError } = load();
-  let polls = 0;
-  const fetch = async (url) => {
-    if (url.startsWith("https://api2.cursor.sh/auth/poll")) {
-      return ++polls < 3 ? { status: 404, json: async () => ({}) } : { status: 200, json: async () => ({ accessToken: "t" }) };
-    }
-    return { ok: false, status: 401, text: async () => "{}" };
-  };
+test("loads and answers sign-in where touching setTimeout throws", async () => {
+  const { createService } = load();
+  const fetch = async () => ({ status: 404, json: async () => ({}) });
   const map = new Map();
   const storage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v), removeItem: (k) => map.delete(k) };
-  const err = await createService(storage, fetch)
-    .config({ type: "finishSignIn", uuid: "123e4567-e89b-42d3-a456-426614174000", verifier: "v".repeat(43) })
-    .catch((e) => e);
-  assert.equal(polls, 3);
-  assert.equal(safeError(err).code, "AUTH_REQUIRED");
+  const result = await createService(storage, fetch)
+    .config({ type: "finishSignIn", uuid: "123e4567-e89b-42d3-a456-426614174000", verifier: "v".repeat(43) });
+  assert.equal(result.pending, true);
 });

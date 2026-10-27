@@ -138,7 +138,7 @@ test("requires sign-in and valid args", async () => {
   assert.equal(safeError(bad).code, "INVALID_ARGS");
 });
 
-test("finishing Cursor's login polls for the token, then connects", async () => {
+test("finishSignIn polls once: pending until Cursor hands over the token, then connects", async () => {
   const grok = fakeGrokBot();
   const polls = [];
   const fetch = async (url, init) => {
@@ -150,7 +150,10 @@ test("finishing Cursor's login polls for the token, then connects", async () => 
   };
   const uuid = "123e4567-e89b-42d3-a456-426614174000";
   const verifier = "v".repeat(43);
-  const settings = await createService(memoryStorage(), fetch).config({ type: "finishSignIn", uuid, verifier });
+  const service = createService(memoryStorage(), fetch);
+  assert.deepEqual(await service.config({ type: "finishSignIn", uuid, verifier }), { pending: true });
+  assert.deepEqual(await service.config({ type: "finishSignIn", uuid, verifier }), { pending: true });
+  const settings = await service.config({ type: "finishSignIn", uuid, verifier });
   assert.equal(polls.length, 3);
   assert.equal(polls[0], `https://api2.cursor.sh/auth/poll?uuid=${uuid}&verifier=${verifier}`);
   assert.equal(settings.configured, true);

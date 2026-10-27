@@ -185,7 +185,7 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
         const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
         return h.slice(0, 8) + "-" + h.slice(8, 12) + "-" + h.slice(12, 16) + "-" + h.slice(16, 20) + "-" + h.slice(20);
       }
-      // Cursor's PKCE login, as the Grok Bot app starts it; the plugin polls for the token.
+      // Cursor's PKCE login, as the Grok Bot app starts it; the plugin checks once per finishSignIn.
       async function cursorLogin() {
         const base64Url = (bytes) =>
           btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -204,7 +204,13 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
           const cookies = await Pebble.webSignIn({ url: login.url, cookies: ["WorkosCursorSessionToken"], domain: "cursor.com" });
           if (!cookies) { say("Sign-in cancelled."); return; }
           say("Connecting to your Grok Bot computer…");
-          render(await send({ type: "finishSignIn", uuid: login.uuid, verifier: login.verifier }));
+          const deadline = Date.now() + 15000;
+          let result;
+          while ((result = await send({ type: "finishSignIn", uuid: login.uuid, verifier: login.verifier })).pending) {
+            if (Date.now() > deadline) throw new Error("Grok Bot sign-in did not finish. Please try again.");
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          render(result);
           say(bots.length ? describe() : "Connected, but you have no bots yet. Create one in Grok Bot.");
         });
       $("defaultFilter").oninput = () => { fill($("defaultBots"), $("defaultFilter")); controls(); };

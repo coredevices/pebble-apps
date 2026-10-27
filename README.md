@@ -76,4 +76,4 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `tasks-org` | Tasks.org |
 | `ticktick` | TickTick |
 | `todoist` | Todoist |
-| `weather-face` | Plugin Demo: Weather Face (watchface; needs the Pebble SDK) |
+| `weather-face` | Weather Face (Plugin Demo) (watchface; needs the Pebble SDK) |

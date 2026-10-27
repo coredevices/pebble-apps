@@ -121,7 +121,7 @@ function onHours(envelope) {
 function configPage() {
   return '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' +
-    '<title>Plugin Demo: Weather Face</title>' +
+    '<title>Weather Face (Plugin Demo)</title>' +
     '<style>' +
     ':root{color-scheme:light dark}' +
     'body{font:16px system-ui,-apple-system,sans-serif;margin:0;padding:20px}' +
@@ -133,7 +133,7 @@ function configPage() {
     'select{flex:1;padding:10px;font-size:16px;border-radius:8px;' +
     'border:1px solid rgba(128,128,128,.5);background:transparent;color:inherit}' +
     '</style></head><body>' +
-    '<h1>Plugin Demo: Weather Face</h1>' +
+    '<h1>Weather Face (Plugin Demo)</h1>' +
     '<p class="hint" id="status">Waiting for the app…</p>' +
     '<div class="row"><span>Theme</span>' +
     '<select id="theme"><option value="light">Light</option>' +

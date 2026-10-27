@@ -8,10 +8,6 @@ test("bundle loads without Node or DOM globals and registers its handlers", asyn
   let action, config, source;
   const data = new Map();
   const context = vm.createContext({
-    _HostTimer: {
-      schedule: () => 1,
-      cancel: () => {},
-    },
     Pebble: {
       secureStorage: {
         getItem: async (k) => (data.has(k) ? data.get(k) : null),
@@ -59,13 +55,7 @@ test("portable X25519 and AES-GCM interoperate with native crypto and reject tam
     Uint8Array,
     ArrayBuffer,
     DataView,
-    _HostCrypto: {
-      request: (raw) =>
-        JSON.stringify({
-          ok: true,
-          data: crypto.randomBytes(JSON.parse(raw).length).toString("base64"),
-        }),
-    },
+    crypto: { getRandomValues: (array) => crypto.getRandomValues(array) },
   });
   vm.runInContext(r.outputFiles[0].text, context);
   const p = context.primitives,
@@ -117,33 +107,6 @@ test("portable X25519 and AES-GCM interoperate with native crypto and reject tam
   assert.match(p.randomUUID(), /^[a-f0-9-]{36}$/);
 });
 
-test("host timers dispatch once and cancelled callbacks do not run", async () => {
-  const bundle = await build({
-    entryPoints: ["src/runtime.js"], bundle: true, write: false,
-    format: "iife", globalName: "runtime", platform: "browser",
-    inject: ["./src/globals.js"],
-  });
-  let nextId = 0;
-  const scheduled = new Map();
-  const context = vm.createContext({
-    _HostTimer: {
-      schedule(delay) { const id = ++nextId; scheduled.set(id, delay); return id; },
-      cancel(id) { scheduled.delete(id); },
-    },
-  });
-  vm.runInContext(bundle.outputFiles[0].text, context);
-  let value = 0;
-  const id = context.runtime.setTimeout((n) => { value += n; }, 0, 3);
-  assert.equal(scheduled.get(id), 1);
-  context.__hostTimerDispatch(id);
-  context.__hostTimerDispatch(id);
-  assert.equal(value, 3);
-  const cancelled = context.runtime.setTimeout(() => { value++; }, 10);
-  context.runtime.clearTimeout(cancelled);
-  context.__hostTimerDispatch(cancelled);
-  assert.equal(value, 3);
-  assert.equal(scheduled.has(cancelled), false);
-});
 test("bundle works with no host timers or crypto, as on stock CoreApp", async () => {
   const r = await build({
     entryPoints: ["src/crypto.js"],

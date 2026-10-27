@@ -82,17 +82,7 @@ function fixture({ drop = false, rv = false } = {}) {
     );
     return { status: 200, text: async () => text };
   };
-  let timerId = 0;
-  const timers = new Map();
   const context = vm.createContext({
-    _HostTimer: {
-      schedule(delay) {
-        const id = ++timerId;
-        timers.set(id, setTimeout(() => context.__hostTimerDispatch(id), delay));
-        return id;
-      },
-      cancel(id) { clearTimeout(timers.get(id)); timers.delete(id); },
-    },
     fetch: fetchStub,
     Pebble: {
       secureStorage: {
@@ -107,13 +97,7 @@ function fixture({ drop = false, rv = false } = {}) {
       registerConfigHandler: (fn) => (config = fn),
       registerSourceHandler: () => {},
     },
-    _HostCrypto: {
-      request: (raw) =>
-        JSON.stringify({
-          ok: true,
-          data: crypto.randomBytes(JSON.parse(raw).length).toString("base64"),
-        }),
-    },
+    crypto: { getRandomValues: (array) => crypto.getRandomValues(array) },
     WebSocket: class {
       constructor(url) {
         this.id = hostSocket.open(url);

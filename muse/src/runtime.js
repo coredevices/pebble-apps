@@ -39,25 +39,9 @@ export class TextDecoder {
   }
 }
 
-// Plugin engines may expose native timers instead of browser/Node timer globals. Timers here only
-// bound how long a request may take, so without them they never fire and the host's own action
-// limit applies instead.
-const hostTimer = typeof _HostTimer === "undefined" ? null : _HostTimer;
-const timers = new Map();
-let nextTimer = 0;
-globalThis.__hostTimerDispatch = (id) => {
-  const callback = timers.get(id);
-  timers.delete(id);
-  callback?.();
-};
-export function setTimeout(callback, delay = 0, ...args) {
-  const milliseconds = Math.max(1, Math.min(86400000, Math.trunc(Number(delay)) || 1));
-  if (!hostTimer) return --nextTimer;
-  const id = hostTimer.schedule(milliseconds);
-  timers.set(id, () => callback(...args));
-  return id;
+// Plugins get no timers (Android blocks setTimeout, iOS has none), so timers here never fire and the
+// host's own action limit bounds how long a request may take.
+export function setTimeout() {
+  return 0;
 }
-export function clearTimeout(id) {
-  if (!timers.delete(id)) return;
-  hostTimer.cancel(id);
-}
+export function clearTimeout() {}

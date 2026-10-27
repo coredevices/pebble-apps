@@ -8,16 +8,6 @@ export function randomBytes(length) {
   if (globalThis.crypto?.getRandomValues) {
     return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(length)));
   }
-  if (typeof _HostCrypto !== "undefined") {
-    const result = JSON.parse(
-      _HostCrypto.request(JSON.stringify({ operation: "random", length })),
-    );
-    if (!result.ok || typeof result.data !== "string")
-      throw new Error("Secure randomness unavailable");
-    const bytes = Buffer.from(result.data, "base64");
-    if (bytes.length !== length) throw new Error("Invalid secure random bytes");
-    return bytes;
-  }
   const bytes = Buffer.alloc(length);
   for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
   return bytes;

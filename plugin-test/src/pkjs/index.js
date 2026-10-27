@@ -21,6 +21,9 @@ function perQuadrant(make) {
 var STORE_KEY = 'quadrants';
 var TITLES_KEY = 'titles';
 var THEME_KEY = 'theme';
+var TIMELINE_DOWN_KEY = 'timelineDown';
+var WATCH_STATE_PLUGIN = '00000000-0000-0000-0001-000000000007';
+var TIMELINE_FUTURE_APP = '79c76b48-6111-4e80-8deb-3119eebef33e';
 // This app's own uuid, as in package.json. A quick-launch button reads as the uuid of the app
 // it opens, which is how this app recognises itself on one.
 var APP_UUID = '8b1c6b0e-7d6a-4cf2-a9b2-2c3f8b1c6b0e';
@@ -107,10 +110,15 @@ function theme() {
   return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
 }
 
+function timelineDown() {
+  return localStorage.getItem(TIMELINE_DOWN_KEY) === '1';
+}
+
 function sendSettings() {
   Pebble.sendAppMessage({
     theme: theme() === 'dark' ? 1 : 0,
     quick: quickSlot,
+    timelineDown: timelineDown() ? 1 : 0,
   }, function () {}, function (e) {
     log('sending settings failed: ' + JSON.stringify(e));
   });
@@ -774,6 +782,11 @@ Pebble.addEventListener('appmessage', function (e) {
     }
     return;
   }
+  if (payload.openTimeline !== undefined) {
+    Pebble.invokeAction({ plugin: WATCH_STATE_PLUGIN, action: 'launch_app', args: { uuid: TIMELINE_FUTURE_APP } })
+      .then(function (result) { log('open timeline' + (result.ok ? ' ok' : ' failed: ' + result.code)); });
+    return;
+  }
   if (payload.action === undefined) return;
   var index = payload.action;
   var entry = parseEntry(chosen()[index]);
@@ -816,6 +829,7 @@ Pebble.addEventListener('configmessage', function (e) {
         catalogue: catalogue(),
         chosen: chosen(),
         theme: theme(),
+        timelineDown: timelineDown(),
         values: values,
         instances: instances.map(labelsOf),
         properties: properties,
@@ -827,6 +841,12 @@ Pebble.addEventListener('configmessage', function (e) {
         titles: titles(),
       });
       return;
+    case 'setTimelineDown': {
+      localStorage.setItem(TIMELINE_DOWN_KEY, message.on ? '1' : '0');
+      sendSettings();
+      e.respond({ ok: true });
+      return;
+    }
     case 'setTheme': {
       localStorage.setItem(THEME_KEY, message.theme === 'dark' ? 'dark' : 'light');
       sendSettings();
@@ -843,6 +863,7 @@ Pebble.addEventListener('configmessage', function (e) {
         catalogue: catalogue(),
         chosen: chosen(),
         theme: theme(),
+        timelineDown: timelineDown(),
         values: values,
         instances: instances.map(labelsOf),
         properties: properties,

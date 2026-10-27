@@ -26,6 +26,7 @@
 #define PAGES (QUADRANTS / TILES)
 #define PERSIST_DARK 1
 #define PERSIST_QUICK 2
+#define PERSIST_TIMELINE_DOWN 3
 // One key per quadrant: a persisted value is capped, and eight payloads don't fit in one.
 #define PERSIST_QUAD 10
 #define PAYLOAD_MAX 128
@@ -96,6 +97,7 @@ static Layer *s_layers[TILES];
 static GRect s_frames[TILES];
 static Quadrant s_quadrants[QUADRANTS];
 static int s_page;
+static bool s_timeline_down;
 
 /** Which of the eight a tile is showing, given the page it is on. */
 static int slot_of(int tile) {
@@ -368,6 +370,13 @@ static void send_art_size(void) {
   app_message_outbox_send();
 }
 
+static void send_open_timeline(void) {
+  DictionaryIterator *out;
+  if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
+  dict_write_uint8(out, MESSAGE_KEY_openTimeline, 1);
+  app_message_outbox_send();
+}
+
 static void send_action(int quadrant) {
   DictionaryIterator *out;
   if (app_message_outbox_begin(&out) != APP_MSG_OK) return;
@@ -422,6 +431,11 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   if (quick) {
     s_quick_slot = quick->value->int32;
     persist_write_int(PERSIST_QUICK, s_quick_slot);
+  }
+  Tuple *timeline_down = dict_find(iter, MESSAGE_KEY_timelineDown);
+  if (timeline_down) {
+    s_timeline_down = timeline_down->value->int32;
+    persist_write_bool(PERSIST_TIMELINE_DOWN, s_timeline_down);
   }
   Tuple *img_quad = dict_find(iter, MESSAGE_KEY_imgQuad);
   if (img_quad) {
@@ -480,6 +494,11 @@ static void update_grid(Layer *layer, GContext *ctx) {
 
 static void turn_page(ClickRecognizerRef recognizer, void *context) {
   bool up = click_recognizer_get_button_id(recognizer) == BUTTON_ID_UP;
+  // When quick-launched from UP, DOWN means "back out", so it never leaves for the timeline then.
+  if (!up && s_timeline_down && s_page == PAGES - 1 && !(paging_out() && s_quick_slot == QUICK_UP)) {
+    send_open_timeline();
+    return;
+  }
   if (!paging_out()) {
     // Opened the ordinary way: both buttons cycle the pages.
     s_page = (s_page + (up ? 1 : -1) + PAGES) % PAGES;
@@ -557,6 +576,7 @@ static void on_day(struct tm *now, TimeUnits changed) {
 static void init(void) {
   s_dark = persist_read_bool(PERSIST_DARK);
   s_quick_slot = persist_read_int(PERSIST_QUICK);
+  s_timeline_down = persist_read_bool(PERSIST_TIMELINE_DOWN);
   s_quick_launched = launch_reason() == APP_LAUNCH_QUICK_LAUNCH;
   s_window = window_create();
   window_set_background_color(s_window, paper());

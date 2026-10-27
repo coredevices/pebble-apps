@@ -1,0 +1,44 @@
+{
+  "name": "complication-face",
+  "author": "Pebble",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "Complication Face (Plugin Demo)",
+    "uuid": "f07173d2-86dc-40d2-b3b1-0bcb911b8a83",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": [
+      "hello",
+      "imageSize",
+      "numText",
+      "numLabel",
+      "numFill",
+      "imgLabel",
+      "iconWidth",
+      "iconHeight",
+      "iconPalette",
+      "iconPixels"
+    ],
+    "resources": {
+      "media": []
+    },
+    "usesPermissions": []
+  }
+}

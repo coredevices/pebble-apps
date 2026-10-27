@@ -1,7 +1,7 @@
 {
   "name": "met-weather",
   "author": "Pebble",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "pebble": {
     "displayName": "MET Norway Weather",
     "uuid": "323dc117-55bd-455f-9ee4-4d0faba56ea1",
@@ -18,7 +18,7 @@
       }
     ],
     "plugin": {
-      "description": "Weather where the phone is, from the Norwegian Meteorological Institute (api.met.no). One location instance (the phone's current position) and the hours ahead of it.",
+      "description": "Weather for the user's weather locations (the phone's position for the current-location one), from the Norwegian Meteorological Institute (api.met.no), in their units: now, the hours of today and tomorrow, the week ahead and sunrise/sunset. Enough to be the watch's weather provider (Settings → Weather).",
       "script": "src/plugin/index.js",
       "sources": [
         {
@@ -62,40 +62,76 @@
             "uv_index": [
               "numericValue",
               "shortText"
-            ]
-          },
-          "callerPermissions": [
-            "Location"
-          ],
-          "suggestedRefreshIntervalSec": 1800
-        },
-        {
-          "category": "weather",
-          "items": [
-            "hour"
-          ],
-          "properties": {
-            "temperature": [
+            ],
+            "hourly_temperature": [
+              "series.numericValue",
+              "series.shortText"
+            ],
+            "hourly_condition": [
+              "series.shortText",
+              "series.icon",
+              "series.image"
+            ],
+            "hourly_condition_code": [
+              "series.longText"
+            ],
+            "precipitation": [
               "numericValue",
               "shortText"
             ],
-            "condition": [
-              "shortText",
-              "icon",
-              "image"
+            "humidity": [
+              "numericValue",
+              "shortText"
             ],
-            "condition_code": [
-              "longText"
+            "wind_speed": [
+              "numericValue",
+              "shortText"
+            ],
+            "wind_direction": [
+              "numericValue"
+            ],
+            "utc_offset": [
+              "numericValue"
+            ],
+            "sunrise": [
+              "timestamp"
+            ],
+            "sunset": [
+              "timestamp"
+            ],
+            "daily_high": [
+              "series.numericValue",
+              "series.shortText"
+            ],
+            "daily_low": [
+              "series.numericValue",
+              "series.shortText"
+            ],
+            "daily_condition": [
+              "series.shortText",
+              "series.longText",
+              "series.icon",
+              "series.image"
+            ],
+            "daily_condition_code": [
+              "series.longText"
+            ],
+            "daily_precipitation": [
+              "series.numericValue"
+            ],
+            "daily_sunrise": [
+              "series.timestamp"
+            ],
+            "daily_sunset": [
+              "series.timestamp"
             ]
           },
-          "supportsMultiple": true,
           "callerPermissions": [
             "Location"
           ],
           "suggestedRefreshIntervalSec": 1800
         }
       ]
-    },
-    "projectType": "plugin"
+    }
   }
 }

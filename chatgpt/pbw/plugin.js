@@ -6666,6 +6666,7 @@
           if (args.chat_id !== void 0 && args.chat_id !== null && typeof args.chat_id !== "string") {
             throw PluginError("INVALID_ARGS", "Name a ChatGPT chat.");
           }
+          text += " ⌚";
           var wanted = (args.chat_id || "").trim().toLowerCase();
           if (!wanted) {
             var target = (await destination()).target;

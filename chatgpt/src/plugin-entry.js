@@ -156,6 +156,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     if (args.chat_id !== undefined && args.chat_id !== null && typeof args.chat_id !== 'string') {
       throw PluginError('INVALID_ARGS', 'Name a ChatGPT chat.');
     }
+    text += ' ⌚';
     var wanted = (args.chat_id || '').trim().toLowerCase();
     if (!wanted) {
       var target = (await destination()).target;

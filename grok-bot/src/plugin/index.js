@@ -393,7 +393,7 @@ function createService(storage, fetch, cache) {
       throw new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot is responding slowly, so the message was not sent. Try again shortly.");
     var clientNonce = nonce();
     try {
-      await call("sendPrompt", { agentId: bot.id, prompt: message, clientNonce: clientNonce });
+      await call("sendPrompt", { agentId: bot.id, prompt: message + " ⌚", clientNonce: clientNonce });
     } catch (e) {
       // A refusal is safe to report as not sent; anything else may have landed.
       if (e instanceof PluginError && e.status && e.status < 500) throw e;

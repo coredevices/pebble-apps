@@ -86,7 +86,7 @@ test("connects, picks the first bot, sends and returns a receipt; replies are re
   assert.ok(sent.body.clientNonce);
 
   const read = await service.action({ action: "read_grok_bot", args: { limit: 5 } });
-  assert.equal(read.text, "Ada: old reply\n\nre: hello");
+  assert.equal(read.text, "Ada: old reply\n\nre: hello ⌚");
 });
 
 test("reports a send the bot rejected as not sent", async () => {

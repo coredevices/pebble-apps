@@ -103,6 +103,9 @@ test('create_reminder rejects a due time without an offset and maps an expired t
   let r = responder();
   await handlers.action({ action: 'create_reminder', args: { title: 'x', due_iso: '2026-10-28T14:30:00', timezone: 'UTC' } }, r);
   assert.strictEqual(r.out.error.code, 'INVALID_ARGS');
+  r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x', due_iso: '2026-02-30T14:30:00Z', timezone: 'UTC' } }, r);
+  assert.strictEqual(r.out.error.code, 'INVALID_ARGS');
   assert.strictEqual(calls.length, 0);
 
   ({ handlers } = load(SIGNED_IN, { 'rtm.timelines.create': { stat: 'fail', err: { code: '98', msg: 'Login failed / Invalid auth token' } } }));
@@ -129,4 +132,22 @@ test('sign-in stores the key, opens a signed auth link, and exchanges the frob f
   allowed = true;
   const done = await new Promise((resolve) => handlers.config({ type: 'finish' }, resolve));
   assert.deepStrictEqual([done.configured, done.user, secure.get('rtm_auth_token')], [true, 'Eric', 'tok']);
+});
+
+test('a task whose due time fails to set is still reported as created, so it is not retried', async () => {
+  const { handlers } = load(SIGNED_IN, {
+    'rtm.timelines.create': { stat: 'ok', timeline: 'tl' },
+    'rtm.tasks.add': { stat: 'ok', list: { id: '4', taskseries: [{ id: 's1', task: [{ id: 't1' }] }] } },
+    'rtm.tasks.setDueDate': { stat: 'fail', err: { code: '105', msg: 'Service currently unavailable' } },
+  });
+  const r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x', due_iso: '2026-10-28T14:30:00Z', timezone: 'UTC' } }, r);
+  assert.match(r.out.ok.text, /could not set its due time/);
+});
+
+test('settings reopened mid sign-in still offer Done', async () => {
+  const { handlers } = load({ rtm_api_key: 'key', rtm_shared_secret: 'secret' }, { 'rtm.auth.getFrob': { stat: 'ok', frob: 'f' } });
+  await new Promise((resolve) => handlers.config({ type: 'start' }, resolve));
+  const status = await new Promise((resolve) => handlers.config({ type: 'status' }, resolve));
+  assert.strictEqual(status.pending, true);
 });

@@ -79,6 +79,10 @@
       statusElement.textContent = result.configured
         ? 'Signed in to Remember The Milk' + (result.user ? ' as ' + result.user : '') + '.'
         : 'Remember The Milk is not connected.';
+      if (result.pending) {
+        finish.classList.remove('hidden');
+        statusElement.textContent = 'If you allowed access in Remember The Milk, tap Done. Otherwise, sign in again.';
+      }
     }
 
     document.getElementById('start').onclick = async function () {

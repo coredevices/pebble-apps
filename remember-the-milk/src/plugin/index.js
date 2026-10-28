@@ -88,6 +88,7 @@ async function call(creds, method, params) {
     console.error('Remember The Milk ' + method + ' failed: ' + e);
     throw rtmError('PLUGIN_UNAVAILABLE', 'Could not reach Remember The Milk.');
   }
+  if (response.status === 503) throw rtmError('RATE_LIMITED', 'Remember The Milk is rate limiting requests. Try again shortly.');
   var text = await response.text();
   var rsp = null;
   try {
@@ -97,8 +98,7 @@ async function call(creds, method, params) {
   }
   if (!rsp) {
     console.error('Remember The Milk ' + method + ': HTTP ' + response.status);
-    throw rtmError(response.status === 503 ? 'RATE_LIMITED' : 'UNKNOWN',
-      'Remember The Milk failed (HTTP ' + response.status + ').');
+    throw rtmError('UNKNOWN', 'Remember The Milk failed (HTTP ' + response.status + ').');
   }
   if (rsp.stat !== 'ok') {
     var code = rsp.err && String(rsp.err.code);
@@ -108,6 +108,7 @@ async function call(creds, method, params) {
     if (code === '96' || code === '97' || code === '100') {
       throw rtmError('AUTH_REQUIRED', 'Remember The Milk did not accept the API key and shared secret.');
     }
+    if (code === '105') throw rtmError('PLUGIN_UNAVAILABLE', 'Remember The Milk is unavailable. Try again later.');
     throw rtmError('UNKNOWN', 'Remember The Milk: ' + message);
   }
   return rsp;
@@ -131,7 +132,11 @@ function respondWithError(error, respond) {
 
 /** An absolute ISO-8601 instant with Z or an offset, as RTM's UTC form; null if it is anything else. */
 function rtmDue(value) {
-  if (!/^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/.test(value)) return null;
+  var match = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(\.\d+)?([Zz]|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!match) return null;
+  var day = new Date(Date.UTC(+match[1], +match[2] - 1, +match[3]));
+  if (day.getUTCMonth() !== +match[2] - 1 || day.getUTCDate() !== +match[3] ||
+      +match[4] > 23 || +match[5] > 59 || +match[6] > 59 || (match[9] && (+match[9] > 23 || +match[10] > 59))) return null;
   var date = new Date(value);
   return isNaN(date.getTime()) ? null : date.toISOString().replace(/\.\d+Z$/, 'Z');
 }
@@ -228,13 +233,18 @@ Pebble.registerActionHandler(async function (request, respond) {
       respond.error('UNKNOWN', 'Remember The Milk created no identifiable task.');
       return;
     }
+    var text = 'Created “' + title + '” in Remember The Milk.';
     if (due) {
-      await call(creds, 'rtm.tasks.setDueDate', {
-        timeline: timeline, list_id: list.id, taskseries_id: series.id, task_id: task.id,
-        due: due, has_due_time: '1', parse: '0',
-      });
+      try {
+        await call(creds, 'rtm.tasks.setDueDate', {
+          timeline: timeline, list_id: list.id, taskseries_id: series.id, task_id: task.id,
+          due: due, has_due_time: '1', parse: '0',
+        });
+      } catch (error) {
+        text = 'Created “' + title + '” in Remember The Milk, but could not set its due time: ' + error.message;
+      }
     }
-    respond.ok({ text: 'Created “' + title + '” in Remember The Milk.', url: listUrl(list.id) + '/' + task.id });
+    respond.ok({ text: text, url: listUrl(list.id) + '/' + task.id });
   } catch (error) {
     respondWithError(error, respond);
   }
@@ -245,7 +255,10 @@ Pebble.registerConfigHandler(async function (message, respond) {
   try {
     switch (message && message.type) {
       case 'status':
-        respond({ configured: creds.token.length > 0, hasKey: creds.apiKey.length > 0, apiKey: creds.apiKey });
+        respond({
+          configured: creds.token.length > 0, hasKey: creds.apiKey.length > 0, apiKey: creds.apiKey,
+          pending: !creds.token && !!localStorage.getItem(FROB_KEY),
+        });
         return;
       case 'start': {
         var apiKey = String(message.apiKey || '').trim() || creds.apiKey;

@@ -1,7 +1,7 @@
 {
   "name": "remember-the-milk",
   "author": "Pebble",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "test": "node --test test/*.test.cjs"
   },

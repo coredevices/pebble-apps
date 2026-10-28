@@ -12,7 +12,8 @@ function keyOf(chat) {
 }
 
 /**
- * The user's Codex chats in one list (live sessions on their computers and Codex Cloud tasks),
+ * The user's Codex and ChatGPT chats in one list (live sessions on their computers, Codex Cloud tasks
+ * and chatgpt.com conversations),
  * with the nicknames they gave them in settings.
  */
 function accountKey(a) {
@@ -24,7 +25,7 @@ function sameAccount(a, b) {
 }
 
 /** [auth] tags the cache with the Codex account: settings and requests run in separate sessions. */
-function createCodexChats(storage, remote, cloud, auth, now) {
+function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
   // Within one session, an older listing finishing last doesn't overwrite a newer one.
   var started = 0;
   var landed = 0;
@@ -95,7 +96,7 @@ function createCodexChats(storage, remote, cloud, auth, now) {
     } catch (_) { /* The cache is best-effort. */ }
   }
 
-  /** Every reachable chat, most recent first; [errors] says which half couldn't be listed. */
+  /** Every reachable chat, most recent first; [errors] says which part couldn't be listed. */
   async function list() {
     var seq = ++started;
     var owner = null;
@@ -115,15 +116,16 @@ function createCodexChats(storage, remote, cloud, auth, now) {
           return { kind: 'task', id: task.id, label: task.title.slice(0, 80), state: 'cloud', updatedAt: task.updatedAt };
         });
       })),
+      part('chatgpt', chatgpt.list()),
     ]);
-    var chats = halves[0].concat(halves[1]);
-    if (errors.length < 2) await remember(owner, seq, chats);
+    var chats = halves[0].concat(halves[1], halves[2]);
+    if (errors.length < halves.length) await remember(owner, seq, chats);
     return { chats: await named(chats), errors: errors };
   }
 
   /** Saves [nickname] (empty clears it, undefined leaves it) and, when [makeDefault], the chat as the default. */
   async function update(chat, nickname, makeDefault) {
-    if (!chat || (chat.kind !== 'session' && chat.kind !== 'task') || typeof chat.id !== 'string' || !chat.id) {
+    if (!chat || (chat.kind !== 'session' && chat.kind !== 'task' && chat.kind !== 'chat') || typeof chat.id !== 'string' || !chat.id) {
       throw PluginError('INVALID_ARGS', 'Pick a Codex chat first.');
     }
     var name = typeof nickname === 'string' ? nickname.trim().slice(0, MAX_NICKNAME) : '';
@@ -175,6 +177,7 @@ function createCodexChats(storage, remote, cloud, auth, now) {
 
   function deliver(chat, text) {
     if (chat.kind === 'task') return cloud.followUp({ message: text, task: chat.id });
+    if (chat.kind === 'chat') return chatgpt.send({ message: text, conversation: chat.id, title: chat.nickname || chat.label });
     return remote.send({ message: text, session: chat.id, computer: chat.computer });
   }
 

@@ -58,7 +58,7 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 |---|---|
 | `apple-notes` | Apple Notes |
 | `chat` | Chat |
-| `chatgpt` | ChatGPT (Dot, Codex sessions, Codex Cloud) |
+| `chatgpt` | ChatGPT (Dot, ChatGPT chats, Codex sessions, Codex Cloud) |
 | `claude` | Claude |
 | `complication-face` | Complication Face (Plugin Demo) (watchface; needs the Pebble SDK) |
 | `find-my-phone` | Find My Phone (watchapp; needs the Pebble SDK) |

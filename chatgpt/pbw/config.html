@@ -8,7 +8,7 @@
 * { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px 16px; background:var(--bg); color:var(--ink); }
 h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
 .card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-#dotAccount,#codexAccount { font-weight:600; margin:10px 0 4px; overflow-wrap:anywhere; } #selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
+#codexAccount { font-weight:600; margin:10px 0 4px; overflow-wrap:anywhere; } #selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
 label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input,textarea { font:inherit; } select,textarea,input:not([type=radio]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
 button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; } #account .card { margin:12px 0; }
 .row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; }
@@ -23,10 +23,10 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 <div class="card modes">
 <div class="eyebrow">Send messages to</div>
 <label class="check"><input type="radio" name="dest" value="dot"><span>Your Dot<small id="dotHint"></small></span></label>
-<label class="check"><input type="radio" name="dest" value="codex"><span>Codex<small id="codexHint"></small></span></label>
+<label class="check"><input type="radio" name="dest" value="codex"><span>A ChatGPT or Codex chat<small id="codexHint"></small></span></label>
 </div>
 <div class="card" id="defaultCard" hidden>
-<div class="eyebrow">Your default Codex chat</div>
+<div class="eyebrow">Your default chat</div>
 <p id="selected"></p>
 <div class="row"><input id="defaultFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="defaultRefresh" class="quiet">Refresh</button></div>
 <select id="defaultChats" aria-label="Default chat"></select>
@@ -36,7 +36,7 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 <p class="hint">Naming a chat or nickname always sends there instead.</p>
 <p id="status" role="status" aria-live="polite">Starting ChatGPT…</p>
 <details id="nicknames" hidden><summary>Nicknames</summary>
-<p class="hint">Give a Codex chat a short name you can say: “Send to ble…”. Works whichever option you chose above.</p>
+<p class="hint">Give a chat a short name you can say: “Send to ble…”. Works whichever option you chose above.</p>
 <div class="row"><input id="nickFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="nickRefresh" class="quiet">Refresh</button></div>
 <label for="nickChats">Chat</label><select id="nickChats"></select>
 <div id="editor" hidden>
@@ -48,24 +48,19 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 </details>
 <details id="account"><summary>Account &amp; connection</summary>
 <div class="card">
-<div class="eyebrow">Dot</div>
-<section id="dotOut" hidden>
-<button id="signin" class="primary">Sign in with ChatGPT</button>
-<p class="hint">This sign-in gives the plugin access to your ChatGPT account, not only your Dot. It is used only to find your Dot and send it messages.</p>
-</section>
-<section id="dotIn" hidden>
-<p id="dotAccount"></p>
-<button id="disconnect" class="quiet">Disconnect Dot</button>
-</section>
-</div>
-<div class="card">
-<div class="eyebrow">Codex</div>
+<div class="eyebrow">ChatGPT account</div>
 <section id="codexOut" hidden>
-<button id="codexSignin" class="primary">Sign in with ChatGPT for Codex</button>
-<p class="hint">Reaches Codex sessions on your computers and your Codex Cloud tasks.</p>
+<button id="signin" class="primary">Sign in with ChatGPT</button>
+<p class="hint">One sign-in reaches your Dot, your ChatGPT chats and Codex Cloud. It gives the plugin access to your ChatGPT account; it is used only to list your chats and send them your messages.</p>
 </section>
 <section id="codexIn" hidden>
 <p id="codexAccount"></p>
+<p id="dotAccount" class="hint"></p>
+<button id="codexDisconnect" class="quiet">Sign out</button>
+</section>
+</div>
+<div class="card" id="computersCard" hidden>
+<div class="eyebrow">Codex on your computers (optional)</div>
 <button id="codexEnroll" class="primary">Connect to your computers</button>
 <p class="hint">Your computer needs Codex remote control on: in the Codex app, or with <code>codex remote-control start</code>.</p>
 <section id="enroll" hidden>
@@ -81,8 +76,6 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 <p class="hint">Pair each computer with this phone once: in the Codex app open remote control (Settings → Connections), or run <code>codex remote-control pair</code>, then paste the code it shows (or the QR code’s text).</p>
 <input id="pairCode" type="text" placeholder="ABCD-EFGH" autocapitalize="characters" aria-label="Pairing code">
 <button id="pairButton" class="primary">Pair computer</button>
-</section>
-<button id="codexDisconnect" class="quiet">Sign out of Codex</button>
 </section>
 </div>
 </details>
@@ -100,7 +93,7 @@ async function send(message) {
 }
 const keyOf = (chat) => chat.kind + ":" + chat.id;
 const chatName = (chat) => (chat.nickname ? chat.nickname + " — " : "") + chat.label;
-const where = (chat) => (chat.kind === "task" ? "Codex Cloud" : chat.computer);
+const where = (chat) => (chat.kind === "task" ? "Codex Cloud" : chat.kind === "chat" ? "ChatGPT" : chat.computer);
 function ago(ms) {
   if (!ms) return "";
   const minutes = Math.max(0, Math.round((Date.now() - ms) / 60000));
@@ -148,28 +141,27 @@ function controls() {
   $("useDefault").disabled = busy || !$("defaultChats").value || $("defaultChats").value === defaultKey();
 }
 async function loadChats() {
-  say("Loading Codex chats…");
+  say("Loading chats…");
   const found = await send({ type: "codex_chats" });
   chats = found.chats;
   $("chatErrors").replaceChildren(...found.errors.map((e) => item(e)));
   renderChats();
-  say(chats.length ? "" : "No Codex chats found.");
+  say(chats.length ? "" : "No chats found.");
 }
 async function render(next) {
   state = next;
   const { dots, codex, destination } = state;
   document.querySelectorAll("input[name=dest]").forEach((input) => { input.checked = input.value === destination.chosen; });
-  $("dotHint").textContent = dots.configured ? dots.dotName : "Sign in to your Dot below";
-  $("codexHint").textContent = !codex.signedIn ? "Sign in to Codex below" : codex.defaultChat ? chatName(codex.defaultChat) : "Choose a default chat";
+  $("dotHint").textContent = dots.configured ? dots.dotName : codex.signedIn ? "No Dot found on this account" : "Sign in below";
+  $("codexHint").textContent = !codex.signedIn ? "Sign in below" : codex.defaultChat ? chatName(codex.defaultChat) : "Choose a default chat";
   $("defaultCard").hidden = !(destination.chosen === "codex" && codex.signedIn);
   $("selected").textContent = codex.defaultChat ? chatName(codex.defaultChat) : "Choose a chat below";
   $("nicknames").hidden = !codex.signedIn;
   if (!codex.signedIn) chats = [];
   // Open for first-time setup; folded away once Codex is signed in, unless the user opens it.
   if (codexSignedIn !== codex.signedIn) { $("account").open = !codex.signedIn; codexSignedIn = codex.signedIn; }
-  $("dotOut").hidden = dots.configured;
-  $("dotIn").hidden = !dots.configured;
-  if (dots.configured) $("dotAccount").textContent = dots.dotName + (dots.email ? " · " + dots.email : "");
+  $("dotAccount").textContent = dots.configured ? "Your Dot: " + dots.dotName : "No Dot found on this account. Sign in again after setting one up in ChatGPT.";
+  $("computersCard").hidden = !codex.signedIn;
   $("codexOut").hidden = codex.signedIn;
   $("codexIn").hidden = !codex.signedIn;
   $("codexAccount").textContent = codex.email ? "Signed in as " + codex.email : "Signed in";
@@ -193,11 +185,11 @@ async function loadComputers() {
 function describe() {
   const { dots, codex, destination } = state;
   if (!destination.kind) {
-    return codex.signedIn ? "Choose a default Codex chat." : "Sign in under Account & connection to choose where messages go.";
+    return codex.signedIn ? "Choose a default chat." : "Sign in under Account & connection to choose where messages go.";
   }
   let text = "Messages with no chat named go to " + (destination.kind === "dot" ? "your Dot, " + dots.dotName : chatName(codex.defaultChat)) + ".";
   if (destination.kind !== destination.chosen) {
-    text += destination.chosen === "codex" ? " Choose a default Codex chat to send there instead." : " Sign in to your Dot to send there instead.";
+    text += destination.chosen === "codex" ? " Choose a default chat to send there instead." : " Set up a Dot in ChatGPT, then sign in again, to send there instead.";
   }
   return text;
 }
@@ -264,20 +256,11 @@ $("saveNickname").onclick = () => run(async () => {
 $("signin").onclick = () => run(async () => {
   const sessionToken = await chatgptCookie();
   if (!sessionToken) return;
-  say("Finding your Dot…");
-  await render(await send({ type: "dots_connect", session_token: sessionToken }));
-  say(describe());
-});
-$("disconnect").onclick = () => run(async () => {
-  await render(await send({ type: "dots_disconnect" }));
-  say("Dot disconnected. Saved sign-in removed from this plugin.");
-});
-$("codexSignin").onclick = () => run(async () => {
-  const sessionToken = await chatgptCookie();
-  if (!sessionToken) return;
-  await render(await send({ type: "codex_connect", session_token: sessionToken }));
+  say("Signing in…");
+  const next = await send({ type: "connect", session_token: sessionToken });
+  await render(next);
   await refresh();
-  say("Signed in for Codex. " + describe());
+  say((next.dotError ? next.dotError + " " : "") + describe());
 });
 $("codexEnroll").onclick = () => run(async () => {
   const begun = await send({ type: "codex_enroll_begin", entropy: entropy(96) });
@@ -309,8 +292,8 @@ $("pairButton").onclick = () => run(async () => {
   say("Computer paired.");
 });
 $("codexDisconnect").onclick = () => run(async () => {
-  await render(await send({ type: "codex_disconnect" }));
-  say("Signed out of Codex.");
+  await render(await send({ type: "disconnect" }));
+  say("Signed out. The saved sign-in and paired computers were removed from this plugin.");
 });
 Pebble.addEventListener("ready", (event) => {
   if (event.target !== "plugin") return;
@@ -320,7 +303,7 @@ Pebble.addEventListener("ready", (event) => {
     } catch (e) {
       // Without a status there is nothing to render, so offer sign-in rather than an empty page.
       $("account").open = true;
-      $("dotOut").hidden = $("codexOut").hidden = false;
+      $("codexOut").hidden = false;
       throw e;
     }
     await refresh();

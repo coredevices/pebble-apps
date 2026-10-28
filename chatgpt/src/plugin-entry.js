@@ -7,20 +7,25 @@ var createCodexAuth = require('./codex-auth').createCodexAuth;
 var createCodexRemote = require('./codex-remote').createCodexRemote;
 var createCodexCloud = require('./codex-cloud').createCodexCloud;
 var createCodexChats = require('./codex-chats').createCodexChats;
+var createChatGptChats = require('./chatgpt-chats').createChatGptChats;
 
 var DOT_ID = 'dot';
+var NEW_CHAT_ID = 'new-chat';
+var NEW_CHAT_NAME = 'New ChatGPT chat';
 var CHATS_FRESH_MS = 5 * 60 * 1000;
+var PART_LABELS = { computers: 'Computers: ', cloud: 'Codex Cloud: ', chatgpt: 'ChatGPT chats: ' };
 
 function chatInstance(id, name, title) {
   return { instanceId: id, properties: { name: { shortText: { text: name } }, title: { shortText: { text: title } } } };
 }
 
 function createPlugin(storage, fetch, now, WebSocketImpl) {
-  var dots = createDotsService(storage, fetch, now);
   var auth = createCodexAuth(storage, fetch, now);
+  var dots = createDotsService(storage, fetch, auth);
   var remote = createCodexRemote(storage, fetch, now, WebSocketImpl, auth);
   var cloud = createCodexCloud(fetch, auth);
-  var chats = createCodexChats(storage, remote, cloud, auth, now);
+  var chatgpt = createChatGptChats(storage, fetch, now, auth);
+  var chats = createCodexChats(storage, remote, cloud, chatgpt, auth, now);
 
   async function codexStatus() {
     var account = await auth.load();
@@ -68,22 +73,35 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     };
   }
 
+  /**
+   * Signs in for everything, then looks for the account's Dot: no Dot (or no reaching it) still
+   * signs in, and [dotError] says why. Another account drops the old one's Dot, computers and chats.
+   */
+  async function connect(sessionToken) {
+    var before = await auth.load();
+    var after = await auth.connect(sessionToken);
+    if (!before || before.account !== after.account || before.user !== after.user) {
+      await remote.disconnect();
+      await dots.disconnect();
+      await chats.forget();
+    }
+    try {
+      await dots.connect();
+      return status();
+    } catch (error) {
+      if (error.code === 'AUTH_REQUIRED') throw error;
+      return Object.assign(await status(), { dotError: safeError(error).message });
+    }
+  }
+
   async function config(message) {
     switch (message && message.type) {
       case 'status':
         return status();
+      case 'connect':
       case 'dots_connect':
-        await dots.connect(message.session_token);
-        return status();
-      case 'dots_disconnect':
-        await dots.disconnect();
-        return status();
-      case 'codex_connect': {
-        var before = await auth.load();
-        var after = await auth.connect(message.session_token);
-        if (!before || before.account !== after.account || before.user !== after.user) await chats.forget();
-        return status();
-      }
+      case 'codex_connect':
+        return connect(message.session_token);
       case 'codex_enroll_begin':
         return auth.beginEnroll(message.entropy);
       case 'codex_enroll_finish': {
@@ -95,7 +113,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
         var found = await chats.list();
         return {
           chats: found.chats,
-          errors: found.errors.map(function (e) { return (e.part === 'cloud' ? 'Codex Cloud: ' : 'Computers: ') + safeError(e.error).message; }),
+          errors: found.errors.map(function (e) { return PART_LABELS[e.part] + safeError(e.error).message; }),
         };
       }
       case 'codex_chat_save':
@@ -111,8 +129,11 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
         return { computers: await remote.pair(message.code) };
       case 'codex_computers':
         return { computers: await remote.computers() };
+      case 'disconnect':
+      case 'dots_disconnect':
       case 'codex_disconnect':
         await remote.disconnect();
+        await dots.disconnect();
         await auth.signOut();
         await chats.forget();
         return status();
@@ -126,7 +147,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     start_codex_cloud_task: cloud.create,
   };
 
-  /** No chat_id goes to the chosen destination; "dot" or the Dot's name to the Dot; anything else names a Codex chat. */
+  /** No chat_id goes to the chosen destination; "dot" or the Dot's name to the Dot; "new-chat" starts a ChatGPT chat; anything else names a chat in the list. */
   async function sendToAgent(args) {
     var text = args.message;
     if (typeof text !== 'string' || !text.trim() || text.length > 16000) {
@@ -139,7 +160,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     if (!wanted) {
       var target = (await destination()).target;
       if (!target) {
-        throw PluginError('INVALID_ARGS', 'Nowhere to send yet. Sign in to your Dot, or pick a default Codex chat, in plugin settings.');
+        throw PluginError('INVALID_ARGS', 'Nowhere to send yet. Sign in with ChatGPT, then set up a Dot or pick a default chat, in plugin settings.');
       }
       return target.kind === 'dot' ? dots.send({ message: text }) : chats.deliver(target.chat, text);
     }
@@ -147,6 +168,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     if (wanted === DOT_ID || (dot.configured && wanted === dot.dotName.toLowerCase())) {
       return dots.send({ message: text });
     }
+    if (wanted === NEW_CHAT_ID || wanted === NEW_CHAT_NAME.toLowerCase()) return chatgpt.send({ message: text });
     return chats.send({ message: text, chat: args.chat_id });
   }
 
@@ -177,6 +199,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
       throw PluginError('INVALID_ARGS', 'Unsupported ChatGPT source.');
     }
     var instances = dot.configured ? [chatInstance(DOT_ID, dot.dotName, dot.dotName)] : [];
+    if (await auth.load()) instances.push(chatInstance(NEW_CHAT_ID, NEW_CHAT_NAME, NEW_CHAT_NAME));
     (await codexChats()).forEach(function (chat) {
       instances.push(chatInstance(chat.id, chat.nickname || chat.label, chat.label));
     });

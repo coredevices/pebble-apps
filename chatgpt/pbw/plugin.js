@@ -145,49 +145,25 @@
       "use strict";
       var util = require_util();
       var PluginError = util.PluginError;
-      var jwtClaims = util.jwtClaims;
       var uuid = util.uuid;
       var KEY = "chatgpt-dots.connection.v1";
       var API = "https://chatgpt.com/backend-api";
-      var SESSION_URL = "https://chatgpt.com/api/auth/session";
-      var SESSION_COOKIE = "__Secure-next-auth.session-token";
       var MAX_MESSAGE = 16e3;
-      var MAX_TOKEN = 16384;
-      var RENEW_BEFORE_MS = 5 * 60 * 1e3;
-      function authRequired() {
-        return PluginError("AUTH_REQUIRED", "ChatGPT sign-in expired. Sign in again in plugin settings.");
-      }
-      function validToken(value) {
-        return typeof value === "string" && value.length > 0 && value.length <= MAX_TOKEN && !/[\r\n;]/.test(value);
-      }
-      function identity(accessToken) {
-        var claims = validToken(accessToken) ? jwtClaims(accessToken) : null;
-        if (!claims) return null;
-        var auth = claims["https://api.openai.com/auth"] || {};
-        var profile = claims["https://api.openai.com/profile"] || {};
-        if (typeof auth.chatgpt_account_id !== "string" || !auth.chatgpt_account_id || typeof auth.chatgpt_user_id !== "string" || !auth.chatgpt_user_id || typeof claims.exp !== "number" || !claims.exp) return null;
-        return {
-          account: auth.chatgpt_account_id,
-          user: auth.chatgpt_user_id,
-          email: typeof profile.email === "string" ? profile.email : "",
-          expiresAt: claims.exp * 1e3
-        };
-      }
-      function createDotsService(storage, fetch2, now) {
+      function createDotsService(storage, fetch2, auth) {
         async function load() {
+          var session = await auth.load();
           var raw = await storage.getItem(KEY);
-          return raw ? JSON.parse(raw) : null;
-        }
-        function save(state) {
-          return storage.setItem(KEY, JSON.stringify(state));
+          var state = raw ? JSON.parse(raw) : null;
+          return state && session && state.account === session.account && state.user === session.user ? Object.assign({ email: session.email }, state) : null;
         }
         async function required() {
           var state = await load();
-          if (!state) throw PluginError("AUTH_REQUIRED", "Sign in to ChatGPT in plugin settings.");
-          return state;
+          if (state) return state;
+          if (await auth.load()) throw PluginError("PLUGIN_UNAVAILABLE", "No Dot found. Set up a Dot in ChatGPT, then sign in again in plugin settings.");
+          throw PluginError("AUTH_REQUIRED", "Sign in to ChatGPT in plugin settings.");
         }
         async function failure(response, path) {
-          if (response.status === 401) return authRequired();
+          if (response.status === 401) return PluginError("AUTH_REQUIRED", "ChatGPT sign-in expired. Sign in again in plugin settings.");
           if (response.status === 403) {
             return PluginError(
               "PERMISSION_DENIED",
@@ -207,13 +183,13 @@
           }
           return PluginError("PLUGIN_UNAVAILABLE", "ChatGPT returned an error (HTTP " + response.status + ").");
         }
-        async function call(state, method, path, body) {
+        async function call(session, method, path, body) {
           var response = await fetch2(API + path, {
             method,
             headers: {
-              "Authorization": "Bearer " + state.accessToken,
-              "ChatGPT-Account-Id": state.account,
-              "X-OpenAI-Expected-Account-Id": state.account,
+              "Authorization": "Bearer " + session.accessToken,
+              "ChatGPT-Account-Id": session.account,
+              "X-OpenAI-Expected-Account-Id": session.account,
               "Content-Type": "application/json"
             },
             body: body === void 0 ? void 0 : JSON.stringify(body)
@@ -226,34 +202,17 @@
           }
           return response.json();
         }
-        async function exchange(sessionToken) {
-          var response = await fetch2(SESSION_URL, { headers: { "Cookie": SESSION_COOKIE + "=" + sessionToken } });
-          if (response.status !== 200) throw authRequired();
-          var session = await response.json();
-          var signedIn = session && validToken(session.sessionToken) ? identity(session.accessToken) : null;
-          if (!signedIn || signedIn.expiresAt - now() < 60 * 1e3) throw authRequired();
-          return { accessToken: session.accessToken, sessionToken: session.sessionToken, identity: signedIn };
-        }
-        async function renew(state) {
-          var renewed = await exchange(state.sessionToken);
-          if (renewed.identity.account !== state.account || renewed.identity.user !== state.user) throw authRequired();
-          state.accessToken = renewed.accessToken;
-          state.sessionToken = renewed.sessionToken;
-          state.expiresAt = renewed.identity.expiresAt;
-          if (state.room) await save(state);
-        }
-        async function authed(state, method, path, body) {
-          if (state.expiresAt - now() < RENEW_BEFORE_MS) await renew(state);
+        async function authed(method, path, body) {
+          var session = await auth.current();
           try {
-            return await call(state, method, path, body);
+            return await call(session, method, path, body);
           } catch (error) {
             if (error.status !== 401) throw error;
-            await renew(state);
-            return call(state, method, path, body);
+            return call(await auth.renew(), method, path, body);
           }
         }
-        async function discover(state) {
-          var primary = await authed(state, "GET", "/tbo/primary");
+        async function discover() {
+          var primary = await authed("GET", "/tbo/primary");
           var selection = primary && primary.selection;
           if (!selection || !selection.available) {
             throw PluginError("PLUGIN_UNAVAILABLE", "No Dot found. Set up a Dot in ChatGPT first.");
@@ -261,11 +220,11 @@
           if (!selection.thread_id || !selection.aeon_id || !selection.messaging_room_id) {
             throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT returned an incomplete Dot.");
           }
-          var profile = await authed(state, "GET", "/tbo/by-thread/" + encodeURIComponent(selection.thread_id));
+          var profile = await authed("GET", "/tbo/by-thread/" + encodeURIComponent(selection.thread_id));
           if (!profile || profile.status !== "active" || profile.id !== selection.aeon_id || profile.messaging_room_id !== selection.messaging_room_id || profile.active_root_thread_id && profile.active_root_thread_id !== selection.thread_id) {
             throw PluginError("PLUGIN_UNAVAILABLE", "Your Dot did not match its room. Open ChatGPT, then sign in again.");
           }
-          var room = await authed(state, "GET", "/messaging/rooms/" + encodeURIComponent(profile.messaging_room_id));
+          var room = await authed("GET", "/messaging/rooms/" + encodeURIComponent(profile.messaging_room_id));
           var members = room && Array.isArray(room.members) ? room.members : [];
           var hasDot = members.some(function(m) {
             return m && m.aeon_id === profile.id && m.account_user_id;
@@ -273,32 +232,19 @@
           var humans = members.filter(function(m) {
             return m && !m.aeon_id;
           });
-          if (!room || room.type !== "DM" || room.app_source !== "chatgpt:messaging" || room.id !== profile.messaging_room_id || room.aeon_id !== profile.id || members.length !== 2 || !hasDot || humans.length !== 1 || humans[0].account_user_id !== state.user) {
+          var session = await auth.load();
+          if (!room || room.type !== "DM" || room.app_source !== "chatgpt:messaging" || room.id !== profile.messaging_room_id || room.aeon_id !== profile.id || members.length !== 2 || !hasDot || humans.length !== 1 || !session || !session.user || humans[0].account_user_id !== session.user) {
             throw PluginError("PLUGIN_UNAVAILABLE", "Your Dot did not match its room. Open ChatGPT, then sign in again.");
           }
-          return { room: room.id, dotName: typeof profile.display_name === "string" && profile.display_name ? profile.display_name : "Dot" };
+          return { account: session.account, user: session.user, room: room.id, dotName: typeof profile.display_name === "string" && profile.display_name ? profile.display_name : "Dot" };
         }
         function status(state) {
           return state ? { configured: true, email: state.email, dotName: state.dotName } : { configured: false };
         }
-        async function connect(sessionToken) {
-          if (!validToken(sessionToken)) {
-            throw PluginError("AUTH_REQUIRED", "ChatGPT sign-in returned an invalid session. Please try again.");
-          }
-          var signedIn = await exchange(sessionToken);
-          var state = {
-            accessToken: signedIn.accessToken,
-            sessionToken: signedIn.sessionToken,
-            account: signedIn.identity.account,
-            user: signedIn.identity.user,
-            email: signedIn.identity.email,
-            expiresAt: signedIn.identity.expiresAt
-          };
-          var dot = await discover(state);
-          state.room = dot.room;
-          state.dotName = dot.dotName;
-          await save(state);
-          return status(state);
+        async function connect() {
+          var dot = await discover();
+          await storage.setItem(KEY, JSON.stringify({ account: dot.account, user: dot.user, room: dot.room, dotName: dot.dotName }));
+          return status(await load());
         }
         async function disconnect() {
           await storage.removeItem(KEY);
@@ -311,7 +257,7 @@
           }
           var state = await required();
           var id = uuid();
-          var sent = await authed(state, "POST", "/messaging/rooms/" + encodeURIComponent(state.room) + "/messages", {
+          var sent = await authed("POST", "/messaging/rooms/" + encodeURIComponent(state.room) + "/messages", {
             content: { text },
             request_id: id,
             idempotency_token: id
@@ -350,11 +296,11 @@
     }
     return [Ah, Al];
   }
-  function setU64FromNum(view, byteOffset, n, isLE) {
+  function setU64FromNum(view, byteOffset, n, isLE2) {
     const h = fromNumH(n);
     const l = fromNumL(n);
-    view.setUint32(byteOffset, isLE ? l : h, isLE);
-    view.setUint32(byteOffset + 4, isLE ? h : l, isLE);
+    view.setUint32(byteOffset, isLE2 ? l : h, isLE2);
+    view.setUint32(byteOffset + 4, isLE2 ? h : l, isLE2);
   }
   function add(Ah, Al, Bh, Bl) {
     const l = (Al >>> 0) + (Bl >>> 0);
@@ -393,6 +339,11 @@
       throw new RangeError(atitle(title) + "expected integer >= 0, got " + n);
     return n;
   }
+  function abool(value, title = "") {
+    if (typeof value !== "boolean")
+      throw new TypeError(atitle(title) + "expected boolean, got type=" + typeof value);
+    return value;
+  }
   function abytes(value, length, title = "") {
     if (isBytes(value) && (length === void 0 || value.length === length))
       return value;
@@ -427,6 +378,9 @@
       throw new RangeError('"output" expected length >= ' + min);
     }
   }
+  function u32(arr) {
+    return new Uint32Array(arr.buffer, arr.byteOffset, Math.floor(arr.byteLength / 4));
+  }
   function clean(...arrays) {
     for (let i = 0; i < arrays.length; i++) {
       arrays[i].fill(0);
@@ -437,6 +391,15 @@
   }
   function rotr(word, shift) {
     return word << 32 - shift | word >>> shift;
+  }
+  function byteSwap(word) {
+    return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
+  }
+  function byteSwap32(arr) {
+    for (let i = 0; i < arr.length; i++) {
+      arr[i] = byteSwap(arr[i]);
+    }
+    return arr;
   }
   function bytesToHex(bytes) {
     abytes(bytes);
@@ -533,7 +496,7 @@
       throw new RangeError(`"bytesLength" expected <= 65536, got ${bytesLength}`);
     return cr.getRandomValues(new Uint8Array(bytesLength));
   }
-  var atitle, aobject, aopts, hasHexBuiltin, hexes, oidNist;
+  var atitle, aobject, aopts, isLE, swap32IfBE, hasHexBuiltin, hexes, oidNist;
   var init_utils = __esm({
     "node_modules/@noble/hashes/utils.js"() {
       atitle = (title) => title ? `"${title}" ` : "";
@@ -549,6 +512,8 @@
         if (Object.hasOwn(value, "__proto__"))
           throw new TypeError(`"${label}.__proto__" is not allowed`);
       };
+      isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+      swap32IfBE = isLE ? (u) => u : byteSwap32;
       hasHexBuiltin = /* @__PURE__ */ (() => (
         // @ts-ignore
         typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
@@ -575,7 +540,7 @@
       init_u64();
       init_utils();
       HashMD = class {
-        constructor(blockLen, outputLen, padOffset, isLE) {
+        constructor(blockLen, outputLen, padOffset, isLE2) {
           __publicField(this, "blockLen");
           __publicField(this, "outputLen");
           __publicField(this, "canXOF", false);
@@ -591,7 +556,7 @@
           this.blockLen = blockLen;
           this.outputLen = outputLen;
           this.padOffset = padOffset;
-          this.isLE = isLE;
+          this.isLE = isLE2;
           this.buffer = new Uint8Array(blockLen);
           this.view = createView(this.buffer);
         }
@@ -628,7 +593,7 @@
           aexists(this);
           aoutput(out, this);
           this.finished = true;
-          const { buffer, view, blockLen, isLE } = this;
+          const { buffer, view, blockLen, isLE: isLE2 } = this;
           let { pos } = this;
           buffer[pos++] = 128;
           buffer.fill(0, pos);
@@ -636,7 +601,7 @@
             this.process(view, 0);
             buffer.fill(0);
           }
-          setU64FromNum(view, blockLen - 8, this.length * 8, isLE);
+          setU64FromNum(view, blockLen - 8, this.length * 8, isLE2);
           this.process(view, 0);
           this.roundClean();
           const oview = out === buffer ? view : createView(out);
@@ -646,7 +611,7 @@
           if (len % 4 || outLen > state.length)
             throw new Error("invalid outputLen");
           for (let i = 0; i < outLen; i++)
-            oview.setUint32(4 * i, state[i], isLE);
+            oview.setUint32(4 * i, state[i], isLE2);
         }
         digest() {
           const { buffer, outputLen } = this;
@@ -842,13 +807,13 @@
           this.H = IV[7] | 0;
         }
         get() {
-          const { A, B, C, D, E, F, G, H } = this;
-          return [A, B, C, D, E, F, G, H];
+          const { A, B: B2, C, D, E, F, G, H } = this;
+          return [A, B2, C, D, E, F, G, H];
         }
         // prettier-ignore
-        set(A, B, C, D, E, F, G, H) {
+        set(A, B2, C, D, E, F, G, H) {
           this.A = A | 0;
-          this.B = B | 0;
+          this.B = B2 | 0;
           this.C = C | 0;
           this.D = D | 0;
           this.E = E | 0;
@@ -870,30 +835,30 @@
             const s1 = rotr(W2, 17) ^ rotr(W2, 19) ^ W2 >>> 10;
             SHA256_W[i] = s1 + SHA256_W[i - 7] + s0 + SHA256_W[i - 16] | 0;
           }
-          let { A, B, C, D, E, F, G, H } = this;
+          let { A, B: B2, C, D, E, F, G, H } = this;
           for (let i = 0; i < 64; i++) {
             const sigma1 = rotr(E, 6) ^ rotr(E, 11) ^ rotr(E, 25);
             const T1 = H + sigma1 + Chi(E, F, G) + SHA256_K[i] + SHA256_W[i] | 0;
             const sigma0 = rotr(A, 2) ^ rotr(A, 13) ^ rotr(A, 22);
-            const T2 = sigma0 + Maj(A, B, C) | 0;
+            const T2 = sigma0 + Maj(A, B2, C) | 0;
             H = G;
             G = F;
             F = E;
             E = D + T1 | 0;
             D = C;
-            C = B;
-            B = A;
+            C = B2;
+            B2 = A;
             A = T1 + T2 | 0;
           }
           A = A + this.A | 0;
-          B = B + this.B | 0;
+          B2 = B2 + this.B | 0;
           C = C + this.C | 0;
           D = D + this.D | 0;
           E = E + this.E | 0;
           F = F + this.F | 0;
           G = G + this.G | 0;
           H = H + this.H | 0;
-          this.set(A, B, C, D, E, F, G, H);
+          this.set(A, B2, C, D, E, F, G, H);
         }
         roundClean() {
           clean(SHA256_W);
@@ -1234,6 +1199,7 @@
       var REDIRECT = "http://localhost:1455/auth/callback";
       var ORIGINATOR = "Codex Desktop";
       var AUTH_KEY = "chatgpt.codex.session.v1";
+      var DOT_KEY = "chatgpt-dots.connection.v1";
       var PENDING_KEY = "chatgpt.codex.pending.v1";
       var PENDING_TTL_MS = 30 * 60 * 1e3;
       var RENEW_BEFORE_MS = 5 * 60 * 1e3;
@@ -1242,7 +1208,10 @@
       var SEED_BYTES = 48;
       var ENTROPY_BYTES = VERIFIER_BYTES + STATE_BYTES + SEED_BYTES;
       function authRequired() {
-        return PluginError("AUTH_REQUIRED", "ChatGPT sign-in for Codex expired. Sign in again in plugin settings.");
+        return PluginError("AUTH_REQUIRED", "ChatGPT sign-in expired. Sign in again in plugin settings.");
+      }
+      function signInFirst() {
+        return PluginError("AUTH_REQUIRED", "Sign in with ChatGPT in plugin settings.");
       }
       function validToken(value) {
         return typeof value === "string" && value.length > 0 && value.length <= 16384 && !/[\r\n;]/.test(value);
@@ -1260,9 +1229,26 @@
         };
       }
       function createCodexAuth(storage, fetch2, now) {
+        var renewing = null;
         async function load() {
           var raw = await storage.getItem(AUTH_KEY);
-          return raw ? JSON.parse(raw) : null;
+          var state = raw ? JSON.parse(raw) : null;
+          var dotRaw = await storage.getItem(DOT_KEY);
+          var dot = dotRaw ? JSON.parse(dotRaw) : null;
+          if (!dot || !dot.sessionToken) return state;
+          if (!state || dot.expiresAt > state.expiresAt) {
+            state = {
+              account: dot.account,
+              user: dot.user,
+              email: dot.email || "",
+              expiresAt: dot.expiresAt,
+              accessToken: dot.accessToken,
+              sessionToken: dot.sessionToken
+            };
+            await storage.setItem(AUTH_KEY, JSON.stringify(state));
+          }
+          await storage.setItem(DOT_KEY, JSON.stringify({ account: dot.account, user: dot.user, room: dot.room, dotName: dot.dotName }));
+          return state;
         }
         async function exchange(sessionToken) {
           var response = await fetch2(SESSION_URL, { headers: { "Cookie": SESSION_COOKIE + "=" + sessionToken } });
@@ -1284,12 +1270,24 @@
         }
         async function current() {
           var state = await load();
-          if (!state) throw PluginError("AUTH_REQUIRED", "Sign in with ChatGPT in the Codex part of plugin settings.");
+          if (!state) throw signInFirst();
           if (state.expiresAt - now() > RENEW_BEFORE_MS) return state;
-          var renewed = await exchange(state.sessionToken);
-          if (renewed.account !== state.account || renewed.user !== state.user) throw authRequired();
-          await storage.setItem(AUTH_KEY, JSON.stringify(renewed));
-          return renewed;
+          return renew();
+        }
+        function renew() {
+          if (!renewing) {
+            renewing = (async function() {
+              var state = await load();
+              if (!state) throw signInFirst();
+              var renewed = await exchange(state.sessionToken);
+              if (renewed.account !== state.account || renewed.user !== state.user) throw authRequired();
+              await storage.setItem(AUTH_KEY, JSON.stringify(renewed));
+              return renewed;
+            })().finally(function() {
+              renewing = null;
+            });
+          }
+          return renewing;
         }
         async function beginEnroll(entropy) {
           var bytes = typeof entropy === "string" ? util.fromBase64(entropy) : [];
@@ -1358,6 +1356,7 @@
           load,
           connect,
           current,
+          renew,
           beginEnroll,
           finishEnroll,
           signOut
@@ -1401,7 +1400,7 @@
       throw new TypeError(`"${title}" is invalid: expected function, got ${typeof value}`);
     return value;
   }
-  function abool(value, title = "") {
+  function abool2(value, title = "") {
     if (typeof value !== "boolean")
       throw new TypeError(atitle2(title) + "expected boolean, got type=" + typeof value);
     return value;
@@ -1795,7 +1794,7 @@
   function FpInvertBatch(Fp, nums, passZero = false) {
     validateField(Fp);
     aarray(nums, "nums");
-    abool(passZero, "passZero");
+    abool2(passZero, "passZero");
     const F = Fp;
     const inverted = new Array(nums.length).fill(passZero ? F.ZERO : void 0);
     const multipliedAcc = nums.reduce((acc, num, i) => {
@@ -1860,16 +1859,16 @@
     const length = getFieldBytesLength(fieldOrder);
     return length + Math.ceil(length / 2);
   }
-  function mapHashToField(key, fieldOrder, isLE = false) {
+  function mapHashToField(key, fieldOrder, isLE2 = false) {
     abytes2(key);
     const len = key.length;
     const fieldLen = getFieldBytesLength(fieldOrder);
     const minLen = Math.max(getMinHashLength(fieldOrder), 16);
     if (len < minLen || len > 1024)
       throw new Error("expected " + minLen + "-1024 bytes of input, got " + len);
-    const num = isLE ? bytesToNumberLE(key) : bytesToNumberBE(key);
+    const num = isLE2 ? bytesToNumberLE(key) : bytesToNumberBE(key);
     const reduced = mod(num, fieldOrder - _1n2) + _1n2;
-    return isLE ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE(reduced, fieldLen);
+    return isLE2 ? numberToBytesLE(reduced, fieldLen) : numberToBytesBE(reduced, fieldLen);
   }
   var _0n2, _1n2, _2n, _3n, _4n, _5n, _7n, _8n, _9n, _15n, _16n, POW_WINDOWED_MIN, FIELD_FIELDS, FIELD_SQRT, _Field;
   var init_modular = __esm({
@@ -2010,18 +2009,18 @@
         }
         fromBytes(bytes, skipValidation = false) {
           abytes2(bytes);
-          const { _lengths: allowedLengths, BYTES, isLE, ORDER, _mod: modFromBytes } = this;
+          const { _lengths: allowedLengths, BYTES, isLE: isLE2, ORDER, _mod: modFromBytes } = this;
           if (allowedLengths) {
             if (bytes.length < 1 || !allowedLengths.includes(bytes.length) || bytes.length > BYTES) {
               throw new Error("Field.fromBytes: expected " + allowedLengths + " bytes, got " + bytes.length);
             }
             const padded = new Uint8Array(BYTES);
-            padded.set(bytes, isLE ? 0 : padded.length - bytes.length);
+            padded.set(bytes, isLE2 ? 0 : padded.length - bytes.length);
             bytes = padded;
           }
           if (bytes.length !== BYTES)
             throw new Error("Field.fromBytes: expected " + BYTES + " bytes, got " + bytes.length);
-          let scalar = isLE ? bytesToNumberLE(bytes) : bytesToNumberBE(bytes);
+          let scalar = isLE2 ? bytesToNumberLE(bytes) : bytesToNumberBE(bytes);
           if (modFromBytes)
             scalar = mod(scalar, ORDER);
           if (!skipValidation) {
@@ -2037,7 +2036,7 @@
         // We can't move this out because Fp6, Fp12 implement it
         // and it's unclear what to return in there.
         cmov(a, b, condition) {
-          abool(condition, "condition");
+          abool2(condition, "condition");
           return condition ? b : a;
         }
       };
@@ -2169,7 +2168,7 @@
   function mulAddUnsafe(c, points, scalars, allowOversized = false) {
     validatePointCons(c);
     validateMSMPoints(points, c);
-    abool(allowOversized, "allowOversized");
+    abool2(allowOversized, "allowOversized");
     validateMSMScalars(scalars, c.Fn, allowOversized ? c.Fn.ORDER ** _4n2 : void 0);
     if (points.length !== scalars.length)
       throw new Error("arrays of points and scalars must have equal length");
@@ -2177,14 +2176,14 @@
     const digits = scalars.map((n) => wnafDigits(n, 4));
     return wnafWalk(c.ZERO, tables, digits);
   }
-  function createField(order, field, isLE) {
+  function createField(order, field, isLE2) {
     if (field) {
       if (field.ORDER !== order)
         throw new Error("Field.ORDER must match order: Fp == p, Fn == n");
       validateField(field);
       return field;
     } else {
-      return Field(order, { isLE });
+      return Field(order, { isLE: isLE2 });
     }
   }
   function createCurveFields(type, CURVE, curveOpts = {}, FpFnLE) {
@@ -2543,9 +2542,9 @@
           const len = checkLength(a, b);
           if (fft) {
             const A = fft.direct(a, false, true);
-            const B = fft.direct(b, false, true);
+            const B2 = fft.direct(b, false, true);
             for (let i = 0; i < A.length; i++)
-              A[i] = F.mul(A[i], B[i]);
+              A[i] = F.mul(A[i], B2[i]);
             return fft.inverse(A, true, false);
           } else {
             const res = _create(len);
@@ -2932,13 +2931,13 @@
   function mapToCurveSimpleSWU(Fp, opts) {
     const F = validateField(Fp);
     validateObject(opts, {}, {}, "opts");
-    const { A, B, Z } = opts;
-    if (!F.isValidNot0(A) || !F.isValidNot0(B) || !F.isValid(Z))
+    const { A, B: B2, Z } = opts;
+    if (!F.isValidNot0(A) || !F.isValidNot0(B2) || !F.isValid(Z))
       throw new Error("mapToCurveSimpleSWU: invalid opts");
     if (F.eql(Z, F.neg(F.ONE)) || FpIsSquare(F, Z))
       throw new Error("mapToCurveSimpleSWU: invalid opts");
-    const x = F.mul(B, F.inv(F.mul(Z, A)));
-    const gx = F.add(F.add(F.mul(F.sqr(x), x), F.mul(A, x)), B);
+    const x = F.mul(B2, F.inv(F.mul(Z, A)));
+    const gx = F.add(F.add(F.mul(F.sqr(x), x), F.mul(A, x)), B2);
     if (!FpIsSquare(F, gx))
       throw new Error("mapToCurveSimpleSWU: invalid opts");
     const sqrtRatio = SWUFpSqrtRatio(F, Z);
@@ -2951,7 +2950,7 @@
       tv2 = F.sqr(tv1);
       tv2 = F.add(tv2, tv1);
       tv3 = F.add(tv2, F.ONE);
-      tv3 = F.mul(tv3, B);
+      tv3 = F.mul(tv3, B2);
       tv4 = F.cmov(Z, F.neg(tv2), !F.eql(tv2, F.ZERO));
       tv4 = F.mul(tv4, A);
       tv2 = F.sqr(tv3);
@@ -2960,7 +2959,7 @@
       tv2 = F.add(tv2, tv5);
       tv2 = F.mul(tv2, tv3);
       tv6 = F.mul(tv6, tv4);
-      tv5 = F.mul(tv6, B);
+      tv5 = F.mul(tv6, B2);
       tv2 = F.add(tv2, tv5);
       x2 = F.mul(tv1, tv3);
       const { isValid, value } = sqrtRatio(tv2, tv6);
@@ -3796,8 +3795,8 @@
       return bytes;
     };
     const hashInput = (...bytes) => hash(encode(...bytes, "Finalize"));
-    function getTranscripts(B, C, D, ctx) {
-      const Bm = B.toBytes();
+    function getTranscripts(B2, C, D, ctx) {
+      const Bm = B2.toBytes();
       const seed = hash(encode(Bm, concatBytes2(asciiToBytes("Seed-"), ctx)));
       const res2 = [];
       for (let i = 0; i < C.length; i++) {
@@ -3808,38 +3807,38 @@
       }
       return res2;
     }
-    function computeComposites(B, C, D, ctx) {
-      const T = getTranscripts(B, C, D, ctx);
+    function computeComposites(B2, C, D, ctx) {
+      const T = getTranscripts(B2, C, D, ctx);
       const M = msm(C, T);
       const Z = msm(D, T);
       return { M, Z };
     }
-    function computeCompositesFast(k, B, C, D, ctx) {
-      const T = getTranscripts(B, C, D, ctx);
+    function computeCompositesFast(k, B2, C, D, ctx) {
+      const T = getTranscripts(B2, C, D, ctx);
       const M = msm(C, T);
       const Z = M.multiply(k);
       return { M, Z };
     }
-    function challengeTranscript(B, M, Z, t2, t3, ctx) {
-      const [Bm, a0, a1, a2, a3] = [B, M, Z, t2, t3].map((i) => i.toBytes());
+    function challengeTranscript(B2, M, Z, t2, t3, ctx) {
+      const [Bm, a0, a1, a2, a3] = [B2, M, Z, t2, t3].map((i) => i.toBytes());
       return hashToScalarPrefixed(encode(Bm, a0, a1, a2, a3, "Challenge"), ctx);
     }
-    function generateProof(ctx, k, B, C, D, rng) {
-      const { M, Z } = computeCompositesFast(k, B, C, D, ctx);
+    function generateProof(ctx, k, B2, C, D, rng) {
+      const { M, Z } = computeCompositesFast(k, B2, C, D, ctx);
       const r = randomScalar(rng);
       const t2 = Point.BASE.multiply(r);
       const t3 = M.multiply(r);
-      const c = challengeTranscript(B, M, Z, t2, t3, ctx);
+      const c = challengeTranscript(B2, M, Z, t2, t3, ctx);
       const s = Fn.sub(r, Fn.mul(c, k));
       return concatBytes2(...[c, s].map((i) => Fn.toBytes(i)));
     }
-    function verifyProof(ctx, B, C, D, proof) {
+    function verifyProof(ctx, B2, C, D, proof) {
       abytes2(proof, 2 * Fn.BYTES);
-      const { M, Z } = computeComposites(B, C, D, ctx);
+      const { M, Z } = computeComposites(B2, C, D, ctx);
       const [c, s] = [proof.subarray(0, Fn.BYTES), proof.subarray(Fn.BYTES)].map((f) => Fn.fromBytes(f));
-      const t2 = msm([Point.BASE, B], [s, c]);
+      const t2 = msm([Point.BASE, B2], [s, c]);
       const t3 = msm([M, Z], [s, c]);
-      const expectedC = challengeTranscript(B, M, Z, t2, t3, ctx);
+      const expectedC = challengeTranscript(B2, M, Z, t2, t3, ctx);
       if (!Fn.eql(c, expectedC))
         throw new Error("proof verification failed");
     }
@@ -4273,8 +4272,8 @@
     for (let optName of Object.keys(def)) {
       optsn[optName] = opts[optName] === void 0 ? def[optName] : opts[optName];
     }
-    abool(optsn.lowS, "lowS");
-    abool(optsn.prehash, "prehash");
+    abool2(optsn.lowS, "lowS");
+    abool2(optsn.prehash, "prehash");
     if (optsn.format !== void 0)
       validateSigFormat(optsn.format);
     return optsn;
@@ -4318,7 +4317,7 @@
       }
       const { x, y } = point.toAffine();
       const bx = Fp.toBytes(x);
-      abool(isCompressed, "isCompressed");
+      abool2(isCompressed, "isCompressed");
       if (isCompressed) {
         assertCompressionIsSupported();
         const hasEvenY = !Fp.isOdd(y);
@@ -4696,7 +4695,7 @@
         return this.clearCofactor().is0();
       }
       toBytes(isCompressed = true) {
-        abool(isCompressed, "isCompressed");
+        abool2(isCompressed, "isCompressed");
         this.assertValidity();
         return encodePoint(_Point, this, isCompressed);
       }
@@ -5846,7 +5845,7 @@
       function sameAccount(a, b) {
         return !!a && !!b && a.account === b.account && a.user === b.user;
       }
-      function createCodexChats(storage, remote, cloud, auth, now) {
+      function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
         var started = 0;
         var landed = 0;
         async function stored() {
@@ -5931,14 +5930,15 @@
               return tasks.map(function(task) {
                 return { kind: "task", id: task.id, label: task.title.slice(0, 80), state: "cloud", updatedAt: task.updatedAt };
               });
-            }))
+            })),
+            part("chatgpt", chatgpt.list())
           ]);
-          var chats = halves[0].concat(halves[1]);
-          if (errors.length < 2) await remember(owner, seq, chats);
+          var chats = halves[0].concat(halves[1], halves[2]);
+          if (errors.length < halves.length) await remember(owner, seq, chats);
           return { chats: await named(chats), errors };
         }
         async function update(chat, nickname, makeDefault) {
-          if (!chat || chat.kind !== "session" && chat.kind !== "task" || typeof chat.id !== "string" || !chat.id) {
+          if (!chat || chat.kind !== "session" && chat.kind !== "task" && chat.kind !== "chat" || typeof chat.id !== "string" || !chat.id) {
             throw PluginError("INVALID_ARGS", "Pick a Codex chat first.");
           }
           var name = typeof nickname === "string" ? nickname.trim().slice(0, MAX_NICKNAME) : "";
@@ -5995,6 +5995,7 @@
         }
         function deliver(chat, text) {
           if (chat.kind === "task") return cloud.followUp({ message: text, task: chat.id });
+          if (chat.kind === "chat") return chatgpt.send({ message: text, conversation: chat.id, title: chat.nickname || chat.label });
           return remote.send({ message: text, session: chat.id, computer: chat.computer });
         }
         async function setDestination(value) {
@@ -6026,6 +6027,502 @@
     }
   });
 
+  // node_modules/@noble/hashes/sha3.js
+  var sha3_exports = {};
+  __export(sha3_exports, {
+    Keccak: () => Keccak,
+    keccakP: () => keccakP,
+    keccak_224: () => keccak_224,
+    keccak_256: () => keccak_256,
+    keccak_384: () => keccak_384,
+    keccak_512: () => keccak_512,
+    sha3_224: () => sha3_224,
+    sha3_256: () => sha3_256,
+    sha3_384: () => sha3_384,
+    sha3_512: () => sha3_512,
+    shake128: () => shake128,
+    shake128_32: () => shake128_32,
+    shake256: () => shake256,
+    shake256_64: () => shake256_64
+  });
+  function keccakP(s, rounds = 24) {
+    if (!(s instanceof Uint32Array))
+      throw new TypeError('"s" expected Uint32Array(50), got type=' + typeof s);
+    if (s.length !== 50)
+      throw new RangeError('"s" expected Uint32Array(50), got length=' + s.length);
+    anumber(rounds, "rounds");
+    if (rounds < 1 || rounds > 24)
+      throw new Error('"rounds" expected integer 1..24');
+    for (let round = 24 - rounds; round < 24; round++) {
+      for (let x = 0; x < 10; x++)
+        B[x] = s[x] ^ s[x + 10] ^ s[x + 20] ^ s[x + 30] ^ s[x + 40];
+      for (let x = 0; x < 10; x += 2) {
+        const idx1 = (x + 8) % 10;
+        const idx0 = (x + 2) % 10;
+        const B0 = B[idx0];
+        const B1 = B[idx0 + 1];
+        const Th = rotlH(B0, B1, 1) ^ B[idx1];
+        const Tl = rotlL(B0, B1, 1) ^ B[idx1 + 1];
+        for (let y = 0; y < 50; y += 10) {
+          s[x + y] ^= Th;
+          s[x + y + 1] ^= Tl;
+        }
+      }
+      let curH = s[2];
+      let curL = s[3];
+      for (let t = 0; t < 24; t++) {
+        const shift = SHA3_ROTL[t];
+        const Th = rotlH(curH, curL, shift);
+        const Tl = rotlL(curH, curL, shift);
+        const PI = SHA3_PI[t];
+        curH = s[PI];
+        curL = s[PI + 1];
+        s[PI] = Th;
+        s[PI + 1] = Tl;
+      }
+      for (let y = 0; y < 50; y += 10) {
+        const b0 = s[y], b1 = s[y + 1], b2 = s[y + 2], b3 = s[y + 3];
+        s[y] ^= ~s[y + 2] & s[y + 4];
+        s[y + 1] ^= ~s[y + 3] & s[y + 5];
+        s[y + 2] ^= ~s[y + 4] & s[y + 6];
+        s[y + 3] ^= ~s[y + 5] & s[y + 7];
+        s[y + 4] ^= ~s[y + 6] & s[y + 8];
+        s[y + 5] ^= ~s[y + 7] & s[y + 9];
+        s[y + 6] ^= ~s[y + 8] & b0;
+        s[y + 7] ^= ~s[y + 9] & b1;
+        s[y + 8] ^= ~b0 & b2;
+        s[y + 9] ^= ~b1 & b3;
+      }
+      s[0] ^= SHA3_IOTA_H[round];
+      s[1] ^= SHA3_IOTA_L[round];
+    }
+    clean(B);
+  }
+  var _0n7, _1n6, _2n4, _7n2, _256n, _0x71n, SHA3_PI, SHA3_ROTL, _SHA3_IOTA, IOTAS, SHA3_IOTA_H, SHA3_IOTA_L, rotlSH, rotlSL, rotlBH, rotlBL, rotlH, rotlL, B, Keccak, genKeccak, sha3_224, sha3_256, sha3_384, sha3_512, keccak_224, keccak_256, keccak_384, keccak_512, genShake, shake128, shake256, shake128_32, shake256_64;
+  var init_sha3 = __esm({
+    "node_modules/@noble/hashes/sha3.js"() {
+      init_u64();
+      init_utils();
+      _0n7 = BigInt(0);
+      _1n6 = BigInt(1);
+      _2n4 = BigInt(2);
+      _7n2 = BigInt(7);
+      _256n = BigInt(256);
+      _0x71n = BigInt(113);
+      SHA3_PI = [];
+      SHA3_ROTL = [];
+      _SHA3_IOTA = [];
+      for (let round = 0, R = _1n6, x = 1, y = 0; round < 24; round++) {
+        [x, y] = [y, (2 * x + 3 * y) % 5];
+        SHA3_PI.push(2 * (5 * y + x));
+        SHA3_ROTL.push((round + 1) * (round + 2) / 2 % 64);
+        let t = _0n7;
+        for (let j = 0; j < 7; j++) {
+          R = (R << _1n6 ^ (R >> _7n2) * _0x71n) % _256n;
+          if (R & _2n4)
+            t ^= _1n6 << (_1n6 << BigInt(j)) - _1n6;
+        }
+        _SHA3_IOTA.push(t);
+      }
+      IOTAS = split(_SHA3_IOTA, true);
+      SHA3_IOTA_H = IOTAS[0];
+      SHA3_IOTA_L = IOTAS[1];
+      rotlSH = (h, l, s) => h << s | l >>> 32 - s;
+      rotlSL = (h, l, s) => l << s | h >>> 32 - s;
+      rotlBH = (h, l, s) => l << s - 32 | h >>> 64 - s;
+      rotlBL = (h, l, s) => h << s - 32 | l >>> 64 - s;
+      rotlH = (h, l, s) => s > 32 ? rotlBH(h, l, s) : rotlSH(h, l, s);
+      rotlL = (h, l, s) => s > 32 ? rotlBL(h, l, s) : rotlSL(h, l, s);
+      B = new Uint32Array(5 * 2);
+      Keccak = class _Keccak {
+        // NOTE: we accept arguments in bytes instead of bits here.
+        constructor(blockLen, suffix, outputLen, enableXOF = false, rounds = 24) {
+          __publicField(this, "state");
+          __publicField(this, "pos", 0);
+          __publicField(this, "posOut", 0);
+          __publicField(this, "finished", false);
+          __publicField(this, "state32");
+          __publicField(this, "destroyed", false);
+          __publicField(this, "blockLen");
+          __publicField(this, "suffix");
+          __publicField(this, "outputLen");
+          __publicField(this, "canXOF");
+          __publicField(this, "enableXOF", false);
+          __publicField(this, "rounds");
+          anumber(blockLen, "blockLen");
+          anumber(suffix, "suffix");
+          anumber(rounds, "rounds");
+          abool(enableXOF, "enableXOF");
+          this.blockLen = blockLen;
+          this.suffix = suffix;
+          this.outputLen = outputLen;
+          this.enableXOF = enableXOF;
+          this.canXOF = enableXOF;
+          this.rounds = rounds;
+          anumber(outputLen, "outputLen");
+          if (!(0 < blockLen && blockLen < 200))
+            throw new Error('"blockLen" must be 1..199');
+          this.state = new Uint8Array(200);
+          this.state32 = u32(this.state);
+        }
+        clone() {
+          return this._cloneInto();
+        }
+        keccak() {
+          swap32IfBE(this.state32);
+          keccakP(this.state32, this.rounds);
+          swap32IfBE(this.state32);
+          this.posOut = 0;
+          this.pos = 0;
+        }
+        update(data) {
+          aexists(this);
+          abytes(data);
+          const { blockLen, state, state32 } = this;
+          const len = data.length;
+          const canUseU32 = blockLen % 4 === 0 && data.byteOffset % 4 === 0;
+          const blockLen32 = blockLen / 4;
+          const data32 = canUseU32 && len >= blockLen ? u32(data) : void 0;
+          for (let pos = 0; pos < len; ) {
+            if (data32 !== void 0 && this.pos === 0 && pos % 4 === 0 && len - pos >= blockLen) {
+              for (let i = 0, o = pos / 4; i < blockLen32; i++)
+                state32[i] ^= data32[o + i];
+              pos += blockLen;
+              this.pos = blockLen;
+              this.keccak();
+              continue;
+            }
+            const take = Math.min(blockLen - this.pos, len - pos);
+            for (let i = 0; i < take; i++)
+              state[this.pos++] ^= data[pos++];
+            if (this.pos === blockLen)
+              this.keccak();
+          }
+          return this;
+        }
+        finish() {
+          if (this.finished)
+            return;
+          this.finished = true;
+          const { state, suffix, pos, blockLen } = this;
+          state[pos] ^= suffix;
+          if ((suffix & 128) !== 0 && pos === blockLen - 1)
+            this.keccak();
+          state[blockLen - 1] ^= 128;
+          this.keccak();
+        }
+        writeInto(out) {
+          aexists(this, false);
+          abytes(out);
+          this.finish();
+          const bufferOut = this.state;
+          const { blockLen } = this;
+          for (let pos = 0, len = out.length; pos < len; ) {
+            if (this.posOut >= blockLen)
+              this.keccak();
+            const take = Math.min(blockLen - this.posOut, len - pos);
+            out.set(bufferOut.subarray(this.posOut, this.posOut + take), pos);
+            this.posOut += take;
+            pos += take;
+          }
+          return out;
+        }
+        xofInto(out) {
+          if (!this.enableXOF)
+            throw new Error("XOF is not enabled");
+          return this.writeInto(out);
+        }
+        xof(bytes) {
+          anumber(bytes);
+          return this.xofInto(new Uint8Array(bytes));
+        }
+        digestInto(out) {
+          aoutput(out, this);
+          if (this.finished)
+            throw new Error("digest() was already called");
+          this.writeInto(out.length === this.outputLen ? out : out.subarray(0, this.outputLen));
+          this.destroy();
+        }
+        digest() {
+          const out = new Uint8Array(this.outputLen);
+          this.digestInto(out);
+          return out;
+        }
+        destroy() {
+          this.destroyed = true;
+          clean(this.state);
+        }
+        _cloneInto(to) {
+          const { blockLen, suffix, outputLen, rounds, enableXOF } = this;
+          to || (to = new _Keccak(blockLen, suffix, outputLen, enableXOF, rounds));
+          to.blockLen = blockLen;
+          to.state32.set(this.state32);
+          to.pos = this.pos;
+          to.posOut = this.posOut;
+          to.finished = this.finished;
+          to.rounds = rounds;
+          to.suffix = suffix;
+          to.outputLen = outputLen;
+          to.enableXOF = enableXOF;
+          to.canXOF = this.canXOF;
+          to.destroyed = this.destroyed;
+          return to;
+        }
+      };
+      genKeccak = (suffix, blockLen, outputLen, info = {}) => createHasher(() => new Keccak(blockLen, suffix, outputLen), info);
+      sha3_224 = /* @__PURE__ */ genKeccak(
+        6,
+        144,
+        28,
+        /* @__PURE__ */ oidNist(7)
+      );
+      sha3_256 = /* @__PURE__ */ genKeccak(
+        6,
+        136,
+        32,
+        /* @__PURE__ */ oidNist(8)
+      );
+      sha3_384 = /* @__PURE__ */ genKeccak(
+        6,
+        104,
+        48,
+        /* @__PURE__ */ oidNist(9)
+      );
+      sha3_512 = /* @__PURE__ */ genKeccak(
+        6,
+        72,
+        64,
+        /* @__PURE__ */ oidNist(10)
+      );
+      keccak_224 = /* @__PURE__ */ genKeccak(1, 144, 28);
+      keccak_256 = /* @__PURE__ */ genKeccak(1, 136, 32);
+      keccak_384 = /* @__PURE__ */ genKeccak(1, 104, 48);
+      keccak_512 = /* @__PURE__ */ genKeccak(1, 72, 64);
+      genShake = (suffix, blockLen, outputLen, info = {}) => createHasher((opts = {}) => {
+        opts = checkOpts({}, opts);
+        return new Keccak(blockLen, suffix, opts.dkLen === void 0 ? outputLen : opts.dkLen, true);
+      }, info);
+      shake128 = /* @__PURE__ */ genShake(31, 168, 16, /* @__PURE__ */ oidNist(11));
+      shake256 = /* @__PURE__ */ genShake(31, 136, 32, /* @__PURE__ */ oidNist(12));
+      shake128_32 = /* @__PURE__ */ genShake(31, 168, 32, /* @__PURE__ */ oidNist(11));
+      shake256_64 = /* @__PURE__ */ genShake(31, 136, 64, /* @__PURE__ */ oidNist(12));
+    }
+  });
+
+  // src/chatgpt-chats.js
+  var require_chatgpt_chats = __commonJS({
+    "src/chatgpt-chats.js"(exports, module) {
+      "use strict";
+      var sha3_5122 = (init_sha3(), __toCommonJS(sha3_exports)).sha3_512;
+      var util = require_util();
+      var PluginError = util.PluginError;
+      var API = "https://chatgpt.com/backend-api";
+      var DEVICE_KEY = "chatgpt.web.device.v1";
+      var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+      var DATA_BUILD = "prod-329d9af90bc80a50b17d4b6f95c261f7c70f5a9b";
+      var POW_BUDGET_MS = 5e3;
+      var MAX_REPLY = 300;
+      function needsBrowser() {
+        return PluginError("PERMISSION_DENIED", "ChatGPT wants a browser check before taking this message. Send it from the ChatGPT app.");
+      }
+      function checkText(text) {
+        if (typeof text !== "string" || !text.trim() || text.length > 16e3) {
+          throw PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
+        }
+      }
+      function failure(status) {
+        if (status === 401) return PluginError("AUTH_REQUIRED", "ChatGPT sign-in expired. Sign in again in plugin settings.");
+        if (status === 403) return PluginError("PERMISSION_DENIED", "ChatGPT blocked this message from the plugin. Send it from the ChatGPT app.");
+        if (status === 404) return PluginError("INVALID_ARGS", "ChatGPT could not find that chat.");
+        if (status === 429) return PluginError("RATE_LIMITED", "ChatGPT usage limit reached. Try again later.");
+        return PluginError("PLUGIN_UNAVAILABLE", "ChatGPT returned an error (HTTP " + status + "). If sending, check the chat before trying again.");
+      }
+      function browserConfig(now) {
+        return [
+          4e3,
+          new Date(now()).toString(),
+          null,
+          0,
+          USER_AGENT,
+          null,
+          DATA_BUILD,
+          "en-US",
+          "en-US,en",
+          0,
+          "webdriver−false",
+          "location",
+          "ontransitionend",
+          Math.random() * 1e3,
+          util.uuid(),
+          "",
+          8,
+          Math.floor(now() / 1e3)
+        ];
+      }
+      function solve(seed, difficulty, config, now) {
+        var target = difficulty.toLowerCase();
+        var deadline = now() + POW_BUDGET_MS;
+        for (var i = 0; ; i++) {
+          if (i % 1e3 === 999 && now() > deadline) return null;
+          config[3] = i;
+          config[9] = i >> 1;
+          var answer = util.base64(util.utf8(JSON.stringify(config)));
+          var hash = sha3_5122(util.utf8(seed + answer));
+          var hex = "";
+          for (var j = 0; hex.length < target.length; j++) hex += ("0" + hash[j].toString(16)).slice(-2);
+          if (hex.slice(0, target.length) <= target) return answer;
+        }
+      }
+      function parseStream(body) {
+        var result = { conversation: null, reply: "", done: false, error: false };
+        var current = null;
+        var path = null;
+        var op = null;
+        function start(event) {
+          var m = event.message;
+          if (event.conversation_id) result.conversation = event.conversation_id;
+          var parts = m.content && m.content.parts;
+          current = m.author && m.author.role === "assistant" && m.recipient === "all" && parts && m.content.content_type === "text" ? { text: parts && typeof parts[0] === "string" ? parts[0] : "" } : null;
+          if (current) result.last = current;
+        }
+        function apply(p, o, v) {
+          if (p === "" && o === "add" && v && typeof v.message === "object") start(v);
+          else if (current && p === "/message/content/parts/0" && typeof v === "string") current.text = o === "append" ? current.text + v : v;
+        }
+        body.split("\n").forEach(function(line) {
+          if (line.trim() === "data: [DONE]") result.done = true;
+          if (line.indexOf("data: ") !== 0) return;
+          var event;
+          try {
+            event = JSON.parse(line.slice(6));
+          } catch (_) {
+            return;
+          }
+          if (!event || typeof event !== "object") return;
+          if (event.conversation_id && !result.conversation) result.conversation = event.conversation_id;
+          if (event.type === "message_stream_complete") result.done = true;
+          if (event.error) result.error = true;
+          if (event.message && typeof event.message === "object") return start(event);
+          if (!("v" in event)) return;
+          if ("p" in event) path = event.p;
+          if ("o" in event) op = event.o;
+          if (Array.isArray(event.v)) event.v.forEach(function(d) {
+            if (d) apply(d.p, d.o, d.v);
+          });
+          else apply(path, op, event.v);
+        });
+        result.reply = result.last ? result.last.text.trim() : "";
+        delete result.last;
+        return result;
+      }
+      function millis(value) {
+        return typeof value === "string" ? Date.parse(value) || 0 : util.toMillis(value);
+      }
+      function createChatGptChats(storage, fetch2, now, auth) {
+        async function deviceId() {
+          var id = await storage.getItem(DEVICE_KEY);
+          if (id) return id;
+          id = util.uuid();
+          await storage.setItem(DEVICE_KEY, id);
+          return id;
+        }
+        async function call(session, method, path, body, extra) {
+          var response = await fetch2(API + path, {
+            method,
+            headers: Object.assign({
+              "Authorization": "Bearer " + session.account.accessToken,
+              "ChatGPT-Account-Id": session.account.account,
+              "oai-device-id": session.device,
+              "oai-language": "en-US",
+              "User-Agent": USER_AGENT,
+              "Origin": "https://chatgpt.com",
+              "Referer": "https://chatgpt.com/",
+              "Content-Type": "application/json"
+            }, extra),
+            body: body === void 0 ? void 0 : JSON.stringify(body)
+          });
+          if (response.status < 200 || response.status >= 300) {
+            console.error("ChatGPT " + method + " " + path.split("?")[0].replace(/\/conversation\/[^/]+$/, "/conversation/:id") + ": HTTP " + response.status);
+            throw failure(response.status);
+          }
+          return response;
+        }
+        async function signedIn() {
+          return { account: await auth.current(), device: await deviceId() };
+        }
+        async function list() {
+          var session = await signedIn();
+          var body = await (await call(session, "GET", "/conversations?offset=0&limit=20&order=updated")).json();
+          return (body && body.items || []).filter(function(c) {
+            return c && c.id && !c.is_archived;
+          }).map(function(c) {
+            return { kind: "chat", id: c.id, label: String(c.title || "New chat").slice(0, 80), state: "chatgpt", updatedAt: millis(c.update_time || c.create_time) };
+          });
+        }
+        async function sentinel(session) {
+          var config = browserConfig(now);
+          var p = solve(String(Math.random()), "0fffff", config, now);
+          if (!p) throw needsBrowser();
+          var req = await (await call(session, "POST", "/sentinel/chat-requirements", { p: "gAAAAAC" + p })).json();
+          if (!req || !req.token) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not accept a new message. Try again later.");
+          if (req.turnstile && req.turnstile.required || req.arkose && req.arkose.required) throw needsBrowser();
+          var headers = { "openai-sentinel-chat-requirements-token": req.token };
+          var pow2 = req.proofofwork;
+          if (pow2 && pow2.required) {
+            var answer = typeof pow2.seed === "string" && typeof pow2.difficulty === "string" && solve(pow2.seed, pow2.difficulty, config, now);
+            if (!answer) throw needsBrowser();
+            headers["openai-sentinel-proof-token"] = "gAAAAAB" + answer;
+          }
+          return headers;
+        }
+        async function send(args) {
+          checkText(args && args.message);
+          var session = await signedIn();
+          var id = args.conversation;
+          var parent = "client-created-root";
+          if (id) {
+            var detail = await (await call(session, "GET", "/conversation/" + encodeURIComponent(id))).json();
+            parent = detail && detail.current_node;
+            if (!parent) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT returned an incomplete chat.");
+          }
+          var headers = await sentinel(session);
+          var turn = {
+            action: "next",
+            parent_message_id: parent,
+            model: "auto",
+            conversation_mode: { kind: "primary_assistant" },
+            supports_buffering: true,
+            supported_encodings: ["v1"]
+          };
+          if (id) turn.conversation_id = id;
+          var prepared = await (await call(session, "POST", "/f/conversation/prepare", Object.assign({ client_prepare_state: "none" }, turn))).json();
+          if (!prepared || !prepared.conduit_token) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not accept a new message. Try again later.");
+          headers["x-conduit-token"] = prepared.conduit_token;
+          headers["Accept"] = "text/event-stream";
+          var message = {
+            id: util.uuid(),
+            author: { role: "user" },
+            create_time: now() / 1e3,
+            content: { content_type: "text", parts: [args.message] },
+            metadata: {}
+          };
+          var response = await call(session, "POST", "/f/conversation", Object.assign({ messages: [message], client_prepare_state: "success" }, turn), headers);
+          var stream = parseStream(await response.text());
+          if (!stream.conversation || stream.error && !stream.reply) {
+            throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not confirm the message; check the chat before sending again.");
+          }
+          var text = id ? 'Sent to ChatGPT chat "' + String(args.title || id).slice(0, 60) + '".' : "Started a new ChatGPT chat (chat_id " + stream.conversation + ").";
+          if (stream.done && stream.reply) {
+            text += " ChatGPT replied: " + (stream.reply.length > MAX_REPLY ? stream.reply.slice(0, MAX_REPLY - 1) + "…" : stream.reply);
+          }
+          return { text };
+        }
+        return { list, send };
+      }
+      module.exports = { createChatGptChats };
+    }
+  });
+
   // src/plugin-entry.js
   var require_plugin_entry = __commonJS({
     "src/plugin-entry.js"(exports, module) {
@@ -6036,17 +6533,22 @@
       var createCodexRemote = require_codex_remote().createCodexRemote;
       var createCodexCloud = require_codex_cloud().createCodexCloud;
       var createCodexChats = require_codex_chats().createCodexChats;
+      var createChatGptChats = require_chatgpt_chats().createChatGptChats;
       var DOT_ID = "dot";
+      var NEW_CHAT_ID = "new-chat";
+      var NEW_CHAT_NAME = "New ChatGPT chat";
       var CHATS_FRESH_MS = 5 * 60 * 1e3;
+      var PART_LABELS = { computers: "Computers: ", cloud: "Codex Cloud: ", chatgpt: "ChatGPT chats: " };
       function chatInstance(id, name, title) {
         return { instanceId: id, properties: { name: { shortText: { text: name } }, title: { shortText: { text: title } } } };
       }
       function createPlugin(storage, fetch2, now, WebSocketImpl) {
-        var dots = createDotsService(storage, fetch2, now);
         var auth = createCodexAuth(storage, fetch2, now);
+        var dots = createDotsService(storage, fetch2, auth);
         var remote = createCodexRemote(storage, fetch2, now, WebSocketImpl, auth);
         var cloud = createCodexCloud(fetch2, auth);
-        var chats = createCodexChats(storage, remote, cloud, auth, now);
+        var chatgpt = createChatGptChats(storage, fetch2, now, auth);
+        var chats = createCodexChats(storage, remote, cloud, chatgpt, auth, now);
         async function codexStatus() {
           var account = await auth.load();
           var connected = await remote.load();
@@ -6086,22 +6588,30 @@
             destination: { kind: where.target ? where.target.kind : null, chosen: where.chosen, choosable: where.choosable }
           };
         }
+        async function connect(sessionToken) {
+          var before = await auth.load();
+          var after = await auth.connect(sessionToken);
+          if (!before || before.account !== after.account || before.user !== after.user) {
+            await remote.disconnect();
+            await dots.disconnect();
+            await chats.forget();
+          }
+          try {
+            await dots.connect();
+            return status();
+          } catch (error) {
+            if (error.code === "AUTH_REQUIRED") throw error;
+            return Object.assign(await status(), { dotError: safeError(error).message });
+          }
+        }
         async function config(message) {
           switch (message && message.type) {
             case "status":
               return status();
+            case "connect":
             case "dots_connect":
-              await dots.connect(message.session_token);
-              return status();
-            case "dots_disconnect":
-              await dots.disconnect();
-              return status();
-            case "codex_connect": {
-              var before = await auth.load();
-              var after = await auth.connect(message.session_token);
-              if (!before || before.account !== after.account || before.user !== after.user) await chats.forget();
-              return status();
-            }
+            case "codex_connect":
+              return connect(message.session_token);
             case "codex_enroll_begin":
               return auth.beginEnroll(message.entropy);
             case "codex_enroll_finish": {
@@ -6114,7 +6624,7 @@
               return {
                 chats: found.chats,
                 errors: found.errors.map(function(e) {
-                  return (e.part === "cloud" ? "Codex Cloud: " : "Computers: ") + safeError(e.error).message;
+                  return PART_LABELS[e.part] + safeError(e.error).message;
                 })
               };
             }
@@ -6131,8 +6641,11 @@
               return { computers: await remote.pair(message.code) };
             case "codex_computers":
               return { computers: await remote.computers() };
+            case "disconnect":
+            case "dots_disconnect":
             case "codex_disconnect":
               await remote.disconnect();
+              await dots.disconnect();
               await auth.signOut();
               await chats.forget();
               return status();
@@ -6156,7 +6669,7 @@
           if (!wanted) {
             var target = (await destination()).target;
             if (!target) {
-              throw PluginError("INVALID_ARGS", "Nowhere to send yet. Sign in to your Dot, or pick a default Codex chat, in plugin settings.");
+              throw PluginError("INVALID_ARGS", "Nowhere to send yet. Sign in with ChatGPT, then set up a Dot or pick a default chat, in plugin settings.");
             }
             return target.kind === "dot" ? dots.send({ message: text }) : chats.deliver(target.chat, text);
           }
@@ -6164,6 +6677,7 @@
           if (wanted === DOT_ID || dot.configured && wanted === dot.dotName.toLowerCase()) {
             return dots.send({ message: text });
           }
+          if (wanted === NEW_CHAT_ID || wanted === NEW_CHAT_NAME.toLowerCase()) return chatgpt.send({ message: text });
           return chats.send({ message: text, chat: args.chat_id });
         }
         async function action(request) {
@@ -6192,6 +6706,7 @@
             throw PluginError("INVALID_ARGS", "Unsupported ChatGPT source.");
           }
           var instances = dot.configured ? [chatInstance(DOT_ID, dot.dotName, dot.dotName)] : [];
+          if (await auth.load()) instances.push(chatInstance(NEW_CHAT_ID, NEW_CHAT_NAME, NEW_CHAT_NAME));
           (await codexChats()).forEach(function(chat) {
             instances.push(chatInstance(chat.id, chat.nickname || chat.label, chat.label));
           });

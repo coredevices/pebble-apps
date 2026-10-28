@@ -1,7 +1,7 @@
 {
   "name": "chatgpt",
   "author": "Core Devices",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "build": "npm --prefix .. run build",
@@ -26,7 +26,7 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your ChatGPT Dot, to Codex sessions running on your computers, and to Codex Cloud tasks. With no chat named, sends to your Dot or your default Codex chat, as chosen in settings. Supports Codex chat nicknames. Sign in in settings.",
+      "description": "Send messages to your ChatGPT Dot, to ChatGPT chats (a new one or a recent conversation), to Codex sessions running on your computers, and to Codex Cloud tasks. With no chat named, sends to your Dot or your default chat, as chosen in settings. Supports chat nicknames. Sign in in settings.",
       "script": "plugin.js",
       "sources": [
         {
@@ -68,7 +68,7 @@
       "actions": [
         {
           "name": "send_to_agent",
-          "description": "Send a message to the user's ChatGPT Dot or one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats, or a Codex chat nickname or part of its title; omit it to send to the user's Dot or their default Codex chat, whichever settings choose. Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply. Do not automatically retry an uncertain delivery.",
+          "description": "Send a message to the user's ChatGPT Dot, to a ChatGPT chat (a new one, or a recent chatgpt.com conversation), or to one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats (\"new-chat\" starts a new ChatGPT chat), or a chat nickname or part of its title; omit it to send to the user's Dot or their default chat, whichever settings choose. Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply; a ChatGPT chat's receipt may quote the start of the reply. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -76,14 +76,14 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 16000,
-                "description": "What to tell the Dot or Codex, without the \"tell my Dot\" or \"tell Codex\" instruction itself."
+                "description": "What to tell the Dot, ChatGPT or Codex, without the \"tell my Dot\", \"ask ChatGPT\" or \"tell Codex\" instruction itself."
               },
               "chat_id": {
                 "type": [
                   "string",
                   "null"
                 ],
-                "description": "The chat's instanceId from agent/chats, or a Codex chat's nickname or part of its title. Omit to send to the Dot or the default Codex chat, as chosen in settings."
+                "description": "The chat's instanceId from agent/chats (\"new-chat\" for a new ChatGPT chat), or a chat's nickname or part of its title. Omit to send to the Dot or the default chat, as chosen in settings."
               }
             },
             "required": [

@@ -86,6 +86,7 @@ function fixture({ routes = {}, storage = new Map(), WebSocket = class {}, clock
     [`POST ${RC}/client/enroll/finish`]: () => json(200, { client_id: 'client-1', account_user_id: 'au-1', remote_control_token: 'rc-token', expires_at: new Date(NOW + 3600_000).toISOString(), scopes: ['rc'] }),
     [`GET ${RC}/environments`]: () => json(200, [{ id: 'env-1', name: 'taz-runner', online: true, busy: false, os: 'linux', kind: 'single' }]),
     'GET https://chatgpt.com/backend-api/wham/tasks/list': () => json(200, { items: [] }),
+    'GET https://chatgpt.com/backend-api/conversations': () => json(200, { items: [] }),
     ...routes,
   };
   const fetch = async (url, init = {}) => {
@@ -387,6 +388,7 @@ test('agent/chats lists Codex chats with their ids, named by nickname or title',
   await f.configure({ type: 'codex_chat_save', chat: chats.find((c) => c.id === 'th-old'), nickname: 'ble' });
   const listed = await f.agentChats();
   assert.deepEqual(Array.from(listed.instances, (i) => [i.instanceId, i.properties.name.shortText.text, i.properties.title.shortText.text]), [
+    ['new-chat', 'New ChatGPT chat', 'New ChatGPT chat'],
     ['th-live', 'Index feed polish', 'Index feed polish'],
     ['task_e_1', 'Fix login', 'Fix login'],
     ['th-old', 'ble', 'fix the BLE reconnect bug'],
@@ -400,25 +402,26 @@ const MINUTE = 60_000;
 test('agent/chats lists fresh with no cache, serves a cache under 5 minutes old, and relists after', async () => {
   const f = fixture({ routes: cloudTasks });
   await f.signIn();
-  assert.deepEqual(await ids(f), ['task_e_1']);
+  assert.deepEqual(await ids(f), ['new-chat', 'task_e_1']);
   f.backend[`GET ${WHAM}/tasks/list`] = () => json(200, { items: [{ id: 'task_new', title: 'New', updated_at: NOW / 1000 }] });
   f.clock.now = NOW + 4 * MINUTE;
   const before = f.calls.length;
-  assert.deepEqual(await ids(f), ['task_e_1']);
+  assert.deepEqual(await ids(f), ['new-chat', 'task_e_1']);
   assert.equal(f.calls.length, before);
   f.clock.now = NOW + 6 * MINUTE;
-  assert.deepEqual(await ids(f), ['task_new']);
+  assert.deepEqual(await ids(f), ['new-chat', 'task_new']);
 });
 
-test('a stale cache is served when the fresh listing reaches neither half', async () => {
+test('a stale cache is served when the fresh listing reaches no part', async () => {
   const f = fixture({ WebSocket: relay(threads), routes: cloudTasks });
   await f.signIn();
   await f.enroll();
   await chatsOf(f);
   f.backend[`GET ${RC}/environments`] = () => json(500, {});
   f.backend[`GET ${WHAM}/tasks/list`] = () => json(500, {});
+  f.backend['GET https://chatgpt.com/backend-api/conversations'] = () => json(500, {});
   f.clock.now = NOW + 6 * MINUTE;
-  assert.deepEqual(await ids(f), ['th-live', 'task_e_1', 'th-old']);
+  assert.deepEqual(await ids(f), ['new-chat', 'th-live', 'task_e_1', 'th-old']);
 });
 
 test('another session switching account hides this account\'s cache and drops its in-flight listing', async () => {
@@ -434,7 +437,7 @@ test('another session switching account hides this account\'s cache and drops it
   const other = JSON.parse(storage.get('chatgpt.codex.session.v1'));
   storage.set('chatgpt.codex.session.v1', JSON.stringify({ ...other, account: 'acct-2', user: 'user-2' }));
   a.backend[`GET ${WHAM}/tasks/list`] = () => json(200, { items: [] });
-  assert.deepEqual(await ids(a), []);
+  assert.deepEqual(await ids(a), ['new-chat']);
 
   storage.set('chatgpt.codex.session.v1', JSON.stringify(other));
   storage.delete(CACHE_KEY);
@@ -491,26 +494,32 @@ test('an agent/chats id wins over a nickname that spells the same id', async () 
 });
 
 const DOT_KEY = 'chatgpt-dots.connection.v1';
+const SAVED_DOT = { account: ACCOUNT, user: 'user-1', room: 'room-1', dotName: 'Sol' };
 const CACHE_KEY = 'chatgpt.codex.chats.cache.v1';
 const flush = async () => { for (let i = 0; i < 50; i++) await new Promise((resolve) => setImmediate(resolve)); };
 const stall = () => new Promise(() => {});
 
 test('with a cache under 5 minutes old, a stalled Codex backend does not hold up agent/chats or the Dot', async () => {
   const f = fixture({ WebSocket: relay(threads), routes: cloudTasks });
-  f.storage.set(DOT_KEY, JSON.stringify({ dotName: 'Sol', email: '' }));
   await f.signIn();
+  f.storage.set(DOT_KEY, JSON.stringify(SAVED_DOT));
   await f.enroll();
   await chatsOf(f);
   f.backend[`GET ${RC}/environments`] = stall;
   f.backend[`GET ${WHAM}/tasks/list`] = stall;
   const again = await f.agentChats();
-  assert.deepEqual(Array.from(again.instances, (i) => i.instanceId), ['dot', 'th-live', 'task_e_1', 'th-old']);
+  assert.deepEqual(Array.from(again.instances, (i) => i.instanceId), ['dot', 'new-chat', 'th-live', 'task_e_1', 'th-old']);
 });
 
-test('the Dot is listed even when no Codex half can be listed', async () => {
-  const f = fixture();
-  f.storage.set(DOT_KEY, JSON.stringify({ dotName: 'Sol', email: '' }));
-  assert.deepEqual(Array.from((await f.agentChats()).instances, (i) => [i.instanceId, i.properties.name.shortText.text]), [['dot', 'Sol']]);
+test('the Dot is listed even when no other part can be listed', async () => {
+  const f = fixture({ routes: {
+    [`GET ${WHAM}/tasks/list`]: () => json(500, {}),
+    'GET https://chatgpt.com/backend-api/conversations': () => json(500, {}),
+  } });
+  await f.signIn();
+  f.storage.set(DOT_KEY, JSON.stringify(SAVED_DOT));
+  assert.deepEqual(Array.from((await f.agentChats()).instances, (i) => [i.instanceId, i.properties.name.shortText.text]),
+    [['dot', 'Sol'], ['new-chat', 'New ChatGPT chat']]);
   assert.ok(!f.storage.has(CACHE_KEY));
 });
 
@@ -583,7 +592,7 @@ test('a cache that cannot be written never fails a send or the source', async ()
   await f.signIn();
   await f.enroll();
   assert.equal((await f.run('send_to_agent', { message: 'go', chat_id: 'feed polish' })).ok, true);
-  assert.deepEqual(await ids(f), ['th-live', 'task_e_1', 'th-old']);
+  assert.deepEqual(await ids(f), ['new-chat', 'th-live', 'task_e_1', 'th-old']);
 });
 
 const PREFS_KEY = 'chatgpt.codex.chats.v1';
@@ -650,18 +659,19 @@ test('the chosen destination falls back to the other when it is not set up', asy
   await f.run('send_to_agent', { message: 'hi' });
   assert.equal(queued.threadId, 'th-live');
 
-  signInDot(f);
-  await f.configure({ type: 'destination', destination: 'codex' });
-  await f.configure({ type: 'codex_disconnect' });
-  assert.deepEqual(await configured(f), [true, 'Sol', 'Connected']);
-  assert.equal((await f.run('send_to_agent', { message: 'hi' })).text, 'Message sent to Sol.');
+  const g = fixture();
+  signInDot(g);
+  await g.signIn();
+  await g.configure({ type: 'destination', destination: 'codex' });
+  assert.deepEqual(await configured(g), [true, 'Sol', 'Connected']);
+  assert.equal((await g.run('send_to_agent', { message: 'hi' })).text, 'Message sent to Sol.');
 });
 
 test('with neither the Dot nor a Codex default, a send with no chat_id fails and sends nothing', async () => {
   const f = fixture({ WebSocket: relay(threads), routes: cloudTasks });
   const none = await f.run('send_to_agent', { message: 'hi' });
   assert.equal(none.code, 'INVALID_ARGS');
-  assert.match(none.message, /Sign in to your Dot, or pick a default Codex chat/);
+  assert.match(none.message, /Sign in with ChatGPT, then set up a Dot or pick a default chat/);
   assert.equal(f.calls.length, 0);
   await f.signIn();
   const before = f.calls.length;

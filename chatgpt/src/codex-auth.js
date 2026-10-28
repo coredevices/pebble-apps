@@ -12,6 +12,8 @@ var CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
 var REDIRECT = 'http://localhost:1455/auth/callback';
 var ORIGINATOR = 'Codex Desktop';
 var AUTH_KEY = 'chatgpt.codex.session.v1';
+// Up to v0.3 the Dot kept its own copy of the session here; the Dot's room stays under this key.
+var DOT_KEY = 'chatgpt-dots.connection.v1';
 var PENDING_KEY = 'chatgpt.codex.pending.v1';
 var PENDING_TTL_MS = 30 * 60 * 1000;
 var RENEW_BEFORE_MS = 5 * 60 * 1000;
@@ -22,7 +24,11 @@ var SEED_BYTES = 48;
 var ENTROPY_BYTES = VERIFIER_BYTES + STATE_BYTES + SEED_BYTES;
 
 function authRequired() {
-  return PluginError('AUTH_REQUIRED', 'ChatGPT sign-in for Codex expired. Sign in again in plugin settings.');
+  return PluginError('AUTH_REQUIRED', 'ChatGPT sign-in expired. Sign in again in plugin settings.');
+}
+
+function signInFirst() {
+  return PluginError('AUTH_REQUIRED', 'Sign in with ChatGPT in plugin settings.');
 }
 
 function validToken(value) {
@@ -44,13 +50,30 @@ function accountOf(accessToken) {
 }
 
 /**
- * The ChatGPT sign-in Codex calls run as: the web session cookie `Pebble.webSignIn` captures, traded at
- * chatgpt.com for an access token, as the Dot does with its own sign-in.
+ * The one ChatGPT sign-in the Dot, ChatGPT chats and Codex run as: the web session cookie
+ * `Pebble.webSignIn` captures, traded at chatgpt.com for an access token. Only one copy is stored, so
+ * a renewal (which rotates the session token) can't leave another feature with a stale one.
  */
 function createCodexAuth(storage, fetch, now) {
+  // Concurrent calls in one session share one renewal instead of each rotating the session token.
+  var renewing = null;
+
+  /** The saved session; a v0.3 Dot's own copy is adopted when it is the more recently renewed, then dropped. */
   async function load() {
     var raw = await storage.getItem(AUTH_KEY);
-    return raw ? JSON.parse(raw) : null;
+    var state = raw ? JSON.parse(raw) : null;
+    var dotRaw = await storage.getItem(DOT_KEY);
+    var dot = dotRaw ? JSON.parse(dotRaw) : null;
+    if (!dot || !dot.sessionToken) return state;
+    if (!state || dot.expiresAt > state.expiresAt) {
+      state = {
+        account: dot.account, user: dot.user, email: dot.email || '', expiresAt: dot.expiresAt,
+        accessToken: dot.accessToken, sessionToken: dot.sessionToken,
+      };
+      await storage.setItem(AUTH_KEY, JSON.stringify(state));
+    }
+    await storage.setItem(DOT_KEY, JSON.stringify({ account: dot.account, user: dot.user, room: dot.room, dotName: dot.dotName }));
+    return state;
   }
 
   async function exchange(sessionToken) {
@@ -76,12 +99,24 @@ function createCodexAuth(storage, fetch, now) {
   /** A signed-in state with an access token good for at least a few minutes. */
   async function current() {
     var state = await load();
-    if (!state) throw PluginError('AUTH_REQUIRED', 'Sign in with ChatGPT in the Codex part of plugin settings.');
+    if (!state) throw signInFirst();
     if (state.expiresAt - now() > RENEW_BEFORE_MS) return state;
-    var renewed = await exchange(state.sessionToken);
-    if (renewed.account !== state.account || renewed.user !== state.user) throw authRequired();
-    await storage.setItem(AUTH_KEY, JSON.stringify(renewed));
-    return renewed;
+    return renew();
+  }
+
+  /** A fresh access token now, for a call ChatGPT rejected anyway. */
+  function renew() {
+    if (!renewing) {
+      renewing = (async function () {
+        var state = await load();
+        if (!state) throw signInFirst();
+        var renewed = await exchange(state.sessionToken);
+        if (renewed.account !== state.account || renewed.user !== state.user) throw authRequired();
+        await storage.setItem(AUTH_KEY, JSON.stringify(renewed));
+        return renewed;
+      })().finally(function () { renewing = null; });
+    }
+    return renewing;
   }
 
   /**
@@ -156,7 +191,7 @@ function createCodexAuth(storage, fetch, now) {
   }
 
   return {
-    load: load, connect: connect, current: current, beginEnroll: beginEnroll, finishEnroll: finishEnroll, signOut: signOut,
+    load: load, connect: connect, current: current, renew: renew, beginEnroll: beginEnroll, finishEnroll: finishEnroll, signOut: signOut,
   };
 }
 

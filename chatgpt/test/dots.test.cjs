@@ -9,6 +9,8 @@ const ACCOUNT = 'acct-1';
 const USER = 'user-1';
 const ROOM = 'room-1';
 const DOT = 'aeon-1';
+const AUTH_KEY = 'chatgpt.codex.session.v1';
+const DOT_KEY = 'chatgpt-dots.connection.v1';
 
 function token({ account = ACCOUNT, user = USER, exp, email = 'eric@example.com' }) {
   const claims = {
@@ -74,7 +76,10 @@ function fixture({ now = 1_000_000_000_000, expiresIn = 3600_000, routes = {}, s
     storage,
     backend,
     access,
-    connect: async (sessionToken = 'session-1') => (await config_({ type: 'dots_connect', session_token: sessionToken })).dots,
+    connect: async (sessionToken = 'session-1') => {
+      const result = await config_({ type: 'connect', session_token: sessionToken });
+      return { ...result.dots, dotError: result.dotError };
+    },
     config: config_,
     status: async () => (await config_({ type: 'status' })).dots,
     source: (request) => new Promise((resolve) => source(request, {
@@ -92,10 +97,11 @@ function fixture({ now = 1_000_000_000_000, expiresIn = 3600_000, routes = {}, s
   };
 }
 
-test('connect verifies the primary Dot room and reports the account', async () => {
+test('signing in verifies the primary Dot room and reports the account', async () => {
   const f = fixture();
   const state = await f.connect();
   assert.deepEqual(JSON.parse(JSON.stringify(state)), { configured: true, email: 'eric@example.com', dotName: 'Sol' });
+  assert.deepEqual(JSON.parse(f.storage.get(DOT_KEY)), { account: ACCOUNT, user: USER, room: ROOM, dotName: 'Sol' });
   assert.equal(f.calls[0].init.headers.Cookie, '__Secure-next-auth.session-token=session-1');
   const auth = f.calls[1].init.headers;
   assert.equal(auth.Authorization, 'Bearer ' + f.access);
@@ -103,7 +109,7 @@ test('connect verifies the primary Dot room and reports the account', async () =
   assert.equal(auth['X-OpenAI-Expected-Account-Id'], ACCOUNT);
   assert.deepEqual(f.calls.map((c) => c.key),
     ['GET session', 'GET /tbo/primary', 'GET /tbo/by-thread/t-1', 'GET /messaging/rooms/room-1']);
-  assert.equal(JSON.parse([...f.storage.values()][0]).sessionToken, 'session-2');
+  assert.equal(JSON.parse(f.storage.get(AUTH_KEY)).sessionToken, 'session-2');
   assert.equal((await f.status()).configured, true);
 });
 
@@ -163,7 +169,7 @@ test('renewal that changes account identity requires signing in again', async ()
     ? first(init)
     : json(200, { accessToken: token({ user: 'someone-else', exp: 2e9 }), sessionToken: 's' }));
   await assert.rejects(() => f.connect(), /sign-in expired/);
-  assert.equal(f.storage.size, 0);
+  assert.ok(!f.storage.has(DOT_KEY));
 });
 
 test('a room whose human member is not the signed-in user is refused', async () => {
@@ -175,12 +181,16 @@ test('a room whose human member is not the signed-in user is refused', async () 
       }),
     },
   });
-  await assert.rejects(() => f.connect(), /did not match/);
+  const result = await f.connect();
+  assert.match(result.dotError, /did not match/);
+  assert.equal(result.configured, false);
 });
 
 test('Dots unavailable in the region is explained', async () => {
   const f = fixture({ routes: { 'GET /tbo/primary': () => json(404, { detail: 'Not Found' }) } });
-  await assert.rejects(() => f.connect(), /not available in your region/);
+  const result = await f.connect();
+  assert.match(result.dotError, /not available in your region/);
+  assert.equal(result.configured, false);
 });
 
 test('invalid sessions, actions and messages are rejected without network calls', async () => {
@@ -196,11 +206,15 @@ test('invalid sessions, actions and messages are rejected without network calls'
   assert.equal(f.calls.length, before);
 });
 
-test('disconnect removes the saved sign-in', async () => {
-  const f = fixture();
-  await f.connect();
-  assert.equal((await f.config({ type: 'dots_disconnect' })).dots.configured, false);
-  assert.equal(f.storage.size, 0);
+test('signing out removes the one saved sign-in and the Dot, under the old message names too', async () => {
+  for (const type of ['disconnect', 'dots_disconnect', 'codex_disconnect']) {
+    const f = fixture();
+    await f.connect();
+    const status = await f.config({ type });
+    assert.equal(status.dots.configured, false);
+    assert.equal(status.codex.signedIn, false);
+    assert.equal(f.storage.size, 0);
+  }
 });
 
 const room = (members) => () => json(200, { type: 'DM', app_source: 'chatgpt:messaging', id: ROOM, aeon_id: DOT, members });
@@ -213,7 +227,9 @@ test('a Dot profile pointing at a different root thread is refused', async () =>
       }),
     },
   });
-  await assert.rejects(() => f.connect(), /did not match/);
+  const result = await f.connect();
+  assert.match(result.dotError, /did not match/);
+  assert.equal(result.configured, false);
 });
 
 test('a room with an extra member is refused', async () => {
@@ -226,16 +242,18 @@ test('a room with an extra member is refused', async () => {
       ]),
     },
   });
-  await assert.rejects(() => f.connect(), /did not match/);
+  const result = await f.connect();
+  assert.match(result.dotError, /did not match/);
+  assert.equal(result.configured, false);
 });
 
-test('a failed reconnect leaves the saved connection untouched', async () => {
+test('a failed Dot search on signing in again keeps the saved Dot, and still signs in', async () => {
   const f = fixture();
   await f.connect();
-  const saved = [...f.storage.values()][0];
+  const saved = f.storage.get(DOT_KEY);
   f.backend['GET /tbo/primary'] = () => json(500, {});
-  await assert.rejects(() => f.connect('session-x'), /HTTP 500/);
-  assert.equal([...f.storage.values()][0], saved);
+  assert.match((await f.connect('session-x')).dotError, /HTTP 500/);
+  assert.equal(f.storage.get(DOT_KEY), saved);
   assert.equal((await f.status()).dotName, 'Sol');
 });
 
@@ -264,7 +282,7 @@ test('agent/chats lists the Dot, and its id, "dot" or its name send to it', asyn
   assert.equal((await f.source({ category: 'agent', item: 'chats' })).instances.length, 0);
   await f.connect();
   const chats = await f.source({ category: 'agent', item: 'chats' });
-  assert.deepEqual(Array.from(chats.instances, (i) => [i.instanceId, i.properties.name.shortText.text]), [['dot', 'Sol']]);
+  assert.deepEqual(Array.from(chats.instances, (i) => [i.instanceId, i.properties.name.shortText.text]), [['dot', 'Sol'], ['new-chat', 'New ChatGPT chat']]);
   for (const chat_id of [chats.instances[0].instanceId, 'DOT', 'sol', null]) {
     assert.equal((await f.send({ message: 'hi', chat_id })).text, 'Message sent to Sol.');
   }
@@ -280,4 +298,61 @@ test('unknown and removed actions are rejected before touching the network', asy
   }
   assert.equal((await f.send({ message: 'hi', chat_id: 5 })).code, 'INVALID_ARGS');
   assert.equal(f.calls.length, before);
+});
+
+const NOW = 1_000_000_000_000;
+function legacyDot(sessionToken, expiresAt, extra = {}) {
+  return JSON.stringify({
+    accessToken: token({ exp: expiresAt / 1000 }), sessionToken, account: ACCOUNT, user: USER, email: 'eric@example.com',
+    expiresAt, room: ROOM, dotName: 'Sol', ...extra,
+  });
+}
+function codexSession(sessionToken, expiresAt) {
+  return JSON.stringify({ account: ACCOUNT, user: USER, email: 'eric@example.com', expiresAt, accessToken: token({ exp: expiresAt / 1000 }), sessionToken });
+}
+const storedSessions = (storage) => [...storage.values()].filter((v) => v.includes('sessionToken'));
+
+test('a v0.3 Dot sign-in keeps working without signing in again, and becomes the one shared sign-in', async () => {
+  const storage = new Map([[DOT_KEY, legacyDot('dot-session', NOW + 3600_000)]]);
+  const f = fixture({ storage });
+  assert.equal((await f.send()).text, 'Message sent to Sol.');
+  assert.deepEqual(f.calls.map((c) => c.key), ['POST /messaging/rooms/room-1/messages']);
+  assert.equal(f.calls[0].init.headers.Authorization, 'Bearer ' + token({ exp: (NOW + 3600_000) / 1000 }));
+  assert.deepEqual(JSON.parse(storage.get(DOT_KEY)), { account: ACCOUNT, user: USER, room: ROOM, dotName: 'Sol' });
+  assert.equal(JSON.parse(storage.get(AUTH_KEY)).sessionToken, 'dot-session');
+  assert.equal((await f.config({ type: 'status' })).codex.signedIn, true);
+});
+
+test('with both v0.3 sign-ins stored, the more recently renewed one is kept and the other dropped', async () => {
+  for (const [dotAt, codexAt, kept] of [[NOW + 3600_000, NOW + 1800_000, 'dot-session'], [NOW + 1800_000, NOW + 3600_000, 'codex-session']]) {
+    const storage = new Map([[DOT_KEY, legacyDot('dot-session', dotAt)], [AUTH_KEY, codexSession('codex-session', codexAt)]]);
+    const f = fixture({ storage });
+    assert.equal((await f.status()).dotName, 'Sol');
+    assert.deepEqual(storedSessions(storage).map((v) => JSON.parse(v).sessionToken), [kept]);
+    assert.equal(JSON.parse(storage.get(AUTH_KEY)).sessionToken, kept);
+  }
+});
+
+test('a renewal by one feature leaves one rotated session for all, and concurrent calls renew once', async () => {
+  const storage = new Map([[DOT_KEY, legacyDot('dot-session', NOW + 60_000)], [AUTH_KEY, codexSession('codex-session', NOW + 30_000)]]);
+  const f = fixture({ storage });
+  await f.source({ category: 'agent', item: 'chats' });
+  const renewals = f.calls.filter((c) => c.key === 'GET session');
+  assert.equal(renewals.length, 1);
+  assert.equal(renewals[0].init.headers.Cookie, '__Secure-next-auth.session-token=dot-session');
+  assert.deepEqual(storedSessions(storage).map((v) => JSON.parse(v).sessionToken), ['session-2']);
+  assert.equal((await f.send()).ok, true);
+  assert.equal(f.calls.at(-1).init.headers.Authorization, 'Bearer ' + f.access);
+});
+
+test('signing in to another account drops the old account\'s Dot and paired computers', async () => {
+  const f = fixture();
+  await f.connect();
+  f.storage.set('chatgpt.codex.remote.v1', JSON.stringify({ paired: true }));
+  f.backend['GET session'] = () => json(200, { accessToken: token({ account: 'acct-2', user: 'user-2', exp: (NOW + 3600_000) / 1000 }), sessionToken: 's-2' });
+  const after = await f.connect('session-other');
+  assert.equal(after.configured, false);
+  assert.match(after.dotError, /did not match/);
+  assert.ok(!f.storage.has(DOT_KEY));
+  assert.ok(!f.storage.has('chatgpt.codex.remote.v1'));
 });

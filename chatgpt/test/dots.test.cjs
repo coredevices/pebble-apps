@@ -121,7 +121,7 @@ test('send posts to the verified room with a matching request id', async () => {
   assert.equal(result.text, 'Message sent to Sol.');
   const post = f.calls.at(-1);
   const body = JSON.parse(post.init.body);
-  assert.equal(body.content.text, 'hello Dot');
+  assert.equal(body.content.text, 'hello Dot ⌚');
   assert.match(body.request_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(body.idempotency_token, body.request_id);
 });

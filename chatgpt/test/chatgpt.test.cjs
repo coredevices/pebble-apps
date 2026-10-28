@@ -121,7 +121,7 @@ test('a new ChatGPT chat is sent the way the web app sends it, and the receipt q
   assert.equal(sent.body.parent_message_id, 'client-created-root');
   assert.equal(sent.body.conversation_id, undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(sent.body.messages.map((m) => [m.author.role, m.content]))),
-    [['user', { content_type: 'text', parts: ['hello ChatGPT'] }]]);
+    [['user', { content_type: 'text', parts: ['hello ChatGPT ⌚'] }]]);
   assert.equal(f.call(PREPARE).body.parent_message_id, 'client-created-root');
   assert.ok(solves(f.call(REQUIREMENTS).body.p, 'gAAAAAC', '', ''));
 });

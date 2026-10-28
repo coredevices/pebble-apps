@@ -236,7 +236,7 @@ test('a Codex chat picked from agent/chats is reached through the relay', async 
   assert.equal(result.ok, true, result.message);
   assert.equal(result.text, 'Sent to Codex session "Index feed polish" on taz-runner.');
   assert.equal(queued.threadId, 'th-live');
-  assert.deepEqual(JSON.parse(JSON.stringify(queued.input)), [{ type: 'text', text: 'run the tests', textElements: [] }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(queued.input)), [{ type: 'text', text: 'run the tests ⌚', textElements: [] }]);
 
   const socket = Socket.last;
   assert.equal(socket.url, 'wss://chatgpt.com/backend-api/codex/remote/control/client');

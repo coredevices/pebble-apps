@@ -1,0 +1,116 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remember The Milk</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    p { line-height: 1.4; }
+    ol { padding-left: 22px; line-height: 1.5; }
+    label { display: block; font-size: 14px; font-weight: 600; margin: 20px 0 6px; }
+    input {
+      box-sizing: border-box; width: 100%; padding: 11px 12px; font-size: 15px;
+      border: 1px solid rgba(128,128,128,.45); border-radius: 8px;
+      background: transparent; color: inherit;
+    }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    button, a.button { padding: 10px 16px; border: 0; border-radius: 8px; font-size: 15px;
+      background: #0060bf; color: white; text-decoration: none; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled { opacity: .55; }
+    #status { margin-top: 16px; padding: 10px 12px; border-radius: 8px;
+      background: rgba(128,128,128,.15); font-size: 14px; }
+    .hint { opacity: .72; font-size: 13px; }
+    a { color: #4d8fe0; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Remember The Milk</h1>
+
+  <div id="setup">
+    <ol>
+      <li><a href="https://www.rememberthemilk.com/services/api/keys.rtm" target="_blank" rel="noreferrer">Apply for a Remember The Milk API key</a> and wait for the email with the key and shared secret.</li>
+      <li>Enter both below and tap <strong>Sign in</strong>.</li>
+      <li>Tap <strong>Allow access</strong>, allow access in Remember The Milk, then come back and tap <strong>Done</strong>.</li>
+    </ol>
+    <label for="apiKey">API key</label>
+    <input id="apiKey" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <label for="secret">Shared secret</label>
+    <input id="secret" type="password" autocomplete="off" autocapitalize="none" spellcheck="false">
+    <p class="hint">Both stay in this plugin's private settings on this phone. Leave them blank later to keep the saved ones.</p>
+    <div class="buttons">
+      <button id="start" type="button">Sign in</button>
+      <a id="allow" class="button hidden" target="_blank" rel="noreferrer">Allow access</a>
+      <button id="finish" class="hidden" type="button">Done</button>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button id="unlink" class="secondary hidden" type="button">Unlink</button>
+  </div>
+  <div id="status">Starting the Remember The Milk plugin…</div>
+
+  <script>
+    var statusElement = document.getElementById('status');
+    var allow = document.getElementById('allow');
+    var finish = document.getElementById('finish');
+
+    function send(message) {
+      return Pebble.sendMessage('plugin', message);
+    }
+
+    function showState(result) {
+      if (result.error) {
+        statusElement.textContent = result.error;
+        return;
+      }
+      document.getElementById('setup').classList.toggle('hidden', result.configured);
+      document.getElementById('unlink').classList.toggle('hidden', !result.configured);
+      document.getElementById('apiKey').value = '';
+      document.getElementById('apiKey').placeholder = result.hasKey ? result.apiKey : '';
+      document.getElementById('secret').value = '';
+      document.getElementById('secret').placeholder = result.hasKey ? 'Saved on this phone' : '';
+      allow.classList.add('hidden');
+      finish.classList.add('hidden');
+      statusElement.textContent = result.configured
+        ? 'Signed in to Remember The Milk' + (result.user ? ' as ' + result.user : '') + '.'
+        : 'Remember The Milk is not connected.';
+    }
+
+    document.getElementById('start').onclick = async function () {
+      statusElement.textContent = 'Asking Remember The Milk for a sign-in link…';
+      var result = await send({
+        type: 'start',
+        apiKey: document.getElementById('apiKey').value,
+        secret: document.getElementById('secret').value,
+      });
+      if (result.error) {
+        statusElement.textContent = result.error;
+        return;
+      }
+      allow.href = result.authUrl;
+      allow.classList.remove('hidden');
+      finish.classList.remove('hidden');
+      statusElement.textContent = 'Tap Allow access, allow it in Remember The Milk, then tap Done.';
+    };
+
+    finish.onclick = async function () {
+      statusElement.textContent = 'Finishing sign-in…';
+      showState(await send({ type: 'finish' }));
+    };
+
+    document.getElementById('unlink').onclick = async function () {
+      showState(await send({ type: 'unlink' }));
+    };
+
+    Pebble.addEventListener('ready', async function (event) {
+      if (event.target !== 'plugin') return;
+      showState(await send({ type: 'status' }));
+    });
+  </script>
+</body>
+</html>

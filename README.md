@@ -72,6 +72,7 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `notion` | Notion |
 | `obsidian` | Obsidian/Markdown Notes |
 | `plugin-test` | Dashboard (Plugin Demo) (watchapp; needs the Pebble SDK) |
+| `remember-the-milk` | Remember The Milk |
 | `roam` | Roam Research |
 | `stocks` | Stocks |
 | `tasks-org` | Tasks.org |

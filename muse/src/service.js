@@ -291,8 +291,8 @@ export function createService(
       await using(state.auth, async (client) => {
         const id = await target(client, state, chatId);
         try {
-          if (id === MAIN) await client.sendMain(message, { beforeSend });
-          else await client.sendToChat(id, message, { beforeSend });
+          if (id === MAIN) await client.sendMain(message + " ⌚", { beforeSend });
+          else await client.sendToChat(id, message + " ⌚", { beforeSend });
         } catch (error) {
           if (late) slow(deadline);
           throw error;

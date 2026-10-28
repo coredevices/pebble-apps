@@ -196,7 +196,7 @@ function fixture({ drop = false, rv = false, failOpens = 0, slowClock = false } 
           else {
             assert.equal(req.path, "/chat/stream");
             const message = JSON.parse(Buffer.from(req.body));
-            assert.equal(message.message, "¿Cómo estás?");
+            assert.equal(message.message, "¿Cómo estás? ⌚");
             assert.ok(
               message.session_id === undefined || message.session_id === "quiz",
             );

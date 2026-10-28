@@ -87,7 +87,7 @@ test("new account defaults to main and filters linked chats", async () => {
     action: "send_to_agent",
     args: { message: "Hola!" },
   });
-  assert.deepEqual(f.calls.at(-2), ["main", "Hola!", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["main", "Hola! ⌚", "vm-one"]);
   assert.equal(f.calls.at(-1), "close");
 });
 test("selection persists; vanished chat never falls back to main", async () => {
@@ -98,7 +98,7 @@ test("selection persists; vanished chat never falls back to main", async () => {
     action: "send_to_agent",
     args: { message: "Quiz me" },
   });
-  assert.deepEqual(f.calls.at(-2), ["spanish", "Quiz me", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["spanish", "Quiz me ⌚", "vm-one"]);
   assert.equal((await f.connect()).selected, "spanish");
   f.setChats([]);
   const count = f.calls.filter(Array.isArray).length;
@@ -168,7 +168,7 @@ test("a cookie-only sign-in asks Muse for the account's VM", async () => {
   }
   assert.deepEqual(seen, [["https://muse.ai/api/session", "hatch_sess=test"]]);
   await f.service.action({ action: "send_to_agent", args: { message: "hi" } });
-  assert.deepEqual(f.calls.find((c) => Array.isArray(c)), ["main", "hi", "vm-two"]);
+  assert.deepEqual(f.calls.find((c) => Array.isArray(c)), ["main", "hi ⌚", "vm-two"]);
 });
 test("chat_id resolves by id, name or Main chat; ambiguous and unknown names fail", async () => {
   const f = fixture();
@@ -182,15 +182,15 @@ test("chat_id resolves by id, name or Main chat; ambiguous and unknown names fai
   const send = (chat_id) =>
     f.service.action({ action: "send_to_agent", args: { message: "hi", chat_id } });
   await send("french");
-  assert.deepEqual(f.calls.at(-2), ["french", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["french", "hi ⌚", "vm-one"]);
   await send("SPANISH QUIZ");
-  assert.deepEqual(f.calls.at(-2), ["spanish", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["spanish", "hi ⌚", "vm-one"]);
   await send("fren");
-  assert.deepEqual(f.calls.at(-2), ["french", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["french", "hi ⌚", "vm-one"]);
   await send("Main chat");
-  assert.deepEqual(f.calls.at(-2), ["main", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["main", "hi ⌚", "vm-one"]);
   await send(null);
-  assert.deepEqual(f.calls.at(-2), ["spanish", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["spanish", "hi ⌚", "vm-one"]);
   const count = f.calls.filter(Array.isArray).length;
   await assert.rejects(send("quiz"), /Multiple/);
   await assert.rejects(send("german"), /No Muse chat/);
@@ -278,7 +278,7 @@ test("a failed cache write never changes a send receipt or a source read", async
     args: { message: "hi", chat_id: "Spanish quiz" },
   });
   assert.equal(result.text, "Message accepted by Muse.");
-  assert.deepEqual(f.calls.at(-2), ["spanish", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["spanish", "hi ⌚", "vm-one"]);
   assert.equal(f.data.size, writes);
   f.cache.clear();
   assert.deepEqual(await chatIds(f), ["main", "spanish"]);
@@ -291,7 +291,7 @@ test("a stalled chat listing doesn't block sends or sign-out", async () => {
   chatIds(f);
   await flush();
   await f.service.action({ action: "send_to_agent", args: { message: "hi" } });
-  assert.deepEqual(f.calls.at(-2), ["main", "hi", "vm-one"]);
+  assert.deepEqual(f.calls.at(-2), ["main", "hi ⌚", "vm-one"]);
   assert.equal((await f.service.config({ type: "disconnect" })).configured, false);
 });
 test("a send is refused, not attempted, once the time budget is too short", async () => {

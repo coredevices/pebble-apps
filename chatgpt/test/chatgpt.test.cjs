@@ -140,12 +140,19 @@ test('the proof of work solves a known seed and difficulty, and is left out when
   assert.equal(f.call(CONVERSATION).init.headers['openai-sentinel-proof-token'], undefined);
 });
 
-test('a required browser check or an unsolvable proof of work refuses the send before anything is posted', async () => {
+test('a turnstile flag still sends', async () => {
   const f = fixture({ routes: { [REQUIREMENTS]: () => json(200, { token: 't', turnstile: { required: true, dx: 'x' } }) } });
   await f.signIn();
-  const turnstile = await f.send({ message: 'hi', chat_id: 'new-chat' });
-  assert.equal(turnstile.code, 'PERMISSION_DENIED');
-  assert.match(turnstile.message, /ChatGPT app/);
+  await f.send({ message: 'hi', chat_id: 'new-chat' });
+  assert.ok(f.calls.some((c) => c.key === CONVERSATION));
+});
+
+test('an Arkose check or an unsolvable proof of work refuses the send before anything is posted', async () => {
+  const f = fixture({ routes: { [REQUIREMENTS]: () => json(200, { token: 't', arkose: { required: true, dx: 'x' } }) } });
+  await f.signIn();
+  const arkose = await f.send({ message: 'hi', chat_id: 'new-chat' });
+  assert.equal(arkose.code, 'PERMISSION_DENIED');
+  assert.match(arkose.message, /ChatGPT app/);
 
   let t = NOW;
   f.clock.now = () => (t += 1000);

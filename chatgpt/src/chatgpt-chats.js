@@ -141,14 +141,19 @@ function createChatGptChats(storage, fetch, now, auth) {
     });
   }
 
-  /** The chat-requirements token and, when asked for, the proof of work; refuses checks only a browser can pass. */
+  /**
+   * The chat-requirements token and, when asked for, the proof of work. A turnstile flag is sent through
+   * without a token, as ChatGPT usually still accepts it; an Arkose check can't be, so it refuses.
+   */
   async function sentinel(session) {
     var config = browserConfig(now);
     var p = solve(String(Math.random()), '0fffff', config, now);
     if (!p) throw needsBrowser();
     var req = await (await call(session, 'POST', '/sentinel/chat-requirements', { p: 'gAAAAAC' + p })).json();
     if (!req || !req.token) throw PluginError('PLUGIN_UNAVAILABLE', 'ChatGPT did not accept a new message. Try again later.');
-    if ((req.turnstile && req.turnstile.required) || (req.arkose && req.arkose.required)) throw needsBrowser();
+    console.log('ChatGPT chat requirements: proof of work ' + !!(req.proofofwork && req.proofofwork.required) +
+      ', turnstile ' + !!(req.turnstile && req.turnstile.required) + ', arkose ' + !!(req.arkose && req.arkose.required));
+    if (req.arkose && req.arkose.required) throw needsBrowser();
     var headers = { 'openai-sentinel-chat-requirements-token': req.token };
     var pow = req.proofofwork;
     if (pow && pow.required) {

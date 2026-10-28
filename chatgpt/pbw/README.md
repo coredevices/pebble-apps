@@ -38,9 +38,9 @@ Standard chatgpt.com conversations (`chatgpt-chats.js`) use the shared sign-in a
 proof), the sentinel's proof of work (sha3-512 of seed + base64 browser config, at most 5 s so the
 reply fits the host's 20 s action limit), `POST /backend-api/f/conversation/prepare` for the conduit
 token, then `POST /backend-api/f/conversation`, whose event stream (v1 deltas) the host fetch
-returns whole. Continuing a chat first reads its `current_node`. When the sentinel asks for a
-turnstile or Arkose check, or the proof of work runs out of time, the send is refused: only a
-browser can pass those. Recent chats come from `GET /backend-api/conversations` and join the Codex
+returns whole. Continuing a chat first reads its `current_node`. A turnstile flag is sent through
+without a token, which ChatGPT usually accepts; when it asks for an Arkose check, or the proof of
+work runs out of time, the send is refused, as only a browser can pass those. Recent chats come from `GET /backend-api/conversations` and join the Codex
 chats in one list, with nicknames and the default chat.
 
 Protocol reference: [gpt4free](https://github.com/xtekky/gpt4free) `g4f/Provider/needs_auth/OpenaiAccount.py`

@@ -28,7 +28,7 @@ MANIFEST_VERSION = 2
 
 # Must match PermissionKind. Built-in permission names belong to the phone app, so whether a
 # callerPermissions name is one is left to it.
-PERMISSION_KINDS = {"read", "write", "exfiltrating"}
+PERMISSION_KINDS = {"read", "write", "exfiltrating", "dangerous"}
 PERMISSION_NAME = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 # Every plugin's implicit permission (see PluginDefinedPermissions.kt).
 RESERVED_PERMISSION_NAMES = {"InvokeAction"}

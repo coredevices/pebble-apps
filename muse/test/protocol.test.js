@@ -37,7 +37,10 @@ const {
   encode,
   decode,
 } = module.exports;
-function fixture({ drop = false, rv = false } = {}) {
+function fixture({ drop = false, rv = false, failOpens = 0, slowClock = false } = {}) {
+  const logs = [];
+  let clock = Date.now();
+  let opens = 0;
   let failWrites = false;
   let config,
     action,
@@ -83,6 +86,9 @@ function fixture({ drop = false, rv = false } = {}) {
     return { status: 200, text: async () => text };
   };
   const context = vm.createContext({
+    console: { log: (m) => logs.push(m), error: (m) => logs.push(m) },
+    // Every clock read moves 3 s on, so each connect attempt looks slow.
+    ...(slowClock && { Date: class extends Date { static now() { return (clock += 3000); } } }),
     fetch: fetchStub,
     Pebble: {
       secureStorage: {
@@ -125,7 +131,7 @@ function fixture({ drop = false, rv = false } = {}) {
           phase: 0,
           decoder: new FrameDecoder(),
         });
-        dispatch(id, { type: "open" });
+        dispatch(id, { type: ++opens <= failOpens ? "error" : "open" });
         return id;
       },
       send(id, base64) {
@@ -243,6 +249,10 @@ function fixture({ drop = false, rv = false } = {}) {
       return sends;
     },
     failures,
+    logs,
+    get opens() {
+      return opens;
+    },
   };
 }
 for (const selected of ["main", "quiz"])
@@ -293,4 +303,35 @@ test("a failing credential store never turns a delivered send into an error", as
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(f.sends, 1);
   assert.deepEqual(f.failures, []);
+});
+test("a socket the just-woken VM refuses is retried until it opens", async () => {
+  const f = fixture({ failOpens: 2 });
+  const result = await f.config({
+    type: "connect",
+    session: { cookie: "hatch_sess=fixture", vm_id: "vm-fixture" },
+  });
+  assert.equal(result.configured, true, JSON.stringify(result));
+  assert.equal(f.opens, 3);
+  assert.ok(f.logs.some((l) => /opened on attempt 3/.test(l)), f.logs.join("\n"));
+  assert.equal((await f.send()).ok, true);
+});
+test("connecting gives up after four refused sockets", async () => {
+  const f = fixture({ failOpens: 99 });
+  const r = await f.config({
+    type: "connect",
+    session: { cookie: "hatch_sess=fixture", vm_id: "vm-fixture" },
+  });
+  assert.ok(r.error);
+  assert.equal(f.opens, 4);
+  assert.equal(f.sends, 0);
+});
+test("connecting stops retrying once another attempt would pass the deadline", async () => {
+  const f = fixture({ failOpens: 99, slowClock: true });
+  const r = await f.config({
+    type: "connect",
+    session: { cookie: "hatch_sess=fixture", vm_id: "vm-fixture" },
+  });
+  assert.ok(r.error);
+  assert.ok(f.opens < 4, String(f.opens));
+  assert.ok(f.logs.some((l) => /retries stopped/.test(l)), f.logs.join("\n"));
 });

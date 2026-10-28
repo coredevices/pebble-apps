@@ -10,6 +10,7 @@ import { chatInfo, validateChatId, sessionResult } from './chats.js';
 
 const ORIGIN = 'https://muse.ai';
 const ENDPOINT = 'wss://hatch.metaaivm.com/v1/noise';
+const CONNECT_ATTEMPTS = 4;
 function endpoints(origin, endpoint) {
   if (origin !== ORIGIN || endpoint !== ENDPOINT) throw new MuseError('invalid endpoints');
 }
@@ -33,7 +34,7 @@ export class MuseClient {
       const timer = setTimeout(abort, timeout);
       const combined = controller.signal;
       try { return await fn(combined); }
-      catch (error) { this.#disconnect(); if (error instanceof MuseError) throw error; throw new MuseError('operation failed; delivery may be uncertain'); }
+      catch (error) { this.#disconnect(); if (error instanceof MuseError) throw error; console.error(`Muse operation failed: ${error?.name || typeof error}`); throw new MuseError('operation failed; delivery may be uncertain'); }
       finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); this.#active = null; }
     });
     this.#tail = task.catch(() => {}); return task;
@@ -48,13 +49,32 @@ export class MuseClient {
   /** Wake, mint a fresh one-use token, then complete Noise XX over verified TLS. */
   connect(options) {
     return this.#run(async signal => {
-      this.#disconnect();
-      await this.#rest('vm/wake', { vm_id: this.#auth.vm_id, retry_count: 0, connect_attempt_id: randomUUID() }, signal);
-      const admission = await this.#rest('token', { vmAddress: `${this.#auth.vm_id}.metaaivm.com`, force_refresh: true }, signal);
-      if (!admission || typeof admission.token !== 'string' || !admission.token) throw new MuseError('missing admission token');
-      const url = this.#endpoint + "?" + queryString({ vm_id: this.#auth.vm_id, auth_token: admission.token, app_id: 'hatch-web', request_id: randomUUID(),
-        ...(typeof admission.notary_token === 'string' && admission.notary_token ? { notary_token: admission.notary_token } : {}) });
-      const socket = this.#socket = new Socket(url, this.#origin); await socket.open(signal);
+      const started = Date.now(), connectAttemptId = randomUUID();
+      let socket;
+      // A just-woken VM's gateway answers 502 until it is up, so the socket can fail to open a few times.
+      for (let attempt = 0; ; attempt++) {
+        this.#disconnect();
+        await this.#rest('vm/wake', { vm_id: this.#auth.vm_id, retry_count: attempt, connect_attempt_id: connectAttemptId }, signal);
+        const admission = await this.#rest('token', { vmAddress: `${this.#auth.vm_id}.metaaivm.com`, force_refresh: true }, signal);
+        if (!admission || typeof admission.token !== 'string' || !admission.token) throw new MuseError('missing admission token');
+        const url = this.#endpoint + "?" + queryString({ vm_id: this.#auth.vm_id, auth_token: admission.token, app_id: 'hatch-web', request_id: randomUUID(),
+          ...(typeof admission.notary_token === 'string' && admission.notary_token ? { notary_token: admission.notary_token } : {}) });
+        socket = this.#socket = new Socket(url, this.#origin);
+        try {
+          await socket.open(signal);
+          if (attempt) console.log(`Muse VM socket opened on attempt ${attempt + 1} after ${Date.now() - started}ms`);
+          break;
+        } catch (error) {
+          const elapsed = Date.now() - started, perAttempt = elapsed / (attempt + 1);
+          console.error(`Muse VM socket attempt ${attempt + 1}/${CONNECT_ATTEMPTS} did not open after ${elapsed}ms`);
+          if (attempt + 1 >= CONNECT_ATTEMPTS || signal.aborted) throw error;
+          // Another attempt only if it can finish before the caller's deadline.
+          if (options?.deadline && Date.now() + perAttempt > options.deadline) {
+            console.error(`Muse VM socket retries stopped: ${options.deadline - Date.now()}ms left`);
+            throw error;
+          }
+        }
+      }
       const hs = new NoiseInitiator();
       try {
         await socket.write(hs.writeHello(encode('ClientHello', { clientNonce: randomBytes(32) })), signal);

@@ -16,7 +16,10 @@ export class Socket {
     this.#ws=new WebSocket(String(url));
     this.#ws.binaryType='arraybuffer';
     this.#ws.onopen=()=>this.#resolve();
-    this.#ws.onerror=this.#ws.onclose=()=>this.close();
+    this.#ws.onerror=this.#ws.onclose=event=>{
+      if(!this.#error)console.error(`Muse WebSocket ${event?.type}${event?.code?` (code ${event.code})`:''}`);
+      this.close();
+    };
     this.#ws.onmessage=event=>{
       if(this.#error)return;
       if(typeof event.data==='string'){this.close();return;}

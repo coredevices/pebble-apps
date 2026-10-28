@@ -54,10 +54,10 @@ export function createService(
       );
     return value;
   }
-  async function using(auth, fn, signal) {
+  async function using(auth, fn, deadline = now() + SEND_BUDGET_MS) {
     const client = new Client(auth);
     try {
-      await client.connect({ signal });
+      await client.connect({ deadline });
       return await fn(client);
     } finally {
       client.close();
@@ -297,7 +297,7 @@ export function createService(
           if (late) slow(deadline);
           throw error;
         }
-      });
+      }, deadline - SEND_MIN_LEFT_MS);
       return { text: "Message accepted by Muse." };
     });
   }

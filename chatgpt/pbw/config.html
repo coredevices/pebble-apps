@@ -315,7 +315,14 @@ $("codexDisconnect").onclick = () => run(async () => {
 Pebble.addEventListener("ready", (event) => {
   if (event.target !== "plugin") return;
   run(async () => {
-    await render(await send({ type: "status" }));
+    try {
+      await render(await send({ type: "status" }));
+    } catch (e) {
+      // Without a status there is nothing to render, so offer sign-in rather than an empty page.
+      $("account").open = true;
+      $("dotOut").hidden = $("codexOut").hidden = false;
+      throw e;
+    }
     await refresh();
     say(describe());
   });

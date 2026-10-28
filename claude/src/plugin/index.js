@@ -376,7 +376,7 @@ function createService(storage, fetch, now) {
     var ref = await resolve(state, args.chat_id);
     if (sending) throw invalid('A Claude message is already being sent. Check it before sending another.');
     sending = true;
-    try { return await send(state, ref, args.message); } finally { sending = false; }
+    try { return await send(state, ref, args.message + ' ⌚'); } finally { sending = false; }
   }
   async function source(request) {
     if (!request || request.category !== 'agent') throw invalid('Unsupported Claude source.');

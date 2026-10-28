@@ -77,13 +77,13 @@ test('chat send uses current branch and correlated UUIDs, not the last array mes
   const f=fixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
   assert.equal((await f.source()).instances[0].properties.name.shortText.text,'Planning');
   const r=await f.action('send_to_agent',{message:'hello 世界'});assert.equal(r.ok,true);const b=JSON.parse(posts(f)[0].init.body);
-  assert.equal(b.parent_message_uuid,LEAF);assert.equal(b.prompt,'hello 世界');assert.equal(b.turn_message_uuids.human_message_uuid,r.message_id);
+  assert.equal(b.parent_message_uuid,LEAF);assert.equal(b.prompt,'hello 世界 ⌚');assert.equal(b.turn_message_uuids.human_message_uuid,r.message_id);
   assert.notEqual(b.turn_message_uuids.human_message_uuid,b.turn_message_uuids.assistant_message_uuid);assert.equal(b.create_conversation_params,undefined);
   assert.equal(posts(f)[0].init.headers['Content-Type'],'application/json; charset=utf-8');
 });
 test('Code send uses wrapped stream-json events',async()=>{
   const f=fixture();await f.connect();const r=await sendCode(f);assert.equal(r.ok,true);const b=JSON.parse(posts(f)[0].init.body);
-  assert.equal(b.session_id,CODE);assert.equal(b.events[0].payload.type,'user');assert.equal(b.events[0].payload.message.content[0].text,'run tests');assert.equal(b.events[0].payload.uuid,r.message_id);
+  assert.equal(b.session_id,CODE);assert.equal(b.events[0].payload.type,'user');assert.equal(b.events[0].payload.message.content[0].text,'run tests ⌚');assert.equal(b.events[0].payload.uuid,r.message_id);
 });
 test('offline and archived Code sessions cannot receive messages',async()=>{
   for(const extra of [{connection_status:'disconnected'},{status:'archived'}]){
@@ -206,7 +206,7 @@ test('generic send forwards status unchanged to saved default without listing or
   const r=await f.action('send_to_agent',{message:'status'});
   assert.equal(r.session_id,'code:'+CODE);
   assert.deepEqual(f.calls.map(c=>c.key),['GET '+CDETAIL,'POST '+CPOST]);
-  assert.equal(JSON.parse(posts(f)[0].init.body).events[0].payload.message.content[0].text,'status');
+  assert.equal(JSON.parse(posts(f)[0].init.body).events[0].payload.message.content[0].text,'status ⌚');
 });
 test('unknown actions are rejected before touching the network',async()=>{
   const f=fixture();await f.connect();f.calls.length=0;
@@ -248,7 +248,7 @@ test('with no chat named a message starts a new conversation under the root mess
   assert.equal(created.name,'');assert.equal(r.session_id,'chat:'+created.uuid);assert.equal(r.url,'https://claude.ai/chat/'+created.uuid);
   const completion=JSON.parse(posts(f)[1].init.body);
   assert.equal(posts(f)[1].key,'POST '+BASE+'/chat_conversations/'+created.uuid+'/completion');
-  assert.equal(completion.parent_message_uuid,ROOT);assert.equal(completion.prompt,'hello 世界');
+  assert.equal(completion.parent_message_uuid,ROOT);assert.equal(completion.prompt,'hello 世界 ⌚');
   assert.deepEqual(f.calls.map(c=>c.key.split(' ')[0]),['POST','POST']);
 });
 test('a null chat_id means no chat was named',async()=>{

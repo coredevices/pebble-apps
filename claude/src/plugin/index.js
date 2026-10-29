@@ -10,31 +10,54 @@ var MODES = ['new_chat', 'default_chat'];
 var KINDS = ['claude', 'code'];
 // chat_id values that always start a new Claude chat; not usable as nicknames.
 var NEW_CHAT = ['new', 'new chat'];
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
-var PROBES = [['claude.ai', 'https://claude.ai/']];
+var HOSTS = ['claude.ai'];
+// Apps without Pebble.permissions fail a request to a domain the user hasn't allowed the same way
+// as a dead network, so there a failed request is all we know.
+var PROBES = { 'claude.ai': 'https://claude.ai/' };
 var BLOCKED_KEY = 'claude.blocked.v1';
+function permissions() { return (typeof Pebble !== 'undefined' && Pebble.permissions) || null; }
 
 // Resolves with the first domain whose request fails, or null once every request has answered.
-function blockedHost(request) {
+function unreachableHost(request) {
   return new Promise(function (resolve) {
     var answered = 0;
-    PROBES.forEach(function (probe) {
-      Promise.resolve().then(function () { return request(probe[1]); })
-        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    HOSTS.forEach(function (host) {
+      Promise.resolve().then(function () { return request(PROBES[host]); })
+        .then(function () { if (++answered === HOSTS.length) resolve(null); }, function () { resolve(host); });
     });
   });
 }
-async function checkReach(storage, request) {
-  var host = await blockedHost(request);
+// { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null.
+async function blockedHost(request, query) {
+  if (query === undefined) query = permissions();
+  if (query) {
+    for (var host of HOSTS) {
+      if (await query.query('Internet/' + host) !== 'granted') return { host: host, sure: true };
+    }
+    return null;
+  }
+  var unreachable = await unreachableHost(request);
+  return unreachable && { host: unreachable, sure: false };
+}
+async function checkReach(storage, request, query) {
+  var blocked = await blockedHost(request, query);
   try {
-    if (host) storage.setItem(BLOCKED_KEY, host);
+    if (blocked) storage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else storage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
-function lastBlocked(storage) { return storage.getItem(BLOCKED_KEY); }
-function blockedMessage(host) {
-  return 'Claude doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Claude\'s Permissions, or check your internet connection.';
+function lastBlocked(storage) {
+  try {
+    return JSON.parse(storage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
+}
+function blockedMessage(blocked) {
+  var host = blocked.host;
+  return 'Claude doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Claude\'s Permissions' +
+    (blocked.sure ? '.' : ', or check your internet connection.');
 }
 
 function PluginError(code, message) {
@@ -170,6 +193,7 @@ function createService(storage, fetch, now) {
       console.error('Claude ' + method + ' ' + route + ' failed: ' + String(e).split(path).join(route));
       var failure = risky ? uncertain() : PluginError('PLUGIN_UNAVAILABLE', 'Could not reach Claude. Try opening Claude in your browser.');
       failure.unreachable = true;
+      if (e && e.name === 'NotAllowedError') failure.blocked = { host: 'claude.ai', sure: true };
       throw failure;
     }
     if (response.status < 200 || response.status >= 300) console.error('Claude ' + method + ' ' + route + ': HTTP ' + response.status);
@@ -442,13 +466,13 @@ function safeError(error) {
 // Probes have no deadline, so a failed action answers from the last check and starts a new one.
 function withBlockedHost(error, safe) {
   if (!error || !error.unreachable) return safe;
-  var host = null;
+  var blocked = error.blocked || null;
   try {
-    host = lastBlocked(localStorage);
+    if (!blocked) blocked = lastBlocked(localStorage);
     checkReach(localStorage, fetch).catch(function () {});
   } catch (_) {}
-  if (!host) return safe;
-  return { code: safe.code, message: blockedMessage(host) + (/uncertain/.test(safe.message) ? ' ' + safe.message : '') };
+  if (!blocked) return safe;
+  return { code: safe.code, message: blockedMessage(blocked) + (/uncertain/.test(safe.message) ? ' ' + safe.message : '') };
 }
 var service = createService(Pebble.secureStorage, fetch, Date.now);
 Pebble.registerActionHandler(function (request, response) {

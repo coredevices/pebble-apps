@@ -225,10 +225,10 @@ $('saveNickname').onclick = () => run(async () => {
 $('disconnect').onclick = () => run(async () => {
   render(await send({type:'disconnect'})); defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render(); say('Disconnected. Saved sign-in removed.');
 });
-function showBlocked(host) {
+function showBlocked({ host, sure }) {
   const banner = $('blocked'), title = document.createElement('strong');
   title.textContent = "Claude doesn't have permission to connect to " + host + '.';
-  banner.replaceChildren(title, 'Go back to Claude\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+  banner.replaceChildren(title, 'Go back to Claude\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? '' : " If it's already on, check your internet connection."));
   banner.hidden = false;
 }
 Pebble.addEventListener('ready', event => {

@@ -1,7 +1,7 @@
 {
   "name": "claude",
   "author": "Core Devices",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js"

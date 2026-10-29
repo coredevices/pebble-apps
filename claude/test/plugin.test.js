@@ -338,19 +338,37 @@ test('choosing a default of a different kind than the page shows is rejected and
   assert.equal((await f.config({type:'select',session_id:'chat:'+CHAT,kind:'claude'})).selected.session_id,'chat:'+CHAT);
 });
 const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)};};
-test('reach: first failure wins, a stalled probe does not block, the last check is remembered',async()=>{
+const permissions=states=>({query:async key=>states[key]??'granted'});
+test('reach: with Pebble.permissions, a domain not granted is named for sure, without any request',async()=>{
+  const s=fixture().sandbox,request=()=>{throw new Error('no request expected');};
+  assert.equal(await s.blockedHost(request,permissions({})),null);
+  assert.deepEqual({...await s.blockedHost(request,permissions({'Internet/claude.ai':'denied'}))},{host:'claude.ai',sure:true});
+  assert.deepEqual({...await s.blockedHost(request,permissions({'Internet/claude.ai':'prompt'}))},{host:'claude.ai',sure:true});
+  s.HOSTS.push('second.example');
+  try { assert.equal((await s.blockedHost(request,permissions({'Internet/second.example':'denied'}))).host,'second.example'); }
+  finally { s.HOSTS.pop(); }
+  assert.equal(s.blockedMessage({host:'claude.ai',sure:true}),'Claude doesn\'t have permission to connect to claude.ai. Turn on "Connect to claude.ai" in Claude\'s Permissions.');
+});
+test('reach: without it, first failure wins as a guess, a stalled probe does not block, the last check is remembered',async()=>{
   const f=fixture(),s=f.sandbox;s.localStorage=memory();
-  assert.equal(await s.blockedHost(async()=>({status:403})),null);
-  assert.equal(await s.blockedHost(()=>Promise.reject(new TypeError('blocked'))),'claude.ai');
-  s.PROBES.push(['stalled.example','https://stalled.example/']);
-  assert.equal(await s.blockedHost(url=>url.includes('stalled')?new Promise(()=>{}):Promise.reject(new TypeError('blocked'))),'claude.ai');
-  s.PROBES.pop();
-  await s.checkReach(s.localStorage,()=>Promise.reject(new TypeError('blocked')));assert.equal(s.lastBlocked(s.localStorage),'claude.ai');
+  assert.equal(await s.blockedHost(async()=>({status:403}),null),null);
+  assert.deepEqual({...await s.blockedHost(()=>Promise.reject(new TypeError('blocked')),null)},{host:'claude.ai',sure:false});
+  s.HOSTS.push('stalled.example');s.PROBES['stalled.example']='https://stalled.example/';
+  try { assert.equal((await s.blockedHost(url=>url.includes('stalled')?new Promise(()=>{}):Promise.reject(new TypeError('blocked')),null)).host,'claude.ai'); }
+  finally { s.HOSTS.pop(); }
+  await s.checkReach(s.localStorage,()=>Promise.reject(new TypeError('blocked')));assert.deepEqual({...s.lastBlocked(s.localStorage)},{host:'claude.ai',sure:false});
   await s.checkReach(s.localStorage,async()=>({status:200}));assert.equal(s.lastBlocked(s.localStorage),null);
+  s.localStorage.setItem('claude.blocked.v1','claude.ai');assert.equal(s.lastBlocked(s.localStorage),null);
 });
 test('reach: an unreachable send names the blocked domain and keeps the uncertainty warning',async()=>{
-  const f=fixture({['POST '+CPOST]:()=>{throw new TypeError('fetch failed');}});f.sandbox.localStorage=memory();f.sandbox.localStorage.setItem('claude.blocked.v1','claude.ai');
+  const f=fixture({['POST '+CPOST]:()=>{throw new TypeError('fetch failed');}});f.sandbox.localStorage=memory();f.sandbox.localStorage.setItem('claude.blocked.v1',JSON.stringify({host:'claude.ai',sure:false}));
   await f.connect();const r=await sendCode(f);
   assert.match(r.message,/^Claude doesn't have permission to connect to claude\.ai\. Turn on "Connect to claude\.ai" in Claude's Permissions, or check your internet connection\. Delivery is uncertain/);
   f.sandbox.fetch=async()=>({status:200});assert.equal((await f.config({type:'reach'})).blocked,null);assert.equal(f.sandbox.localStorage.getItem('claude.blocked.v1'),null);
+});
+test('reach: a send the host refuses as not allowed names the domain for sure, with no cached check',async()=>{
+  const f=fixture({['POST '+CPOST]:()=>{throw Object.assign(new Error('fetch not allowed: https://claude.ai'+CPOST),{name:'NotAllowedError'});}});f.sandbox.localStorage=memory();
+  await f.connect();f.sandbox.Pebble.permissions=permissions({'Internet/claude.ai':'denied'});const r=await sendCode(f);
+  assert.match(r.message,/^Claude doesn't have permission to connect to claude\.ai\. Turn on "Connect to claude\.ai" in Claude's Permissions\. Delivery is uncertain/);
+  const reply=await f.config({type:'reach'});assert.deepEqual({...reply.blocked},{host:'claude.ai',sure:true});
 });

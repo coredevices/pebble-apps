@@ -9,6 +9,7 @@
 #include "windows/win-games.h"
 #include "windows/win-card.h"
 #include "windows/win-actions.h"
+#include "windows/win-pins.h"
 #include "ui/prompt.h"
 #include "analytics.h"
 
@@ -59,6 +60,7 @@ void sports_init(void) {
   app_message_register_outbox_failed(out_failed_handler);
   app_message_open(512, 256);
   win_splash_init();
+  win_pins_init();
 
   s_leagues[KEY_LEAGUE_FAVS].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_FAVS);
   s_leagues[KEY_LEAGUE_MLB].icon = gbitmap_create_with_resource(RESOURCE_ID_ICON_BASEBALL);
@@ -92,6 +94,9 @@ void sports_init(void) {
 // #endif
 
   switch (launch_reason()) {
+    case APP_LAUNCH_WAKEUP:
+      win_pins_push();
+      break;
     case APP_LAUNCH_TIMELINE_ACTION:
       win_card_push();
       break;
@@ -109,6 +114,7 @@ void sports_deinit(void) {
   win_actions_deinit();
 // #endif
   win_splash_deinit();
+  win_pins_deinit();
   card_deinit();
   win_leagues_deinit();
   win_games_deinit();
@@ -142,7 +148,9 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
       break;
 
     case KEY_TYPE_READY: {
-      if (launch_reason() == APP_LAUNCH_TIMELINE_ACTION) {
+      if (launch_reason() == APP_LAUNCH_WAKEUP) {
+        timeline_refresh();
+      } else if (launch_reason() == APP_LAUNCH_TIMELINE_ACTION) {
         sports_request_card();
         win_card_increment_progress(60);
       } else {
@@ -168,6 +176,35 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
 
     case KEY_TYPE_CARD:
       card_in_received_handler(iter);
+      break;
+
+    case KEY_TYPE_PIN:
+      tuple = dict_find(iter, MESSAGE_KEY_method);
+      if (!tuple) break;
+      switch (tuple->value->uint8) {
+        case KEY_METHOD_SIZE: {
+          if (win_pins_is_loaded()) {
+            tuple = dict_find(iter, MESSAGE_KEY_index);
+            if (!tuple) break;
+            // uint16_t idx = tuple->value->uint16;
+            tuple = dict_find(iter, MESSAGE_KEY_count);
+            if (!tuple) break;
+            uint16_t count = tuple->value->uint16;
+            win_pins_increment_progress(100 / count);
+            break;
+          }
+          break;
+        };
+        case KEY_METHOD_END: {
+          if (win_pins_is_loaded()) {
+            win_pins_set_progress(100);
+            win_pins_pop();
+            break;
+          }
+          break;
+        }
+        break;
+      }
       break;
 
     case KEY_TYPE_LEAGUE: {

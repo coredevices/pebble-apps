@@ -28,9 +28,13 @@
     .hint { opacity: .72; font-size: 13px; }
     ol { padding-left: 22px; line-height: 1.5; }
     a { color: #668dff; }
+    #blocked { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #fdecc8;
+      color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Roam Research</h1>
   <p>Capture Index notes to today's daily note using a least-privilege, append-only token.</p>
 
@@ -148,8 +152,17 @@
       }
     };
 
+    function showBlocked(host) {
+      var banner = document.getElementById('blocked');
+      var title = document.createElement('strong');
+      title.textContent = 'Roam Research doesn\'t have permission to connect to ' + host + '.';
+      banner.replaceChildren(title, 'Go back to Roam Research\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+      banner.hidden = false;
+    }
+
     Pebble.addEventListener('ready', async function (event) {
       if (event.target !== 'plugin') return;
+      send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
       showState(await send({ type: 'status' }));
     });
   </script>

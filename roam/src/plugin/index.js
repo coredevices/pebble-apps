@@ -6,6 +6,48 @@ var TIMESTAMP_KEY = 'roam_prepend_timestamp';
 var DEFAULT_NEST_UNDER = '[[Pebble Captures]]';
 var DESTINATION_SOURCES = ['notes/destination'];
 
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [['append-api.roamresearch.com', 'https://append-api.roamresearch.com/']];
+var BLOCKED_KEY = 'roam.blocked.v1';
+
+// Resolves with the first domain whose request fails, or null once every request has answered.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'Roam Research doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Roam Research\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so an error answers from the last check and starts a new one.
+function unreachableMessage(fallback) {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host ? blockedMessage(host) : fallback;
+}
+
 function stringValue(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -135,6 +177,10 @@ function actionFailure(response) {
   if (response.status === 429) {
     return { code: 'RATE_LIMITED', message: 'Roam is receiving captures too quickly. Try again shortly.' };
   }
+  var blocked = response.status === 0 && unreachableMessage(null);
+  if (blocked) {
+    return { code: 'UNKNOWN', message: blocked + ' Roam may have received this note, so check Roam before retrying.' };
+  }
   if (response.status === 0 || response.status >= 500 || response.status === 200) {
     return {
       code: 'UNKNOWN',
@@ -236,6 +282,10 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 Pebble.registerConfigHandler(async function (message, respond) {
+  if (message && message.type === 'reach') {
+    respond({ blocked: await checkReach().catch(function () { return null; }) });
+    return;
+  }
   var config = await storedConfig();
   switch (message && message.type) {
     case 'status':

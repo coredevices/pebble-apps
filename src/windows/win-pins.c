@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include <libs/pebble-assist.h>
+#include <string.h>
 #include "generated/keys.h"
 #include "layers/progress_layer.h"
 #include "win-pins.h"
@@ -14,6 +15,7 @@ static void window_unload(Window *window);
 static Window *s_window = NULL;
 static Layer *s_main_layer = NULL;
 static ProgressLayer *s_progress_layer = NULL;
+static AppTimer *s_timeout = NULL;
 
 static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
   window_stack_remove(s_window, true);
@@ -52,12 +54,19 @@ static void window_load(Window *window) {
 }
 
 static void window_unload(Window *window) {
+  app_timer_cancel_safe(s_timeout);
   progress_layer_destroy(s_progress_layer);
   layer_destroy_safe(s_main_layer);
 }
 
+static void close_on_timeout(void *context) {
+  s_timeout = NULL;
+  win_pins_pop();
+}
+
 void win_pins_push(void) {
   window_stack_push(s_window, true);
+  s_timeout = app_timer_register(30000, close_on_timeout, NULL);
 }
 
 void win_pins_pop(void) {

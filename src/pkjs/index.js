@@ -560,14 +560,21 @@ Sports.refreshAllPins = function () {
   // the last pin to finish rather than after the loop.
   Sports.favs.forEach(function(evnt, idx) {
     requestPin({ id: evnt.id }, function (result) {
-      sentPins++;
-      appMessageQueue.send({
-        type: TYPE.PIN,
-        method: METHOD.SIZE,
-        index: idx,
-        count: totalPins,
-      });
-      if (sentPins === totalPins) {
+      if (result) { 
+        sentPins++;
+        appMessageQueue.send({
+          type: TYPE.PIN,
+          method: METHOD.SIZE,
+          index: idx,
+          count: totalPins,
+        });
+        if (sentPins === totalPins) {
+          appMessageQueue.send({
+            type: TYPE.PIN,
+            method: METHOD.END
+          });
+        }
+      } else {
         appMessageQueue.send({
           type: TYPE.PIN,
           method: METHOD.END

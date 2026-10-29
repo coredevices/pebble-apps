@@ -68,6 +68,14 @@
   <p class="hint">Saving performs one real append to a page named “Pebble Connection Check.” Roam's append API does not provide a read-only validation endpoint.</p>
 
   <script>
+    // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest && event.target.closest('a[target="_blank"]');
+      if (!link || !link.href || typeof Pebble.openUrl !== 'function') return;
+      event.preventDefault();
+      Pebble.openUrl(link.href).catch(function () {});
+    });
+
     var graphInput = document.getElementById('graph');
     var tokenInput = document.getElementById('token');
     var groupInput = document.getElementById('group');

@@ -1,7 +1,7 @@
 {
   "name": "roam",
   "author": "Core Devices",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "pebble": {
     "displayName": "Roam Research",
     "uuid": "3b7c7b02-bea8-4c7e-9bb8-d83afe744b77",

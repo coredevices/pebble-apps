@@ -383,11 +383,11 @@
     });
   };
 
-  function showBlocked(host) {
-    var title = document.createElement('strong');
+  function showBlocked(blocked) {
+    var host = blocked.host, title = document.createElement('strong');
     title.textContent = 'Location Sharing doesn\'t have permission to connect to ' + host + '.';
     $('blocked').replaceChildren(title, 'Go back to Location Sharing\'s page and turn on "Connect to ' + host +
-      '" under Permissions. If it\'s already on, check your internet connection.');
+      '" under Permissions.' + (blocked.sure ? '' : ' If it\'s already on, check your internet connection.'));
     $('blocked').className = '';
   }
 

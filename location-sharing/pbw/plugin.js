@@ -2258,40 +2258,59 @@ PERFORMANCE OF THIS SOFTWARE.
   var require_reach = __commonJS({
     "src/reach.js"(exports, module) {
       "use strict";
-      var PROBES = [["google.com", "https://www.google.com/"]];
+      var HOSTS = ["google.com"];
+      var PROBES = { "google.com": "https://www.google.com/" };
       var LAST_KEY = "location-sharing.blocked.v1";
-      function blockedHost(request) {
+      function permissions() {
+        return typeof Pebble !== "undefined" && Pebble.permissions || null;
+      }
+      function unreachableHost(request) {
         request = request || function(url) {
           return fetch(url);
         };
         return new Promise(function(resolve) {
           var answered = 0;
-          PROBES.forEach(function(probe) {
+          HOSTS.forEach(function(host) {
             Promise.resolve().then(function() {
-              return request(probe[1]);
+              return request(PROBES[host]);
             }).then(function() {
-              if (++answered === PROBES.length) resolve(null);
+              if (++answered === HOSTS.length) resolve(null);
             }, function() {
-              resolve(probe[0]);
+              resolve(host);
             });
           });
         });
       }
-      function checkReach(storage, request) {
-        return blockedHost(request).then(function(host) {
+      async function blockedHost(request, query) {
+        if (query === void 0) query = permissions();
+        if (query) {
+          for (var i = 0; i < HOSTS.length; i++) {
+            if (await query.query("Internet/" + HOSTS[i]) !== "granted") return { host: HOSTS[i], sure: true };
+          }
+          return null;
+        }
+        var host = await unreachableHost(request);
+        return host && { host, sure: false };
+      }
+      function checkReach(storage, request, query) {
+        return blockedHost(request, query).then(function(blocked) {
           try {
-            if (host) storage.setItem(LAST_KEY, host);
+            if (blocked) storage.setItem(LAST_KEY, JSON.stringify(blocked));
             else storage.removeItem(LAST_KEY);
           } catch (e) {
           }
-          return host;
+          return blocked;
         });
       }
       function lastBlocked(storage) {
-        return storage.getItem(LAST_KEY);
+        try {
+          return JSON.parse(storage.getItem(LAST_KEY)) || null;
+        } catch (e) {
+          return null;
+        }
       }
-      function blockedMessage(host) {
-        return "Location Sharing doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in Location Sharing's Permissions, or check your internet connection.`;
+      function blockedMessage(blocked) {
+        return "Location Sharing doesn't have permission to connect to " + blocked.host + '. Turn on "Connect to ' + blocked.host + `" in Location Sharing's Permissions` + (blocked.sure ? "." : ", or check your internet connection.");
       }
       module.exports = { blockedHost, checkReach, lastBlocked, blockedMessage };
     }

@@ -1,7 +1,7 @@
 {
   "name": "googlehome",
   "author": "Core Devices",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "pebble": {
     "displayName": "Google Home",
     "uuid": "d93ea4f2-6bb2-4f51-a766-29dbe481c170",

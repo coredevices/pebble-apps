@@ -7,7 +7,7 @@
 import { FoyerAuth, FoyerClient } from './foyer-client';
 import { effectiveType } from './foyer-codec';
 import { GpsOAuth } from './gpsoauth';
-import { blockedMessage, checkReach, lastBlocked } from './reach';
+import { blockedMessage, checkReach, failureBlocked } from './reach';
 import { callServerTool, normalizePasscode, PasscodeStore } from './server';
 
 const KEY_MASTER_TOKEN = 'master_token';
@@ -79,19 +79,9 @@ function errorText(error: unknown): string {
   return redact(error instanceof Error ? error.message : String(error));
 }
 
-// Probes have no deadline, so a failure answers from the last check and starts a new one.
-function recheckReach(): string | null {
-  let host: string | null = null;
-  try {
-    host = lastBlocked(localStorage);
-    checkReach(localStorage).catch(() => {});
-  } catch {}
-  return host;
-}
-
 function pluginError(error: unknown): { code: string; message: string } {
-  const host = error instanceof TypeError ? recheckReach() : null;
-  if (host) return { code: 'PLUGIN_UNAVAILABLE', message: blockedMessage(host) };
+  const blocked = failureBlocked(error, localStorage);
+  if (blocked) return { code: 'PLUGIN_UNAVAILABLE', message: blockedMessage(blocked) };
   const message = errorText(error);
   if (/not signed in|oauth|master.token|auth|HTTP 40[13]/i.test(message)) return { code: 'AUTH_REQUIRED', message };
   if (/provide at least|missing|required|no devices matched|needs at least|passcode|command/i.test(message)) {

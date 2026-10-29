@@ -21,6 +21,10 @@ interface CoreHost {
 }
 
 declare global {
+  interface PebblePermissions {
+    /** The plugin's own permission state, e.g. for `Internet/<domain>`; makes no request. */
+    query(key: string): Promise<'granted' | 'denied' | 'prompt'>;
+  }
   function fetch(url: string, init?: HostFetchInit): Promise<HostFetchResponse>;
   // eslint-disable-next-line no-var
   var coreHost: CoreHost;

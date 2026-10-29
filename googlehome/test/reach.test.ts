@@ -14,7 +14,7 @@ describe('reach', () => {
       return { status: 404 };
     })).toBe('android.clients.google.com');
     expect(blockedMessage('android.clients.google.com')).toBe(
-      'GoogleHome doesn\'t have permission to connect to android.clients.google.com. Turn on "Connect to android.clients.google.com" in GoogleHome\'s Permissions, or check your internet connection.',
+      'Google Home doesn\'t have permission to connect to android.clients.google.com. Turn on "Connect to android.clients.google.com" in Google Home\'s Permissions, or check your internet connection.',
     );
   });
 

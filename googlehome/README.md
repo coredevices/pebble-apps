@@ -1,4 +1,4 @@
-# GoogleHome
+# Google Home
 
 *Uses the Google Home app's private API, reverse engineered; not the Google Home APIs for developers.*
 

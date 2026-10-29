@@ -35,4 +35,4 @@ export async function checkReach(storage: ReachStorage, request?: (url: string) 
 export const lastBlocked = (storage: ReachStorage): string | null => storage.getItem(LAST_KEY);
 
 export const blockedMessage = (host: string): string =>
-  `GoogleHome doesn't have permission to connect to ${host}. Turn on "Connect to ${host}" in GoogleHome's Permissions, or check your internet connection.`;
+  `Google Home doesn't have permission to connect to ${host}. Turn on "Connect to ${host}" in Google Home's Permissions, or check your internet connection.`;

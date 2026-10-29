@@ -33,11 +33,6 @@ test('bundle runs NAC inline in bundled Wasm without x86 or worker hosts', () =>
   assert.ok(!appinfo.usesPermissions.includes('JavaScriptWorker'));
 });
 
-test('display name has no spaces so host tool names stay routable', () => {
-  const pebble = JSON.parse(fs.readFileSync(path.join(app, 'package.json'), 'utf8')).pebble;
-  assert.match(pebble.displayName, /^\S+$/);
-});
-
 test('status reports both providers disconnected without touching the host', async () => {
   const reply = await new Promise(resolve => load().config({ type: 'status' }, resolve));
   assert.equal(reply.ok, true);

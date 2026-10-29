@@ -2291,7 +2291,7 @@ PERFORMANCE OF THIS SOFTWARE.
         return storage.getItem(LAST_KEY);
       }
       function blockedMessage(host) {
-        return "LocationSharing doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in LocationSharing's Permissions, or check your internet connection.`;
+        return "Location Sharing doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in Location Sharing's Permissions, or check your internet connection.`;
       }
       module.exports = { blockedHost, checkReach, lastBlocked, blockedMessage };
     }

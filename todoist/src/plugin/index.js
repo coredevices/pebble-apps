@@ -12,12 +12,12 @@ var MAX_PROJECT_PAGES = 10;
 var PROJECT_PAGE_SIZE = 200;
 var REMINDER_SOURCES = ['reminders/list', 'reminders/configured'];
 
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+// Without Pebble.permissions the host fails a request to a domain the user hasn't allowed the same way as a dead network.
 var PROBES = [['api.todoist.com', 'https://api.todoist.com/']];
 var BLOCKED_KEY = 'todoist.blocked.v1';
 
 // Resolves with the first domain whose request fails, or null once every request has answered.
-function blockedHost() {
+function unreachableHost() {
   return new Promise(function (resolve) {
     var answered = 0;
     PROBES.forEach(function (probe) {
@@ -27,31 +27,49 @@ function blockedHost() {
   });
 }
 
+// { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null.
+async function blockedHost() {
+  var permissions = typeof Pebble !== 'undefined' && Pebble.permissions;
+  if (permissions) {
+    for (var i = 0; i < PROBES.length; i++) {
+      if (await permissions.query('Internet/' + PROBES[i][0]) !== 'granted') return { host: PROBES[i][0], sure: true };
+    }
+    return null;
+  }
+  var host = await unreachableHost();
+  return host && { host: host, sure: false };
+}
+
 async function checkReach() {
-  var host = await blockedHost();
+  var blocked = await blockedHost();
   try {
-    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    if (blocked) localStorage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else localStorage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 function lastBlocked() {
-  return localStorage.getItem(BLOCKED_KEY);
+  try {
+    return JSON.parse(localStorage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function blockedMessage(host) {
-  return 'Todoist doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Todoist\'s Permissions, or check your internet connection.';
+function blockedMessage(blocked) {
+  return 'Todoist doesn\'t have permission to connect to ' + blocked.host + '. Turn on "Connect to ' + blocked.host + '" in Todoist\'s Permissions' + (blocked.sure ? '.' : ', or check your internet connection.');
 }
 
 // Probes have no deadline, so an error answers from the last check and starts a new one.
-function unreachableMessage(fallback) {
-  var host = null;
+// A NotAllowedError names PROBES[0][0] because every request goes there.
+function unreachableMessage(fallback, error) {
+  var blocked = null;
   try {
-    host = lastBlocked();
+    blocked = error && error.name === 'NotAllowedError' ? { host: PROBES[0][0], sure: true } : lastBlocked();
     checkReach().catch(function () {});
   } catch (e) {}
-  return host ? blockedMessage(host) : fallback;
+  return blocked ? blockedMessage(blocked) : fallback;
 }
 
 async function secureItem(key) {
@@ -119,7 +137,7 @@ async function requestJson(method, path, body, tokenOverride) {
     };
   } catch (e) {
     console.error('Todoist ' + method + ' ' + path + ' failed: ' + e);
-    return { ok: false, status: 0, json: null, text: '' };
+    return { ok: false, status: 0, json: null, text: '', cause: e };
   }
 }
 
@@ -146,7 +164,7 @@ function respondWithHttpError(response, respond, operation) {
     return;
   }
   if (response.status === 0) {
-    respond.error('PLUGIN_UNAVAILABLE', unreachableMessage('Could not reach Todoist.'));
+    respond.error('PLUGIN_UNAVAILABLE', unreachableMessage('Could not reach Todoist.', response.cause));
     return;
   }
   respond.error(

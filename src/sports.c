@@ -30,6 +30,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context);
 static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context);
 
 static void schedule_timeline_refresh();
+static void wakeup_handler(WakeupId id, int32_t cookie);
 
 // Heap kept free after a league's games are allocated. On aplite that happens
 // with the games list already open, so this covers the game card and action
@@ -105,6 +106,11 @@ void sports_init(void) {
       win_splash_push();
       break;
   }
+  
+  // A wakeup that comes due while the app is open goes to wakeup_handler
+  // instead of launching it, so sports_init doesn't run to schedule the next one.
+  wakeup_service_subscribe(wakeup_handler);
+  schedule_timeline_refresh();
 }
 
 void sports_deinit(void) {
@@ -375,6 +381,26 @@ void sports_request_cards() {
 #endif
   dict_write_end(iter);
   app_message_outbox_send();
+}
+
+static void schedule_timeline_refresh() {
+  const time_t now = time(NULL);
+  time_t timestamp = now - (now % SECONDS_PER_DAY) + 16 * SECONDS_PER_HOUR;
+  if (timestamp <= now) {
+    timestamp += SECONDS_PER_DAY;
+  } // wakeup at 9am PDT every day
+
+  WakeupId id = wakeup_schedule(timestamp, 0, false);
+
+  if (id >= 0) {
+    const int wakeup_id_key = 43;
+    persist_write_int(wakeup_id_key, id);
+  }
+}
+
+static void wakeup_handler(WakeupId id, int32_t cookie) {
+  schedule_timeline_refresh();
+  timeline_refresh();
 }
 
 #ifdef LOW_MEM

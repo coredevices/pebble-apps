@@ -163,8 +163,8 @@ test('reach names a domain that cannot be reached and remembers it until it answ
     if (!reachable) throw new TypeError('fetch failed');
     return { status: 404 };
   });
-  assert.strictEqual((await reach(handlers)).blocked, HOST);
-  assert.strictEqual(local.get(BLOCKED_KEY), HOST);
+  assert.deepEqual((await reach(handlers)).blocked, { host: HOST, sure: false });
+  assert.deepStrictEqual(JSON.parse(local.get(BLOCKED_KEY)), { host: HOST, sure: false });
   reachable = true;
   assert.strictEqual((await reach(handlers)).blocked, null);
   assert.strictEqual(local.has(BLOCKED_KEY), false);
@@ -173,12 +173,12 @@ test('reach names a domain that cannot be reached and remembers it until it answ
 test('the first failing domain is reported without waiting for a stalled one', async () => {
   const { context, handlers } = load({}, {}, (url) => (url.includes('stalled') ? new Promise(() => {}) : offline()));
   context.PROBES = [['stalled.example', 'https://stalled.example/'], ['blocked.example', 'https://blocked.example/']];
-  assert.strictEqual((await reach(handlers)).blocked, 'blocked.example');
+  assert.strictEqual((await reach(handlers)).blocked.host, 'blocked.example');
 });
 
 test('an unreachable call names the remembered domain without waiting for a new check', async () => {
   const { context, handlers } = load(SIGNED_IN, {}, (url) => (url === 'https://' + HOST + '/' ? new Promise(() => {}) : offline()));
-  context.localStorage.setItem(BLOCKED_KEY, HOST);
+  context.localStorage.setItem(BLOCKED_KEY, JSON.stringify({ host: HOST, sure: false }));
   const r = responder();
   await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
   assert.deepStrictEqual([r.out.error.code, r.out.error.message], ['PLUGIN_UNAVAILABLE',
@@ -191,5 +191,34 @@ test('without a remembered domain the error is unchanged and a check starts in t
   await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
   assert.strictEqual(r.out.error.message, 'Could not reach Remember The Milk.');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.strictEqual(local.get(BLOCKED_KEY), HOST);
+  assert.deepStrictEqual(JSON.parse(local.get(BLOCKED_KEY)), { host: HOST, sure: false });
+});
+
+test('with Pebble.permissions, reach names the first domain not granted for sure, without any request', async () => {
+  const { context, handlers, local } = load({}, {}, () => { throw new Error('no request expected'); });
+  const states = {};
+  context.Pebble.permissions = { query: async (key) => states[key] || 'granted' };
+  context.PROBES = [['a.example', 'https://a.example/'], ['b.example', 'https://b.example/']];
+  assert.strictEqual((await reach(handlers)).blocked, null);
+  states['Internet/b.example'] = 'denied';
+  assert.deepEqual((await reach(handlers)).blocked, { host: 'b.example', sure: true });
+  states['Internet/a.example'] = 'prompt';
+  assert.deepEqual((await reach(handlers)).blocked, { host: 'a.example', sure: true });
+  assert.deepStrictEqual(JSON.parse(local.get(BLOCKED_KEY)), { host: 'a.example', sure: true });
+});
+
+test('a NotAllowedError names the domain for sure without waiting for a check', async () => {
+  const notAllowed = (url) => Promise.reject(Object.assign(new Error('fetch not allowed: ' + url), { name: 'NotAllowedError' }));
+  const { handlers } = load(SIGNED_IN, {}, notAllowed);
+  const r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
+  assert.strictEqual(r.out.error.message, `Remember The Milk doesn't have permission to connect to ${HOST}. Turn on "Connect to ${HOST}" in Remember The Milk's Permissions.`);
+});
+
+test('a remembered host from an older version is ignored', async () => {
+  const { context, handlers } = load(SIGNED_IN, {}, (url) => (url === 'https://' + HOST + '/' ? new Promise(() => {}) : offline()));
+  context.localStorage.setItem(BLOCKED_KEY, HOST);
+  const r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
+  assert.strictEqual(r.out.error.message, 'Could not reach Remember The Milk.');
 });

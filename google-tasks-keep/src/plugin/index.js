@@ -29,6 +29,12 @@ var KEEP_CAPABILITIES = ['NC', 'PI', 'LB', 'AN', 'SH', 'DR', 'TR', 'IN', 'SNB', 
 var KEEP_MUTATION_ACTIVE_MS = 2 * 60 * 1000;
 var KEEP_COMPLETED_MUTATION_TTL_MS = 15 * 60 * 1000;
 var KEEP_COMPLETED_MUTATION_LIMIT = 24;
+var BLOCKED_KEY = 'google-tasks-keep.blocked.v1';
+var PROBES = [
+  ['www.googleapis.com', 'https://www.googleapis.com/'],
+  ['tasks-pa.clients6.google.com', 'https://tasks-pa.clients6.google.com/'],
+  ['android.clients.google.com', 'https://android.clients.google.com/'],
+];
 var SECURE_KEYS = [STORE_MASTER_TOKEN, STORE_OAUTH_TOKEN, STORE_ANDROID_ID, STORE_EMAIL];
 // Credentials live in Pebble.secureStorage, which is async, while this plugin reads them
 // synchronously: they are loaded once per session (and again after a failed write), and writes land,
@@ -475,8 +481,51 @@ function errorText(error) {
   return redact(error && error.message ? error.message : String(error));
 }
 
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve()
+        .then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'Google Tasks & Keep doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host +
+    '" in Google Tasks & Keep\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so a failure answers from the last check and starts a new one.
+function recheckReach() {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host;
+}
+
 function classifyError(error) {
   var message = errorText(error);
+  var unreachable = /^.*?\(HTTP 0\)\./;
+  var host = unreachable.test(message) ? recheckReach() : null;
+  if (host) return { code: 'PLUGIN_UNAVAILABLE', message: message.replace(unreachable, blockedMessage(host)) };
   if (/not connected|oauth|master.token|authorization|HTTP 40[13]/i.test(message)) {
     return { code: 'AUTH_REQUIRED', message: message };
   }
@@ -1071,6 +1120,9 @@ Pebble.registerActionHandler(async function (request, respond) {
 Pebble.registerConfigHandler(async function (message, respond) {
   try {
     switch (message && message.type) {
+      case 'reach':
+        respond({ blocked: await checkReach().catch(function () { return null; }) });
+        return;
       case 'status': {
         var master = stored(STORE_MASTER_TOKEN);
         var oauth = stored(STORE_OAUTH_TOKEN);

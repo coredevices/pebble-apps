@@ -16,11 +16,15 @@
     .warning { margin: 12px 0; padding: 12px; border: 1px solid #d97706; border-radius: 8px;
                background: rgba(217,119,6,.12); }
     .warning p { margin: 0 0 10px; }
+    #blocked { margin: 0 0 16px; padding: 12px 14px; border-radius: 8px; background: #fdecc8;
+               color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
     #status { margin: 14px 0; padding: 10px 12px; border-radius: 8px;
               background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Google Tasks &amp; Keep</h1>
   <button id="googleSignIn" type="button" hidden>Sign in with Google</button>
   <div id="status">Starting the Google plugin…</div>
@@ -123,8 +127,16 @@
     keepWasSaved.onclick = function () { resolveKeepMutation('saved'); };
     keepWasNotSaved.onclick = function () { resolveKeepMutation('not_saved'); };
 
+    function showBlocked(host) {
+      var banner = document.getElementById('blocked'), title = document.createElement('strong');
+      title.textContent = 'Google Tasks & Keep doesn\'t have permission to connect to ' + host + '.';
+      banner.replaceChildren(title, 'Go back to Google Tasks & Keep\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+      banner.hidden = false;
+    }
+
     Pebble.addEventListener('ready', function (event) {
       if (event.target !== 'plugin') return;
+      send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
       refresh();
     });
   </script>

@@ -1,7 +1,10 @@
 {
   "name": "google-tasks-keep",
   "author": "Core Devices",
-  "version": "0.3.0",
+  "version": "0.3.1",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "pebble": {
     "displayName": "Google Tasks & Keep",
     "uuid": "a7c6e4b2-874a-4f08-9d7f-0a98e53c6b41",

@@ -95,7 +95,9 @@ void win_card_push(void) {
 }
 
 void win_card_deinit(void) {
-  app_timer_cancel(s_refresh_timer);
+  // NULL unless the card was opened: cancelling it unconditionally logged
+  // "Timer 0 does not exist" on every exit.
+  app_timer_cancel_safe(s_refresh_timer);
   fonts_unload_custom_font(s_font_score_small);
   fonts_unload_custom_font(s_font_score_large);
   gbitmap_destroy(s_buzz_icon);
@@ -811,7 +813,7 @@ static void window_load(Window *window) {
 
 static void window_unload(Window *window) {
   tick_timer_service_unsubscribe();
-  app_timer_cancel(s_refresh_timer);
+  app_timer_cancel_safe(s_refresh_timer);
   progress_layer_destroy(s_progress_layer);
   layer_destroy_safe(s_footer_layer);
   layer_destroy_safe(s_game_layer);
@@ -820,6 +822,7 @@ static void window_unload(Window *window) {
 }
 
 static void refresh_timer_callback(void *data) {
+  s_refresh_timer = NULL;
   if (!window_is_loaded(s_window)) return;
 
   if (launch_reason() == APP_LAUNCH_TIMELINE_ACTION) {

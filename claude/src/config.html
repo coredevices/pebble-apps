@@ -69,6 +69,14 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 </details>
 <p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-plugins/tree/main/claude" target="_blank" rel="noopener">Source code</a> is available.</em></p>
 <script>
+// Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
+document.addEventListener('click', function (event) {
+  var link = event.target.closest && event.target.closest('a[target="_blank"]');
+  if (!link || !link.href || typeof Pebble.openUrl !== 'function') return;
+  event.preventDefault();
+  Pebble.openUrl(link.href).catch(function () {});
+});
+
 const $ = id => document.getElementById(id);
 let busy = false, state = {configured:false};
 const say = text => { $('status').textContent = text; };

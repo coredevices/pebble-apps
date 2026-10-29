@@ -472,35 +472,60 @@ test("untagged nicknames are adopted by the account that signs in", async () => 
   assert.equal(again.bots.find((b) => b.id === "a1").nickname, "lab");
 });
 
-test("reach: first failure wins, a stalled probe does not block, the last check is remembered", async () => {
+const permissions = (states) => ({ query: async (key) => states[key] ?? "granted" });
+
+test("reach: with Pebble.permissions, the first domain not granted is named for sure, without any request", async () => {
+  const { blockedHost } = require("../src/plugin/index.js");
+  const request = () => { throw new Error("no request expected"); };
+  assert.equal(await blockedHost(request, permissions({})), null);
+  assert.deepEqual(await blockedHost(request, permissions({ "Internet/cursorvm.com": "denied" })), { host: "cursorvm.com", sure: true });
+  assert.deepEqual(await blockedHost(request, permissions({ "Internet/cursor.sh": "prompt", "Internet/cursorvm.com": "denied" })), { host: "cursor.sh", sure: true });
+});
+
+test("reach: without it, first failure wins as a guess, a stalled probe does not block, the last check is remembered", async () => {
   const { blockedHost, checkReach, lastBlocked, PROBES } = require("../src/plugin/index.js");
-  assert.equal(await blockedHost(async () => ({ status: 404 })), null);
-  assert.equal(await blockedHost(() => Promise.reject(new TypeError("blocked"))), "cursor.sh");
+  assert.equal(await blockedHost(async () => ({ status: 404 }), null), null);
+  assert.deepEqual(await blockedHost(() => Promise.reject(new TypeError("blocked")), null), { host: "cursor.sh", sure: false });
   PROBES.push(["stalled.example", "https://stalled.example/"]);
   try {
-    assert.equal(await blockedHost((url) => url.includes("stalled") ? new Promise(() => {}) : Promise.reject(new TypeError("blocked"))), "cursor.sh");
+    assert.equal((await blockedHost((url) => url.includes("stalled") ? new Promise(() => {}) : Promise.reject(new TypeError("blocked")), null)).host, "cursor.sh");
   } finally {
     PROBES.pop();
   }
   const storage = memoryStorage();
   await checkReach(storage, () => Promise.reject(new TypeError("blocked")));
-  assert.equal(lastBlocked(storage), "cursor.sh");
+  assert.deepEqual(lastBlocked(storage), { host: "cursor.sh", sure: false });
   await checkReach(storage, async () => ({ status: 200 }));
+  assert.equal(lastBlocked(storage), null);
+  storage.setItem("grok-bot.blocked.v1", "cursor.sh");
   assert.equal(lastBlocked(storage), null);
 });
 
 test("reach: an unreachable action names the blocked domain, keeping any uncertainty warning", async () => {
   const { withBlockedHost } = require("../src/plugin/index.js");
   const storage = memoryStorage();
-  storage.setItem("grok-bot.blocked.v1", "cursor.sh");
+  const guess = JSON.stringify({ host: "cursor.sh", sure: false });
+  storage.setItem("grok-bot.blocked.v1", guess);
   const message = 'Grok Bot doesn\'t have permission to connect to cursor.sh. Turn on "Connect to cursor.sh" in Grok Bot\'s Permissions, or check your internet connection.';
   const network = new TypeError("fetch failed");
   assert.equal(withBlockedHost(network, safeError(network), storage, async () => ({ status: 200 })).message, message);
   await tick();
   assert.equal(storage.getItem("grok-bot.blocked.v1"), null);
-  storage.setItem("grok-bot.blocked.v1", "cursor.sh");
+  storage.setItem("grok-bot.blocked.v1", guess);
   const service = await connected(fakeGrokBot({ onSend() { throw new TypeError("dropped"); } }));
   const err = await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "g1" } }).catch((e) => e);
   assert.equal(withBlockedHost(err, safeError(err), storage, () => new Promise(() => {})).message, message + " Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
   assert.equal(withBlockedHost(Object.assign(err, { unreachable: false }), safeError(err), storage, () => {}).message, safeError(err).message);
+});
+
+test("reach: a request refused as not allowed names its declared domain for sure, with no cached check", async () => {
+  const { withBlockedHost } = require("../src/plugin/index.js");
+  const notAllowed = (url) => Object.assign(new Error("fetch not allowed: " + url), { name: "NotAllowedError" });
+  const sure = (host) => 'Grok Bot doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Grok Bot\'s Permissions.';
+  const refused = notAllowed("https://api2.cursor.sh/aiserver.v1.GrokBotService/EnsureSandBox");
+  assert.equal(withBlockedHost(refused, safeError(refused), memoryStorage(), async () => ({ status: 200 })).message, sure("cursor.sh"));
+  const service = await connected(fakeGrokBot({ onSend() { throw notAllowed(BOX + "/api/sendPrompt"); } }));
+  const err = await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "g1" } }).catch((e) => e);
+  assert.equal(withBlockedHost(err, safeError(err), memoryStorage(), () => new Promise(() => {})).message,
+    sure("cursorvm.com") + " Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
 });

@@ -244,10 +244,10 @@ document.addEventListener('click', function (event) {
           render(await send({ type: "disconnect" }));
           say("Signed out. Saved sign-in removed from this plugin.");
         });
-      function showBlocked(host) {
+      function showBlocked({ host, sure }) {
         const banner = $("blocked"), title = document.createElement("strong");
         title.textContent = "Grok Bot doesn't have permission to connect to " + host + ".";
-        banner.replaceChildren(title, 'Go back to Grok Bot\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+        banner.replaceChildren(title, 'Go back to Grok Bot\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? "" : " If it's already on, check your internet connection."));
         banner.hidden = false;
       }
       Pebble.addEventListener("ready", (event) => {

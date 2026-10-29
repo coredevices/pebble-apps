@@ -17,7 +17,9 @@ var SEND_BUDGET_MS = 18000;
 var READ_BUDGET_MS = 18000;
 // Below this much time left, a send is refused rather than risk an unknown delivery.
 var SEND_MIN_LEFT_MS = 8000;
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var HOSTS = ["cursor.sh", "cursorvm.com"];
+// Apps without Pebble.permissions fail a request to a domain the user hasn't allowed the same way
+// as a dead network, so there a failed request is all we know.
 var PROBES = [["cursor.sh", "https://cursor.sh/"]];
 var BLOCKED_KEY = "grok-bot.blocked.v1";
 
@@ -92,7 +94,7 @@ function replyText(entry) {
 
 
 /** Resolves with the first domain whose request fails, or null once every request has answered. */
-function blockedHost(request) {
+function unreachableHost(request) {
   return new Promise(function (resolve) {
     var answered = 0;
     PROBES.forEach(function (probe) {
@@ -101,19 +103,47 @@ function blockedHost(request) {
     });
   });
 }
-async function checkReach(storage, request) {
-  var host = await blockedHost(request);
+/** { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null. */
+async function blockedHost(request, query) {
+  if (query === undefined) query = (typeof Pebble !== "undefined" && Pebble.permissions) || null;
+  if (query) {
+    for (var host of HOSTS) {
+      if (await query.query("Internet/" + host) !== "granted") return { host: host, sure: true };
+    }
+    return null;
+  }
+  var unreachable = await unreachableHost(request);
+  return unreachable && { host: unreachable, sure: false };
+}
+async function checkReach(storage, request, query) {
+  var blocked = await blockedHost(request, query);
   try {
-    if (host) storage.setItem(BLOCKED_KEY, host);
+    if (blocked) storage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else storage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 function lastBlocked(storage) {
-  return storage.getItem(BLOCKED_KEY);
+  try {
+    return JSON.parse(storage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
-function blockedMessage(host) {
-  return "Grok Bot doesn't have permission to connect to " + host + ". Turn on \"Connect to " + host + "\" in Grok Bot's Permissions, or check your internet connection.";
+/** The declared domain a NotAllowedError's URL falls under, as { host, sure: true }, or null. */
+function notAllowedHost(error) {
+  var match = error && error.name === "NotAllowedError" && /^fetch not allowed: https?:\/\/([^/?#:\s]+)/i.exec(String(error.message));
+  if (!match) return null;
+  var hostname = match[1].toLowerCase();
+  for (var host of HOSTS) {
+    if (hostname === host || hostname.endsWith("." + host)) return { host: host, sure: true };
+  }
+  return null;
+}
+function blockedMessage(blocked) {
+  var host = blocked.host;
+  return "Grok Bot doesn't have permission to connect to " + host + ". Turn on \"Connect to " + host + "\" in Grok Bot's Permissions" +
+    (blocked.sure ? "." : ", or check your internet connection.");
 }
 
 function createService(storage, fetch, cache) {
@@ -425,6 +455,7 @@ function createService(storage, fetch, cache) {
       if (e instanceof PluginError && e.status && e.status < 500) throw e;
       var uncertain = new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
       uncertain.unreachable = !(e instanceof PluginError);
+      uncertain.cause = e;
       throw uncertain;
     }
     var record = await acceptance(call, clientNonce).catch(function () { return null; });
@@ -497,13 +528,13 @@ function safeError(error) {
 // Probes have no deadline, so a failed action answers from the last check and starts a new one.
 function withBlockedHost(error, safe, storage, request) {
   if (safe.code !== "PLUGIN_UNAVAILABLE" || (error instanceof PluginError && !error.unreachable)) return safe;
-  var host = null;
+  var blocked = notAllowedHost(error instanceof PluginError ? error.cause : error);
   try {
-    host = lastBlocked(storage);
+    if (!blocked) blocked = lastBlocked(storage);
     checkReach(storage, request).catch(function () {});
   } catch (e) {}
-  if (!host) return safe;
-  return { code: safe.code, message: blockedMessage(host) + (error instanceof PluginError ? " " + safe.message : "") };
+  if (!blocked) return safe;
+  return { code: safe.code, message: blockedMessage(blocked) + (error instanceof PluginError ? " " + safe.message : "") };
 }
 
 if (typeof Pebble !== "undefined") {
@@ -610,4 +641,4 @@ if (typeof Pebble !== "undefined") {
 }
 
 if (typeof module !== "undefined") module.exports = { createService: createService, safeError: safeError, blockedHost: blockedHost, checkReach: checkReach,
-  lastBlocked: lastBlocked, withBlockedHost: withBlockedHost, PROBES: PROBES };
+  lastBlocked: lastBlocked, withBlockedHost: withBlockedHost, PROBES: PROBES, HOSTS: HOSTS };

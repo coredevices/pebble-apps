@@ -1,11 +1,13 @@
 'use strict';
 
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var HOSTS = ['chatgpt.com', 'auth.openai.com'];
+// Apps without Pebble.permissions fail a request to a domain the user hasn't allowed the same way
+// as a dead network, so there a failed request is all we know.
 var PROBES = [['chatgpt.com', 'https://chatgpt.com/']];
 var LAST_KEY = 'chatgpt.blocked.v1';
 
 /** Resolves with the first domain whose request fails, or null once every request has answered. */
-function blockedHost(request) {
+function unreachableHost(request) {
   return new Promise(function (resolve) {
     var answered = 0;
     PROBES.forEach(function (probe) {
@@ -15,21 +17,52 @@ function blockedHost(request) {
   });
 }
 
-async function checkReach(storage, request) {
-  var host = await blockedHost(request);
+/** { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null. */
+async function blockedHost(request, query) {
+  if (query === undefined) query = (typeof Pebble !== 'undefined' && Pebble.permissions) || null;
+  if (query) {
+    for (var host of HOSTS) {
+      if (await query.query('Internet/' + host) !== 'granted') return { host: host, sure: true };
+    }
+    return null;
+  }
+  var unreachable = await unreachableHost(request);
+  return unreachable && { host: unreachable, sure: false };
+}
+
+async function checkReach(storage, request, query) {
+  var blocked = await blockedHost(request, query);
   try {
-    if (host) storage.setItem(LAST_KEY, host);
+    if (blocked) storage.setItem(LAST_KEY, JSON.stringify(blocked));
     else storage.removeItem(LAST_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 function lastBlocked(storage) {
-  return storage.getItem(LAST_KEY);
+  try {
+    return JSON.parse(storage.getItem(LAST_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function blockedMessage(host) {
-  return 'ChatGPT doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in ChatGPT\'s Permissions, or check your internet connection.';
+/** The declared domain a NotAllowedError's URL falls under, as { host, sure: true }, or null. */
+function notAllowedHost(error) {
+  var match = error && error.name === 'NotAllowedError' && /^fetch not allowed: https?:\/\/([^/?#:\s]+)/i.exec(String(error.message));
+  if (!match) return null;
+  var hostname = match[1].toLowerCase();
+  for (var host of HOSTS) {
+    if (hostname === host || hostname.endsWith('.' + host)) return { host: host, sure: true };
+  }
+  return null;
 }
 
-module.exports = { PROBES: PROBES, blockedHost: blockedHost, checkReach: checkReach, lastBlocked: lastBlocked, blockedMessage: blockedMessage };
+function blockedMessage(blocked) {
+  var host = blocked.host;
+  return 'ChatGPT doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in ChatGPT\'s Permissions' +
+    (blocked.sure ? '.' : ', or check your internet connection.');
+}
+
+module.exports = { HOSTS: HOSTS, PROBES: PROBES, blockedHost: blockedHost, checkReach: checkReach, lastBlocked: lastBlocked,
+  notAllowedHost: notAllowedHost, blockedMessage: blockedMessage };

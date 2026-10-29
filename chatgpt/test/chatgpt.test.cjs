@@ -235,26 +235,50 @@ test('without a ChatGPT sign-in, a new chat asks to sign in and is not listed', 
   assert.deepEqual(Array.from((await f.agentChats()).instances || []), []);
 });
 
-test('reach: first failure wins, a stalled probe does not block, and an unreachable send names the domain', async () => {
+const permissions = (states) => ({ query: async (key) => states[key] ?? 'granted' });
+const UNCERTAIN = ' If sending, delivery may be uncertain; check before trying again.';
+const notAllowed = (url) => Object.assign(new Error('fetch not allowed: ' + url), { name: 'NotAllowedError' });
+
+test('reach: with Pebble.permissions, the first domain not granted is named for sure, without any request', async () => {
+  const reach = require('../src/reach.js');
+  const request = () => { throw new Error('no request expected'); };
+  assert.equal(await reach.blockedHost(request, permissions({})), null);
+  assert.deepEqual(await reach.blockedHost(request, permissions({ 'Internet/auth.openai.com': 'denied' })), { host: 'auth.openai.com', sure: true });
+  assert.deepEqual(await reach.blockedHost(request, permissions({ 'Internet/chatgpt.com': 'prompt', 'Internet/auth.openai.com': 'denied' })), { host: 'chatgpt.com', sure: true });
+});
+
+test('reach: without it, first failure wins as a guess, a stalled probe does not block, and an unreachable send names the domain', async () => {
   const reach = require('../src/reach.js');
   const { withBlockedHost, safeError } = require('../src/plugin-entry.js');
   const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
-  assert.equal(await reach.blockedHost(async () => ({ status: 403 })), null);
-  assert.equal(await reach.blockedHost(() => Promise.reject(new TypeError('blocked'))), 'chatgpt.com');
+  assert.equal(await reach.blockedHost(async () => ({ status: 403 }), null), null);
+  assert.deepEqual(await reach.blockedHost(() => Promise.reject(new TypeError('blocked')), null), { host: 'chatgpt.com', sure: false });
   reach.PROBES.push(['stalled.example', 'https://stalled.example/']);
   try {
-    assert.equal(await reach.blockedHost((url) => url.includes('stalled') ? new Promise(() => {}) : Promise.reject(new TypeError('blocked'))), 'chatgpt.com');
+    assert.equal((await reach.blockedHost((url) => url.includes('stalled') ? new Promise(() => {}) : Promise.reject(new TypeError('blocked')), null)).host, 'chatgpt.com');
   } finally {
     reach.PROBES.pop();
   }
   const storage = memory();
   await reach.checkReach(storage, () => Promise.reject(new TypeError('blocked')));
-  assert.equal(reach.lastBlocked(storage), 'chatgpt.com');
+  assert.deepEqual(reach.lastBlocked(storage), { host: 'chatgpt.com', sure: false });
   const network = new TypeError('fetch failed');
   assert.equal(withBlockedHost(network, safeError(network), storage, () => new Promise(() => {})).message,
-    'ChatGPT doesn\'t have permission to connect to chatgpt.com. Turn on "Connect to chatgpt.com" in ChatGPT\'s Permissions, or check your internet connection. If sending, delivery may be uncertain; check before trying again.');
+    'ChatGPT doesn\'t have permission to connect to chatgpt.com. Turn on "Connect to chatgpt.com" in ChatGPT\'s Permissions, or check your internet connection.' + UNCERTAIN);
   const coded = Object.assign(new Error('ChatGPT returned an error (HTTP 500).'), { code: 'PLUGIN_UNAVAILABLE' });
   assert.equal(withBlockedHost(coded, safeError(coded), storage, () => {}).message, coded.message);
   await reach.checkReach(storage, async () => ({ status: 200 }));
   assert.equal(reach.lastBlocked(storage), null);
+  storage.setItem('chatgpt.blocked.v1', 'chatgpt.com');
+  assert.equal(reach.lastBlocked(storage), null);
+});
+
+test('reach: a request refused as not allowed names its declared domain for sure, with no cached check', async () => {
+  const reach = require('../src/reach.js');
+  assert.deepEqual(reach.notAllowedHost(notAllowed('https://auth.openai.com/oauth/token')), { host: 'auth.openai.com', sure: true });
+  assert.equal(reach.notAllowedHost(new TypeError('fetch failed')), null);
+  const f = fixture({ routes: { [CONVERSATION]: () => { throw notAllowed(API + '/f/conversation'); } } });
+  await f.signIn();
+  assert.deepEqual(await f.send({ message: 'hi', chat_id: 'new-chat' }), { code: 'PLUGIN_UNAVAILABLE',
+    message: 'ChatGPT doesn\'t have permission to connect to chatgpt.com. Turn on "Connect to chatgpt.com" in ChatGPT\'s Permissions.' + UNCERTAIN });
 });

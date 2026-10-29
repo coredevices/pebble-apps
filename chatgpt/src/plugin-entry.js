@@ -238,12 +238,12 @@ function safeError(error) {
 // Probes have no deadline, so a failed action answers from the last check and starts a new one.
 function withBlockedHost(error, safe, storage, request) {
   if (error && error.code) return safe;
-  var host = null;
+  var blocked = reach.notAllowedHost(error);
   try {
-    host = reach.lastBlocked(storage);
+    if (!blocked) blocked = reach.lastBlocked(storage);
     reach.checkReach(storage, request).catch(function () {});
   } catch (_) {}
-  return host ? { code: safe.code, message: reach.blockedMessage(host) + ' If sending, delivery may be uncertain; check before trying again.' } : safe;
+  return blocked ? { code: safe.code, message: reach.blockedMessage(blocked) + ' If sending, delivery may be uncertain; check before trying again.' } : safe;
 }
 
 if (typeof Pebble !== 'undefined') {

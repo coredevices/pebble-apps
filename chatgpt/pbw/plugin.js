@@ -6528,9 +6528,10 @@
   var require_reach = __commonJS({
     "src/reach.js"(exports, module) {
       "use strict";
+      var HOSTS = ["chatgpt.com", "auth.openai.com"];
       var PROBES = [["chatgpt.com", "https://chatgpt.com/"]];
       var LAST_KEY = "chatgpt.blocked.v1";
-      function blockedHost(request) {
+      function unreachableHost(request) {
         return new Promise(function(resolve) {
           var answered = 0;
           PROBES.forEach(function(probe) {
@@ -6544,22 +6545,55 @@
           });
         });
       }
-      async function checkReach(storage, request) {
-        var host = await blockedHost(request);
+      async function blockedHost(request, query) {
+        if (query === void 0) query = typeof Pebble !== "undefined" && Pebble.permissions || null;
+        if (query) {
+          for (var host of HOSTS) {
+            if (await query.query("Internet/" + host) !== "granted") return { host, sure: true };
+          }
+          return null;
+        }
+        var unreachable = await unreachableHost(request);
+        return unreachable && { host: unreachable, sure: false };
+      }
+      async function checkReach(storage, request, query) {
+        var blocked = await blockedHost(request, query);
         try {
-          if (host) storage.setItem(LAST_KEY, host);
+          if (blocked) storage.setItem(LAST_KEY, JSON.stringify(blocked));
           else storage.removeItem(LAST_KEY);
         } catch (e) {
         }
-        return host;
+        return blocked;
       }
       function lastBlocked(storage) {
-        return storage.getItem(LAST_KEY);
+        try {
+          return JSON.parse(storage.getItem(LAST_KEY)) || null;
+        } catch (e) {
+          return null;
+        }
       }
-      function blockedMessage(host) {
-        return "ChatGPT doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in ChatGPT's Permissions, or check your internet connection.`;
+      function notAllowedHost(error) {
+        var match = error && error.name === "NotAllowedError" && /^fetch not allowed: https?:\/\/([^/?#:\s]+)/i.exec(String(error.message));
+        if (!match) return null;
+        var hostname = match[1].toLowerCase();
+        for (var host of HOSTS) {
+          if (hostname === host || hostname.endsWith("." + host)) return { host, sure: true };
+        }
+        return null;
       }
-      module.exports = { PROBES, blockedHost, checkReach, lastBlocked, blockedMessage };
+      function blockedMessage(blocked) {
+        var host = blocked.host;
+        return "ChatGPT doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in ChatGPT's Permissions` + (blocked.sure ? "." : ", or check your internet connection.");
+      }
+      module.exports = {
+        HOSTS,
+        PROBES,
+        blockedHost,
+        checkReach,
+        lastBlocked,
+        notAllowedHost,
+        blockedMessage
+      };
     }
   });
 
@@ -6777,14 +6811,14 @@
       }
       function withBlockedHost(error, safe, storage, request) {
         if (error && error.code) return safe;
-        var host = null;
+        var blocked = reach.notAllowedHost(error);
         try {
-          host = reach.lastBlocked(storage);
+          if (!blocked) blocked = reach.lastBlocked(storage);
           reach.checkReach(storage, request).catch(function() {
           });
         } catch (_) {
         }
-        return host ? { code: safe.code, message: reach.blockedMessage(host) + " If sending, delivery may be uncertain; check before trying again." } : safe;
+        return blocked ? { code: safe.code, message: reach.blockedMessage(blocked) + " If sending, delivery may be uncertain; check before trying again." } : safe;
       }
       if (typeof Pebble !== "undefined") {
         plugin = createPlugin(Pebble.secureStorage, fetch, Date.now, WebSocket);

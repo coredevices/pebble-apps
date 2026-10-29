@@ -26,9 +26,13 @@
     .hint { opacity: .72; font-size: 13px; }
     a { color: #4d8fe0; }
     .hidden { display: none; }
+    #blocked { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #fdecc8;
+      color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Remember The Milk</h1>
 
   <div id="setup">
@@ -119,8 +123,17 @@
       showState(await send({ type: 'unlink' }));
     };
 
+    function showBlocked(host) {
+      var banner = document.getElementById('blocked');
+      var title = document.createElement('strong');
+      title.textContent = 'Remember The Milk doesn\'t have permission to connect to ' + host + '.';
+      banner.replaceChildren(title, 'Go back to Remember The Milk\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+      banner.hidden = false;
+    }
+
     Pebble.addEventListener('ready', async function (event) {
       if (event.target !== 'plugin') return;
+      send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
       showState(await send({ type: 'status' }));
     });
   </script>

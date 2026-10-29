@@ -7,7 +7,7 @@ const vm = require('node:vm');
 
 const SOURCE = fs.readFileSync(path.join(__dirname, '../src/plugin/index.js'), 'utf8');
 
-function load(stored, replies) {
+function load(stored, replies, fetch) {
   const secure = new Map(Object.entries(stored || {}));
   const local = new Map();
   const handlers = {};
@@ -19,12 +19,12 @@ function load(stored, replies) {
       setItem: (k, v) => local.set(k, String(v)),
       removeItem: (k) => local.delete(k),
     },
-    fetch: async (url) => {
+    fetch: fetch || (async (url) => {
       const params = Object.fromEntries(new URL(url).searchParams);
       calls.push(params);
       const reply = replies[params.method];
       return { status: 200, text: async () => JSON.stringify({ rsp: typeof reply === 'function' ? reply(params) : reply }) };
-    },
+    }),
     Pebble: {
       secureStorage: {
         getItem: async (k) => (secure.has(k) ? secure.get(k) : null),
@@ -39,7 +39,7 @@ function load(stored, replies) {
   };
   vm.createContext(context);
   vm.runInContext(SOURCE, context);
-  return { context, handlers, calls, secure };
+  return { context, handlers, calls, secure, local };
 }
 
 function responder() {
@@ -150,4 +150,46 @@ test('settings reopened mid sign-in still offer Done', async () => {
   await new Promise((resolve) => handlers.config({ type: 'start' }, resolve));
   const status = await new Promise((resolve) => handlers.config({ type: 'status' }, resolve));
   assert.strictEqual(status.pending, true);
+});
+
+const HOST = 'api.rememberthemilk.com';
+const BLOCKED_KEY = 'remember-the-milk.blocked.v1';
+const offline = () => Promise.reject(new TypeError('fetch failed'));
+const reach = (handlers) => new Promise((resolve) => handlers.config({ type: 'reach' }, resolve));
+
+test('reach names a domain that cannot be reached and remembers it until it answers', async () => {
+  let reachable = false;
+  const { handlers, local } = load({}, {}, async () => {
+    if (!reachable) throw new TypeError('fetch failed');
+    return { status: 404 };
+  });
+  assert.strictEqual((await reach(handlers)).blocked, HOST);
+  assert.strictEqual(local.get(BLOCKED_KEY), HOST);
+  reachable = true;
+  assert.strictEqual((await reach(handlers)).blocked, null);
+  assert.strictEqual(local.has(BLOCKED_KEY), false);
+});
+
+test('the first failing domain is reported without waiting for a stalled one', async () => {
+  const { context, handlers } = load({}, {}, (url) => (url.includes('stalled') ? new Promise(() => {}) : offline()));
+  context.PROBES = [['stalled.example', 'https://stalled.example/'], ['blocked.example', 'https://blocked.example/']];
+  assert.strictEqual((await reach(handlers)).blocked, 'blocked.example');
+});
+
+test('an unreachable call names the remembered domain without waiting for a new check', async () => {
+  const { context, handlers } = load(SIGNED_IN, {}, (url) => (url === 'https://' + HOST + '/' ? new Promise(() => {}) : offline()));
+  context.localStorage.setItem(BLOCKED_KEY, HOST);
+  const r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
+  assert.deepStrictEqual([r.out.error.code, r.out.error.message], ['PLUGIN_UNAVAILABLE',
+    'Remember The Milk doesn\'t have permission to connect to api.rememberthemilk.com. Turn on "Connect to api.rememberthemilk.com" in Remember The Milk\'s Permissions, or check your internet connection.']);
+});
+
+test('without a remembered domain the error is unchanged and a check starts in the background', async () => {
+  const { handlers, local } = load(SIGNED_IN, {}, offline);
+  const r = responder();
+  await handlers.action({ action: 'create_reminder', args: { title: 'x' } }, r);
+  assert.strictEqual(r.out.error.message, 'Could not reach Remember The Milk.');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(local.get(BLOCKED_KEY), HOST);
 });

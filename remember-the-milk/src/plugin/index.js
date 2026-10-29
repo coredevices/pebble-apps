@@ -9,6 +9,48 @@ var FROB_KEY = 'rtm_frob';
 var LIST_REFRESH_MS = 15 * 60 * 1000;
 var REMINDER_SOURCES = ['reminders/list', 'reminders/configured'];
 
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [['api.rememberthemilk.com', 'https://api.rememberthemilk.com/']];
+var BLOCKED_KEY = 'remember-the-milk.blocked.v1';
+
+// Resolves with the first domain whose request fails, or null once every request has answered.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'Remember The Milk doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Remember The Milk\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so an error answers from the last check and starts a new one.
+function unreachableMessage(fallback) {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host ? blockedMessage(host) : fallback;
+}
+
 function md5(text) {
   var bytes = unescape(encodeURIComponent(text));
   var words = [];
@@ -86,7 +128,7 @@ async function call(creds, method, params) {
     response = await fetch(API_URL + '?' + signedQuery(query, creds.secret));
   } catch (e) {
     console.error('Remember The Milk ' + method + ' failed: ' + e);
-    throw rtmError('PLUGIN_UNAVAILABLE', 'Could not reach Remember The Milk.');
+    throw rtmError('PLUGIN_UNAVAILABLE', unreachableMessage('Could not reach Remember The Milk.'));
   }
   if (response.status === 503) throw rtmError('RATE_LIMITED', 'Remember The Milk is rate limiting requests. Try again shortly.');
   var text = await response.text();
@@ -251,6 +293,10 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 Pebble.registerConfigHandler(async function (message, respond) {
+  if (message && message.type === 'reach') {
+    respond({ blocked: await checkReach().catch(function () { return null; }) });
+    return;
+  }
   var creds = await credentials();
   try {
     switch (message && message.type) {

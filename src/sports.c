@@ -28,6 +28,8 @@ static LeagueData s_leagues[] = {
 static void in_received_handler(DictionaryIterator *iter, void *context);
 static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reason, void *context);
 
+static void schedule_timeline_refresh();
+
 // Heap kept free after a league's games are allocated. On aplite that happens
 // with the games list already open, so this covers the game card and action
 // menu opened on top of it: about 1.6 KB, measured in the emulator.
@@ -160,6 +162,7 @@ static void in_received_handler(DictionaryIterator *iter, void *context) {
       win_leagues_push();
       win_splash_pop();
       win_splash_deinit();
+      timeline_refresh();
       analytics_set_screen(SCREEN_LEAGUES, BUTTON_ID_SELECT);
       break;
 
@@ -393,6 +396,16 @@ static bool sports_is_NCAA(uint16_t section) {
           section == KEY_LEAGUE_NCAAW);
 }
 #endif
+
+void timeline_refresh() {
+  // This can be called while another message is still going out, and iter is
+  // unset unless outbox_begin succeeds.
+  DictionaryIterator *iter;
+  if (app_message_outbox_begin(&iter) != APP_MSG_OK) return;
+  dict_write_uint8(iter, MESSAGE_KEY_method, KEY_METHOD_REQUESTPINS);
+  dict_write_end(iter);
+  app_message_outbox_send();
+}
 
 void timeline_add(const char *team, uint32_t id) {
   DictionaryIterator *iter;

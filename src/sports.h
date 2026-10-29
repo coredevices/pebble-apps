@@ -21,6 +21,7 @@ void sports_request_cards();
 void sports_request_card();
 void sports_request_game();
 
+void timeline_refresh();
 void timeline_add(const char *team, uint32_t id);
 void timeline_remove(const char *team, uint32_t id);
 

@@ -2,6 +2,7 @@
   "TYPE": [
     "ERROR",
     "CARD",
+    "PIN",
     "LEAGUE",
     "LOADED",
     "READY",

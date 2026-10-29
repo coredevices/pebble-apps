@@ -197,14 +197,17 @@ function pinIdFor(gameId, pins) {
   return pinId;
 }
 
-function requestPin(opts) {
+function requestPin(opts, done) {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
   xhr.onload = function() {
     try {
       var res = JSON.parse(xhr.responseText);
 
-      if (!res.league) return;
+      if (!res.league) {
+        done(false);
+        return;
+      } 
 
       var event = parseCardData(res);
       var pins = loadPins();
@@ -300,10 +303,24 @@ function requestPin(opts) {
       savePins(pins);
 
       console.log('pin inserted for id: ' + opts.id);
+      done(true);
     } catch (e) {
       console.log('error requesting data for pin: ' + e);
+      done(false);
     }
   };
+  // done() on every path: refreshAllPins counts callbacks to know when to
+  // send END, so a pin that never answers would leave the watch waiting.
+  xhr.onerror = function() {
+    console.log('error requesting data for pin: request failed');
+    done(false);
+  };
+  xhr.ontimeout = function() {
+    console.log('error requesting data for pin: timed out');
+    done(false);
+  };
+  // The default of 0 never times out, so a hung request would never call done().
+  xhr.timeout = 10000;
   xhr.send(null);
 }
 
@@ -487,6 +504,7 @@ Sports.loadFavs = function(callback) {
       console.log('error loading favs for league ' + league + ': timed out');
       next();
     };
+    xhr.timeout = 10000;
 
     xhr.send();
   }, function() {
@@ -526,18 +544,37 @@ Sports.refreshAllLeagues = function(callback) {
   });
 };
 
-Sports.refreshAllPins = function() {
-  var insertAll = function() {
-    Sports.favs.forEach(function(evnt) {
-      requestPin({ id: evnt.id });
-    });
-  };
+Sports.refreshAllPins = function () {
+  var totalPins = Sports.favs.length;
+  var sentPins = 0;
 
-  if (Sports.favs.length === 0) {
-    Sports.loadFavs(insertAll);
-  } else {
-    insertAll();
+  if (totalPins === 0) {
+    appMessageQueue.send({
+      type: TYPE.PIN,
+      method: METHOD.END
+    });
+    return;
   }
+
+  // requestPin answers asynchronously, so END goes out from the callback of
+  // the last pin to finish rather than after the loop.
+  Sports.favs.forEach(function(evnt, idx) {
+    requestPin({ id: evnt.id }, function (result) {
+      sentPins++;
+      appMessageQueue.send({
+        type: TYPE.PIN,
+        method: METHOD.SIZE,
+        index: idx,
+        count: totalPins,
+      });
+      if (sentPins === totalPins) {
+        appMessageQueue.send({
+          type: TYPE.PIN,
+          method: METHOD.END
+        });
+      }
+    });
+  });
 };
 
 function addFavoriteTeam(team) {
@@ -571,8 +608,6 @@ Sports.onReady = function() {
   } catch (e) {
     Sports.teams = [];
   }
-
-  Sports.refreshAllPins();
 };
 
 // ANY CHANGES MUST BE UPDATED THE ANALYTICS H FILE
@@ -612,6 +647,10 @@ Sports.onAppMessage = function(e) {
       });
       break;
 
+    case METHOD.REQUESTPINS: // the watch now tells the phone when to refresh Timeline
+      Sports.loadFavs(Sports.refreshAllPins);
+      break;
+
     case METHOD.REQUESTLEAGUE:
       Sports.sendRequestedLeague(e.payload.index);
       break;
@@ -637,8 +676,6 @@ Sports.onAppMessage = function(e) {
     case METHOD.SUBSCRIBE:
       console.log('added ' + e.payload.title + ' to favorites');
       addFavoriteTeam(e.payload.title);
-      // Pins every game of the new team, not just the card it was added from.
-      // refreshAllLeagues rebuilds Sports.favs first, so the pins see it.
       Sports.refreshAllLeagues(Sports.refreshAllPins);
       break;
 
@@ -646,7 +683,7 @@ Sports.onAppMessage = function(e) {
       console.log('removed ' + e.payload.title + ' from favorites');
       removeFavoriteTeam(e.payload.title);
       removeOrphanedPins();
-      Sports.refreshAllLeagues();
+      Sports.refreshAllLeagues(Sports.refreshAllPins);
       break;
 
     case METHOD.SCREEN_CHANGE:

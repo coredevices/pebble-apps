@@ -141,10 +141,10 @@ $("disconnect").onclick = () => run(async () => {
   render(await send({ type: "disconnect" }));
   say("Disconnected. Saved connection removed from this plugin.");
 });
-function showBlocked(host) {
+function showBlocked({ host, sure }) {
   const banner = $("blocked"), title = document.createElement("strong");
   title.textContent = "Muse doesn't have permission to connect to " + host + ".";
-  banner.replaceChildren(title, 'Go back to Muse\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+  banner.replaceChildren(title, 'Go back to Muse\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? "" : " If it's already on, check your internet connection."));
   banner.hidden = false;
 }
 Pebble.addEventListener("ready", (event) => {

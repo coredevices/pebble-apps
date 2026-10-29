@@ -1,7 +1,10 @@
 {
   "name": "notion",
   "author": "Pebble",
-  "version": "1.0.2",
+  "version": "1.0.3",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "pebble": {
     "displayName": "Notion",
     "uuid": "c7ad904e-40d5-4cb5-8f13-1d1d3c6a7e21",

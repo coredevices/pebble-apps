@@ -23,6 +23,48 @@ var PENDING_REVIEW_DELAY_MS = 2 * 60 * 1000;
 var MAX_COMPLETED_RECEIPTS = 20;
 var HEADING_TEXT = 'Todo';
 
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [['api.notion.com', 'https://api.notion.com/']];
+var BLOCKED_KEY = 'notion.blocked.v1';
+
+// Resolves with the first domain whose request fails, or null once every request has answered.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'Notion doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Notion\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so an error answers from the last check and starts a new one.
+function unreachableMessage(fallback) {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host ? blockedMessage(host) : fallback;
+}
+
 function defaultDestination() {
   return {
     mode: 'heading', pageId: null, pageTitle: null, pageUrl: null, placement: 'bottom',
@@ -574,6 +616,7 @@ function prepareHeadingBullet(text, headingBlockId) {
 
 function pluginError(result) {
   console.error('Notion request failed (HTTP ' + result.status + '): ' + result.error);
+  if (result.status === 0) return { code: 'PLUGIN_UNAVAILABLE', message: unreachableMessage(result.error) };
   if (result.status === 401 || result.status === 403) {
     return { code: 'AUTH_REQUIRED', message: result.error || 'Notion authorization failed.' };
   }
@@ -956,6 +999,10 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 Pebble.registerConfigHandler(async function (message, respond) {
+  if (message && message.type === 'reach') {
+    respond({ blocked: await checkReach().catch(function () { return null; }) });
+    return;
+  }
   await loadSecrets();
   var current = state();
   switch (message && message.type) {

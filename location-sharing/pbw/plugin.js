@@ -2254,6 +2254,49 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   });
 
+  // src/reach.js
+  var require_reach = __commonJS({
+    "src/reach.js"(exports, module) {
+      "use strict";
+      var PROBES = [["google.com", "https://www.google.com/"]];
+      var LAST_KEY = "location-sharing.blocked.v1";
+      function blockedHost(request) {
+        request = request || function(url) {
+          return fetch(url);
+        };
+        return new Promise(function(resolve) {
+          var answered = 0;
+          PROBES.forEach(function(probe) {
+            Promise.resolve().then(function() {
+              return request(probe[1]);
+            }).then(function() {
+              if (++answered === PROBES.length) resolve(null);
+            }, function() {
+              resolve(probe[0]);
+            });
+          });
+        });
+      }
+      function checkReach(storage, request) {
+        return blockedHost(request).then(function(host) {
+          try {
+            if (host) storage.setItem(LAST_KEY, host);
+            else storage.removeItem(LAST_KEY);
+          } catch (e) {
+          }
+          return host;
+        });
+      }
+      function lastBlocked(storage) {
+        return storage.getItem(LAST_KEY);
+      }
+      function blockedMessage(host) {
+        return "LocationSharing doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in LocationSharing's Permissions, or check your internet connection.`;
+      }
+      module.exports = { blockedHost, checkReach, lastBlocked, blockedMessage };
+    }
+  });
+
   // src/plugin-entry.js
   var require_plugin_entry = __commonJS({
     "src/plugin-entry.js"(exports, module) {
@@ -2263,6 +2306,7 @@ PERFORMANCE OF THIS SOFTWARE.
       var hostEnvironment = require_host_environment();
       var FetchHttpProvider = require_fetch_http_provider().FetchHttpProvider;
       var SecureBlobStorage = require_secure_blob_storage().SecureBlobStorage;
+      var reach = require_reach();
       var APPLE_UNAVAILABLE = "Apple Find My is not available in this version.";
       function appleUnavailable() {
         var error = new Error(APPLE_UNAVAILABLE);
@@ -2364,13 +2408,27 @@ PERFORMANCE OF THIS SOFTWARE.
           return fn.apply(null, args);
         };
       }
+      function withBlockedHost(error) {
+        return function(code, message) {
+          if (code === "GOOGLE_LOCATION_NETWORK_ERROR") {
+            try {
+              var host = reach.lastBlocked(globalThis.localStorage);
+              reach.checkReach(globalThis.localStorage).catch(function() {
+              });
+              if (host) message = reach.blockedMessage(host);
+            } catch (_) {
+            }
+          }
+          return error(code, message);
+        };
+      }
       Pebble.registerSourceHandler(function(request, respond) {
         return controllerReady.then(function(controller) {
           return controller.handleSource(request, {
             data: afterFlush(respond.data, function() {
               return respond.error("PLUGIN_UNAVAILABLE", SAVE_FAILED);
             }),
-            error: afterFlush(respond.error, sameArgs(respond.error))
+            error: afterFlush(withBlockedHost(respond.error), sameArgs(respond.error))
           });
         });
       });
@@ -2380,11 +2438,18 @@ PERFORMANCE OF THIS SOFTWARE.
             ok: afterFlush(respond.ok, function() {
               return respond.error("PLUGIN_UNAVAILABLE", SAVE_FAILED);
             }),
-            error: afterFlush(respond.error, sameArgs(respond.error))
+            error: afterFlush(withBlockedHost(respond.error), sameArgs(respond.error))
           });
         });
       });
       Pebble.registerConfigHandler(function(message, respond) {
+        if (message && message.type === "reach") {
+          return reach.checkReach(globalThis.localStorage).catch(function() {
+            return null;
+          }).then(function(blocked) {
+            respond({ blocked });
+          });
+        }
         return controllerReady.then(function(controller) {
           return controller.handleConfig(message).then(afterFlush(respond, function() {
             return respond({ ok: false, error: SAVE_FAILED });

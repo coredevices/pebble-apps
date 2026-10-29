@@ -20,6 +20,7 @@ var hostEnvironment = require('../../chat/imessage/src/runtime/host-environment'
 var FetchHttpProvider = require('./runtime/fetch-http-provider').FetchHttpProvider;
 // var JsHostCrypto = require('./runtime/js-host-crypto').JsHostCrypto;
 var SecureBlobStorage = require('./runtime/secure-blob-storage').SecureBlobStorage;
+var reach = require('./reach');
 // var StandardWebSocket = require('./runtime/standard-websocket-provider').StandardWebSocket;
 // Apple Find My needs host features stock CoreApp doesn't give plugins (raw TLS sockets, saved
 // Mac keys, host crypto, timers), so it is switched off below and only Google Maps runs.
@@ -172,11 +173,24 @@ function afterFlush(fn, onFailure) {
   };
 }
 function sameArgs(fn) { return function(args) { return fn.apply(null, args); }; }
+// Probes have no deadline, so a failed request answers from the last check and starts a new one.
+function withBlockedHost(error) {
+  return function(code, message) {
+    if (code === 'GOOGLE_LOCATION_NETWORK_ERROR') {
+      try {
+        var host = reach.lastBlocked(globalThis.localStorage);
+        reach.checkReach(globalThis.localStorage).catch(function() {});
+        if (host) message = reach.blockedMessage(host);
+      } catch (_) {}
+    }
+    return error(code, message);
+  };
+}
 Pebble.registerSourceHandler(function(request, respond) {
   return controllerReady.then(function(controller) {
     return controller.handleSource(request, {
       data: afterFlush(respond.data, function() { return respond.error('PLUGIN_UNAVAILABLE', SAVE_FAILED); }),
-      error: afterFlush(respond.error, sameArgs(respond.error)),
+      error: afterFlush(withBlockedHost(respond.error), sameArgs(respond.error)),
     });
   });
 });
@@ -184,11 +198,14 @@ Pebble.registerActionHandler(function(request, respond) {
   return controllerReady.then(function(controller) {
     return controller.handleAction(request, {
       ok: afterFlush(respond.ok, function() { return respond.error('PLUGIN_UNAVAILABLE', SAVE_FAILED); }),
-      error: afterFlush(respond.error, sameArgs(respond.error)),
+      error: afterFlush(withBlockedHost(respond.error), sameArgs(respond.error)),
     });
   });
 });
 Pebble.registerConfigHandler(function(message, respond) {
+  if (message && message.type === 'reach') {
+    return reach.checkReach(globalThis.localStorage).catch(function() { return null; }).then(function(blocked) { respond({ blocked: blocked }); });
+  }
   return controllerReady.then(function(controller) {
     return controller.handleConfig(message).then(afterFlush(respond, function() { return respond({ ok: false, error: SAVE_FAILED }); }));
   });

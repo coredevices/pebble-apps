@@ -36,9 +36,13 @@
     .row { display: flex; align-items: center; gap: 10px; }
     .row button { width: auto; margin-top: 0; padding: 8px 12px; }
     .hidden { display: none; }
+    #blocked { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: #fdecc8;
+      color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" class="hidden" role="alert"></p>
   <h1>Location Sharing</h1>
   <p id="pluginVersion" class="version">Plugin v0.13.1</p>
   <p class="hint">See people who already share their location with you through
@@ -379,8 +383,18 @@
     });
   };
 
+  function showBlocked(host) {
+    var title = document.createElement('strong');
+    title.textContent = 'LocationSharing doesn\'t have permission to connect to ' + host + '.';
+    $('blocked').replaceChildren(title, 'Go back to LocationSharing\'s page and turn on "Connect to ' + host +
+      '" under Permissions. If it\'s already on, check your internet connection.');
+    $('blocked').className = '';
+  }
+
   Pebble.addEventListener('ready', function (event) {
-    if (event.target === 'plugin') { refreshStatus(); loadSavedMacs(); }
+    if (event.target !== 'plugin') return;
+    send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
+    refreshStatus(); loadSavedMacs();
   });
 </script>
 </body>

@@ -1,7 +1,7 @@
 {
   "name": "location-sharing",
   "author": "Core Devices",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "pebble": {
     "displayName": "LocationSharing",
     "uuid": "3dab147e-32f5-4e48-b980-5a0de672e085",

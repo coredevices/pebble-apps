@@ -22,9 +22,13 @@
     [hidden] { display: none !important; }
     #status { margin-top: 16px; padding: 10px 12px; border-radius: 8px;
               background: rgba(128,128,128,.15); font-size: 14px; }
+    #blocked { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #fdecc8;
+      color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Todoist</h1>
 
   <div class="buttons">
@@ -66,8 +70,17 @@
       showConfigured((await send({ type: 'unlink' })).configured);
     };
 
+    function showBlocked(host) {
+      var banner = document.getElementById('blocked');
+      var title = document.createElement('strong');
+      title.textContent = 'Todoist doesn\'t have permission to connect to ' + host + '.';
+      banner.replaceChildren(title, 'Go back to Todoist\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+      banner.hidden = false;
+    }
+
     Pebble.addEventListener('ready', async function (event) {
       if (event.target !== 'plugin') return;
+      send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
       showConfigured((await send({ type: 'status' })).configured);
     });
   </script>

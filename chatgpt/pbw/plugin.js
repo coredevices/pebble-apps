@@ -6524,6 +6524,45 @@
     }
   });
 
+  // src/reach.js
+  var require_reach = __commonJS({
+    "src/reach.js"(exports, module) {
+      "use strict";
+      var PROBES = [["chatgpt.com", "https://chatgpt.com/"]];
+      var LAST_KEY = "chatgpt.blocked.v1";
+      function blockedHost(request) {
+        return new Promise(function(resolve) {
+          var answered = 0;
+          PROBES.forEach(function(probe) {
+            Promise.resolve().then(function() {
+              return request(probe[1]);
+            }).then(function() {
+              if (++answered === PROBES.length) resolve(null);
+            }, function() {
+              resolve(probe[0]);
+            });
+          });
+        });
+      }
+      async function checkReach(storage, request) {
+        var host = await blockedHost(request);
+        try {
+          if (host) storage.setItem(LAST_KEY, host);
+          else storage.removeItem(LAST_KEY);
+        } catch (e) {
+        }
+        return host;
+      }
+      function lastBlocked(storage) {
+        return storage.getItem(LAST_KEY);
+      }
+      function blockedMessage(host) {
+        return "ChatGPT doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in ChatGPT's Permissions, or check your internet connection.`;
+      }
+      module.exports = { PROBES, blockedHost, checkReach, lastBlocked, blockedMessage };
+    }
+  });
+
   // src/plugin-entry.js
   var require_plugin_entry = __commonJS({
     "src/plugin-entry.js"(exports, module) {
@@ -6535,6 +6574,7 @@
       var createCodexCloud = require_codex_cloud().createCodexCloud;
       var createCodexChats = require_codex_chats().createCodexChats;
       var createChatGptChats = require_chatgpt_chats().createChatGptChats;
+      var reach = require_reach();
       var DOT_ID = "dot";
       var NEW_CHAT_ID = "new-chat";
       var NEW_CHAT_NAME = "New ChatGPT chat";
@@ -6735,11 +6775,26 @@
           message: "Could not reach ChatGPT. If sending, delivery may be uncertain; check before trying again."
         };
       }
+      function withBlockedHost(error, safe, storage, request) {
+        if (error && error.code) return safe;
+        var host = null;
+        try {
+          host = reach.lastBlocked(storage);
+          reach.checkReach(storage, request).catch(function() {
+          });
+        } catch (_) {
+        }
+        return host ? { code: safe.code, message: reach.blockedMessage(host) + " If sending, delivery may be uncertain; check before trying again." } : safe;
+      }
       if (typeof Pebble !== "undefined") {
         plugin = createPlugin(Pebble.secureStorage, fetch, Date.now, WebSocket);
         Pebble.registerActionHandler(function(request, response) {
           plugin.action(request).then(response.ok, function(error) {
             var safe = safeError(error);
+            try {
+              safe = withBlockedHost(error, safe, globalThis.localStorage, fetch);
+            } catch (e) {
+            }
             response.error(safe.code, safe.message);
           });
         });
@@ -6750,13 +6805,21 @@
           });
         });
         Pebble.registerConfigHandler(function(message, respond) {
+          if (message && message.type === "reach") {
+            reach.checkReach(globalThis.localStorage, fetch).catch(function() {
+              return null;
+            }).then(function(blocked) {
+              respond({ blocked });
+            });
+            return;
+          }
           plugin.config(message).then(respond, function(error) {
             respond({ error: safeError(error).message });
           });
         });
       }
       var plugin;
-      module.exports = { createPlugin, safeError };
+      module.exports = { createPlugin, safeError, withBlockedHost };
     }
   });
   require_plugin_entry();

@@ -14,10 +14,12 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 .row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; }
 .check { display:flex; gap:10px; align-items:flex-start; font-weight:400; margin:12px 0 0; } .check small { display:block; overflow-wrap:anywhere; } input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:2px 0 0; }
 details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } ul { padding-left:20px; margin:8px 0; } code { overflow-wrap:anywhere; } [hidden] { display:none!important; }
+#blocked { padding:12px 14px; border-radius:12px; margin:0 0 16px; background:#fdecc8; color:#5c3d00; font-size:14px; line-height:1.45; } #blocked strong { display:block; }
 @media(prefers-color-scheme:dark) { :root { --bg:#1c201f; --card:#262c2a; --ink:#eef3f1; --muted:#aab5b0; --line:#3d4643; --accent:#19a37f; } }
 </style>
 </head>
 <body>
+<p id="blocked" role="alert" hidden></p>
 <h1>ChatGPT</h1>
 <p class="hint">Choose where your messages go.</p>
 <div class="card modes">
@@ -303,8 +305,15 @@ $("codexDisconnect").onclick = () => run(async () => {
   await render(await send({ type: "disconnect" }));
   say("Signed out. The saved sign-in and paired computers were removed from this plugin.");
 });
+function showBlocked(host) {
+  const banner = $("blocked"), title = document.createElement("strong");
+  title.textContent = "ChatGPT doesn't have permission to connect to " + host + ".";
+  banner.replaceChildren(title, 'Go back to ChatGPT\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+  banner.hidden = false;
+}
 Pebble.addEventListener("ready", (event) => {
   if (event.target !== "plugin") return;
+  Pebble.sendMessage("plugin", { type: "reach" }).then((r) => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
   run(async () => {
     try {
       await render(await send({ type: "status" }));

@@ -8,6 +8,7 @@ var createCodexRemote = require('./codex-remote').createCodexRemote;
 var createCodexCloud = require('./codex-cloud').createCodexCloud;
 var createCodexChats = require('./codex-chats').createCodexChats;
 var createChatGptChats = require('./chatgpt-chats').createChatGptChats;
+var reach = require('./reach');
 
 var DOT_ID = 'dot';
 var NEW_CHAT_ID = 'new-chat';
@@ -234,12 +235,24 @@ function safeError(error) {
   };
 }
 
+// Probes have no deadline, so a failed action answers from the last check and starts a new one.
+function withBlockedHost(error, safe, storage, request) {
+  if (error && error.code) return safe;
+  var host = null;
+  try {
+    host = reach.lastBlocked(storage);
+    reach.checkReach(storage, request).catch(function () {});
+  } catch (_) {}
+  return host ? { code: safe.code, message: reach.blockedMessage(host) + ' If sending, delivery may be uncertain; check before trying again.' } : safe;
+}
+
 if (typeof Pebble !== 'undefined') {
   var plugin = createPlugin(Pebble.secureStorage, fetch, Date.now, WebSocket);
 
   Pebble.registerActionHandler(function (request, response) {
     plugin.action(request).then(response.ok, function (error) {
       var safe = safeError(error);
+      try { safe = withBlockedHost(error, safe, globalThis.localStorage, fetch); } catch (e) {}
       response.error(safe.code, safe.message);
     });
   });
@@ -252,10 +265,15 @@ if (typeof Pebble !== 'undefined') {
   });
 
   Pebble.registerConfigHandler(function (message, respond) {
+    if (message && message.type === 'reach') {
+      reach.checkReach(globalThis.localStorage, fetch).catch(function () { return null; })
+        .then(function (blocked) { respond({ blocked: blocked }); });
+      return;
+    }
     plugin.config(message).then(respond, function (error) {
       respond({ error: safeError(error).message });
     });
   });
 }
 
-module.exports = { createPlugin: createPlugin, safeError: safeError };
+module.exports = { createPlugin: createPlugin, safeError: safeError, withBlockedHost: withBlockedHost };

@@ -234,3 +234,27 @@ test('without a ChatGPT sign-in, a new chat asks to sign in and is not listed', 
   assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).code, 'AUTH_REQUIRED');
   assert.deepEqual(Array.from((await f.agentChats()).instances || []), []);
 });
+
+test('reach: first failure wins, a stalled probe does not block, and an unreachable send names the domain', async () => {
+  const reach = require('../src/reach.js');
+  const { withBlockedHost, safeError } = require('../src/plugin-entry.js');
+  const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
+  assert.equal(await reach.blockedHost(async () => ({ status: 403 })), null);
+  assert.equal(await reach.blockedHost(() => Promise.reject(new TypeError('blocked'))), 'chatgpt.com');
+  reach.PROBES.push(['stalled.example', 'https://stalled.example/']);
+  try {
+    assert.equal(await reach.blockedHost((url) => url.includes('stalled') ? new Promise(() => {}) : Promise.reject(new TypeError('blocked'))), 'chatgpt.com');
+  } finally {
+    reach.PROBES.pop();
+  }
+  const storage = memory();
+  await reach.checkReach(storage, () => Promise.reject(new TypeError('blocked')));
+  assert.equal(reach.lastBlocked(storage), 'chatgpt.com');
+  const network = new TypeError('fetch failed');
+  assert.equal(withBlockedHost(network, safeError(network), storage, () => new Promise(() => {})).message,
+    'ChatGPT doesn\'t have permission to connect to chatgpt.com. Turn on "Connect to chatgpt.com" in ChatGPT\'s Permissions, or check your internet connection. If sending, delivery may be uncertain; check before trying again.');
+  const coded = Object.assign(new Error('ChatGPT returned an error (HTTP 500).'), { code: 'PLUGIN_UNAVAILABLE' });
+  assert.equal(withBlockedHost(coded, safeError(coded), storage, () => {}).message, coded.message);
+  await reach.checkReach(storage, async () => ({ status: 200 }));
+  assert.equal(reach.lastBlocked(storage), null);
+});

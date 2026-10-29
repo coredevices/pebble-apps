@@ -20,9 +20,13 @@
     #status { margin: 12px 0; padding: 10px 12px; border-radius: 8px;
               background: rgba(128,128,128,.15); font-size: 14px; min-height: 20px; }
     .hidden { display: none; }
+    #blocked { margin: 0 0 16px; padding: 12px 14px; border-radius: 8px; background: #fdecc8;
+               color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Google Home</h1>
 
   <div id="signedOut" class="hidden">
@@ -126,8 +130,16 @@
     await refresh();
   };
 
+  function showBlocked(host) {
+    var banner = $('blocked'), title = document.createElement('strong');
+    title.textContent = 'GoogleHome doesn\'t have permission to connect to ' + host + '.';
+    banner.replaceChildren(title, 'Go back to GoogleHome\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+    banner.hidden = false;
+  }
+
   Pebble.addEventListener('ready', function (event) {
     if (event.target !== 'plugin') return;
+    send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
     refresh();
   });
 </script>

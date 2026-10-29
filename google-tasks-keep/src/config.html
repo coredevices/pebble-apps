@@ -127,10 +127,11 @@
     keepWasSaved.onclick = function () { resolveKeepMutation('saved'); };
     keepWasNotSaved.onclick = function () { resolveKeepMutation('not_saved'); };
 
-    function showBlocked(host) {
+    function showBlocked(blocked) {
+      var host = blocked.host;
       var banner = document.getElementById('blocked'), title = document.createElement('strong');
       title.textContent = 'Google Tasks & Keep doesn\'t have permission to connect to ' + host + '.';
-      banner.replaceChildren(title, 'Go back to Google Tasks & Keep\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+      banner.replaceChildren(title, 'Go back to Google Tasks & Keep\'s page and turn on "Connect to ' + host + '" under Permissions.' + (blocked.sure ? '' : ' If it\'s already on, check your internet connection.'));
       banner.hidden = false;
     }
 

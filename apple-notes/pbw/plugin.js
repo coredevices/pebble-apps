@@ -8112,6 +8112,48 @@
     }
   });
 
+  // src/reach.mjs
+  function blockedHost(request) {
+    request = request || function(url) {
+      return fetch(url);
+    };
+    return new Promise(function(resolve) {
+      var answered = 0;
+      PROBES.forEach(function(probe) {
+        Promise.resolve().then(function() {
+          return request(probe[1]);
+        }).then(function() {
+          if (++answered === PROBES.length) resolve(null);
+        }, function() {
+          resolve(probe[0]);
+        });
+      });
+    });
+  }
+  function checkReach(storage, request) {
+    return blockedHost(request).then(function(host) {
+      try {
+        if (host) storage.setItem(LAST_KEY, host);
+        else storage.removeItem(LAST_KEY);
+      } catch (e) {
+      }
+      return host;
+    });
+  }
+  function lastBlocked(storage) {
+    return storage.getItem(LAST_KEY);
+  }
+  function blockedMessage(host) {
+    return "Apple Notes doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in Apple Notes's Permissions, or check your internet connection.`;
+  }
+  var PROBES, LAST_KEY;
+  var init_reach = __esm({
+    "src/reach.mjs"() {
+      PROBES = [["icloud.com", "https://www.icloud.com/"]];
+      LAST_KEY = "apple-notes.blocked.v1";
+    }
+  });
+
   // src/plugin.js
   var require_plugin = __commonJS({
     "src/plugin.js"() {
@@ -8120,6 +8162,7 @@
       init_esm();
       init_topotext_pb();
       init_noteDocument();
+      init_reach();
       var STORE_KEY = "apple-notes";
       var SECURE_KEYS = [STORE_KEY];
       var secureCache = (function() {
@@ -9050,6 +9093,16 @@
         if (result.status === 404 || /NOT_FOUND|UNKNOWN_ITEM/i.test(String(result.serverErrorCode || ""))) {
           return { code: "PLUGIN_UNAVAILABLE", message: result.error || "The selected Apple Note no longer exists." };
         }
+        if (result.status === 0) {
+          var host = null;
+          try {
+            host = lastBlocked(globalThis.localStorage);
+            checkReach(globalThis.localStorage).catch(function() {
+            });
+          } catch (e) {
+          }
+          if (host) return { code: "PLUGIN_UNAVAILABLE", message: blockedMessage(host) };
+        }
         return { code: "PLUGIN_UNAVAILABLE", message: result.error || "Apple Notes is unavailable." };
       }
       function shortText(text) {
@@ -9177,6 +9230,12 @@
         });
       });
       Pebble.registerConfigHandler(async function(message, respond) {
+        if (message && message.type === "reach") {
+          respond({ blocked: await checkReach(globalThis.localStorage).catch(function() {
+            return null;
+          }) });
+          return;
+        }
         var current = state();
         switch (message && message.type) {
           case "status":

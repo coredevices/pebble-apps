@@ -22,6 +22,7 @@ import {
   parseNoteDocument,
   validateDocumentInvariants,
 } from '../vendor/icloud-md/src/notes/noteDocument.js';
+import { blockedMessage, checkReach, lastBlocked } from './reach.mjs';
 
 var STORE_KEY = 'apple-notes';
 var SECURE_KEYS = [STORE_KEY];
@@ -978,6 +979,14 @@ function pluginError(result) {
   if (result.status === 404 || /NOT_FOUND|UNKNOWN_ITEM/i.test(String(result.serverErrorCode || ''))) {
     return { code: 'PLUGIN_UNAVAILABLE', message: result.error || 'The selected Apple Note no longer exists.' };
   }
+  if (result.status === 0) {
+    var host = null;
+    try {
+      host = lastBlocked(globalThis.localStorage);
+      checkReach(globalThis.localStorage).catch(function () {});
+    } catch (e) { /* storage unavailable */ }
+    if (host) return { code: 'PLUGIN_UNAVAILABLE', message: blockedMessage(host) };
+  }
   return { code: 'PLUGIN_UNAVAILABLE', message: result.error || 'Apple Notes is unavailable.' };
 }
 
@@ -1116,6 +1125,10 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 Pebble.registerConfigHandler(async function (message, respond) {
+  if (message && message.type === 'reach') {
+    respond({ blocked: await checkReach(globalThis.localStorage).catch(function () { return null; }) });
+    return;
+  }
   var current = state();
   switch (message && message.type) {
     case 'status':

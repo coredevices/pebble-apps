@@ -15,10 +15,11 @@ function loadPlugin() {
   context.globalThis = context;
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "pbw", "plugin.js"), "utf8"), context);
-  return context.__appleNotesPbwTest;
+  return context;
 }
 
-const T = loadPlugin();
+const context = loadPlugin();
+const T = context.__appleNotesPbwTest;
 const replica = new Uint8Array(16).fill(7);
 
 function record(document) {
@@ -76,4 +77,13 @@ test("every added line is a dash item, under the title for top and after the las
   const lines = paragraphs(top.compressedBase64);
   assert.equal(lines[0][1], paragraphs(bottom.compressedBase64)[0][1]);
   assert.deepEqual(lines.slice(1), [["zeroth", 101], ["first", 101]]);
+});
+
+test("a fetch the user hasn't allowed fails like a dead network and answers from the last check", async () => {
+  const storage = new Map([["apple-notes.blocked.v1", JSON.stringify({ host: "icloud.com", sure: true })]]);
+  context.localStorage = { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: (k) => storage.delete(k) };
+  context.fetch = async (url) => { const e = new Error("fetch not allowed: " + url); e.name = "NotAllowedError"; throw e; };
+  const result = await T.http("POST", "https://p1-ckdatabasews.icloud.com/x", {}, "{}");
+  assert.equal(result.status, 0);
+  assert.equal(T.pluginError(result).message, 'Apple Notes doesn\'t have permission to connect to icloud.com. Turn on "Connect to icloud.com" in Apple Notes\'s Permissions.');
 });

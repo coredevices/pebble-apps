@@ -1,7 +1,7 @@
 {
   "name": "apple-notes",
   "author": "Core Devices",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "pebble": {
     "displayName": "Apple Notes",
     "uuid": "04a1a397-7447-4d81-a378-3508ca0de95c",

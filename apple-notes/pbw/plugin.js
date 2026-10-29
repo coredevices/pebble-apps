@@ -8113,43 +8113,62 @@
   });
 
   // src/reach.mjs
-  function blockedHost(request) {
+  function permissions() {
+    return typeof Pebble !== "undefined" && Pebble.permissions || null;
+  }
+  function unreachableHost(request) {
     request = request || function(url) {
       return fetch(url);
     };
     return new Promise(function(resolve) {
       var answered = 0;
-      PROBES.forEach(function(probe) {
+      HOSTS.forEach(function(host) {
         Promise.resolve().then(function() {
-          return request(probe[1]);
+          return request(PROBES[host]);
         }).then(function() {
-          if (++answered === PROBES.length) resolve(null);
+          if (++answered === HOSTS.length) resolve(null);
         }, function() {
-          resolve(probe[0]);
+          resolve(host);
         });
       });
     });
   }
-  function checkReach(storage, request) {
-    return blockedHost(request).then(function(host) {
+  async function blockedHost(request, query) {
+    if (query === void 0) query = permissions();
+    if (query) {
+      for (var i = 0; i < HOSTS.length; i++) {
+        if (await query.query("Internet/" + HOSTS[i]) !== "granted") return { host: HOSTS[i], sure: true };
+      }
+      return null;
+    }
+    var host = await unreachableHost(request);
+    return host && { host, sure: false };
+  }
+  function checkReach(storage, request, query) {
+    return blockedHost(request, query).then(function(blocked) {
       try {
-        if (host) storage.setItem(LAST_KEY, host);
+        if (blocked) storage.setItem(LAST_KEY, JSON.stringify(blocked));
         else storage.removeItem(LAST_KEY);
       } catch (e) {
       }
-      return host;
+      return blocked;
     });
   }
   function lastBlocked(storage) {
-    return storage.getItem(LAST_KEY);
+    try {
+      return JSON.parse(storage.getItem(LAST_KEY)) || null;
+    } catch (e) {
+      return null;
+    }
   }
-  function blockedMessage(host) {
-    return "Apple Notes doesn't have permission to connect to " + host + '. Turn on "Connect to ' + host + `" in Apple Notes's Permissions, or check your internet connection.`;
+  function blockedMessage(blocked) {
+    return "Apple Notes doesn't have permission to connect to " + blocked.host + '. Turn on "Connect to ' + blocked.host + `" in Apple Notes's Permissions` + (blocked.sure ? "." : ", or check your internet connection.");
   }
-  var PROBES, LAST_KEY;
+  var HOSTS, PROBES, LAST_KEY;
   var init_reach = __esm({
     "src/reach.mjs"() {
-      PROBES = [["icloud.com", "https://www.icloud.com/"]];
+      HOSTS = ["icloud.com"];
+      PROBES = { "icloud.com": "https://www.icloud.com/" };
       LAST_KEY = "apple-notes.blocked.v1";
     }
   });
@@ -9373,7 +9392,9 @@
         base64ToBytes,
         bytesToBase64,
         encodeNoteDocument,
-        utf8
+        utf8,
+        http,
+        pluginError
       };
     }
   });

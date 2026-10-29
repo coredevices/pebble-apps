@@ -1275,4 +1275,6 @@ globalThis.__appleNotesPbwTest = {
   bytesToBase64: bytesToBase64,
   encodeNoteDocument: encodeNoteDocument,
   utf8: utf8,
+  http: http,
+  pluginError: pluginError,
 };

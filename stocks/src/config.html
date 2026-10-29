@@ -86,10 +86,11 @@
     else $('symbol').value = '';
   };
 
-  function showBlocked(host) {
+  function showBlocked(blocked) {
+    var host = blocked.host;
     var banner = $('blocked'), title = document.createElement('strong');
     title.textContent = 'Stocks doesn\'t have permission to connect to ' + host + '.';
-    banner.replaceChildren(title, 'Go back to Stocks\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+    banner.replaceChildren(title, 'Go back to Stocks\'s page and turn on "Connect to ' + host + '" under Permissions.' + (blocked.sure ? '' : ' If it\'s already on, check your internet connection.'));
     banner.hidden = false;
   }
 

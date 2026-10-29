@@ -6,7 +6,7 @@
 
 var STORE_KEY = 'stocks';
 var BLOCKED_KEY = 'stocks.blocked.v1';
-var PROBES = [['query1.finance.yahoo.com', 'https://query1.finance.yahoo.com/']];
+var REACH_HOSTS = ['query1.finance.yahoo.com'];
 var QUOTE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 var REFRESH_MS = 60 * 1000;
 var SOURCES = ['finance/stock'];
@@ -27,48 +27,66 @@ async function http(url) {
     return { ok: true, json: await response.json() };
   } catch (e) {
     console.error('Quote request to ' + url + ' failed: ' + e);
-    return { ok: false, json: null, unreachable: true };
+    return { ok: false, json: null, unreachable: true, denied: !!e && e.name === 'NotAllowedError' };
   }
 }
 
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
-function blockedHost() {
+// Apps without Pebble.permissions fail a request to a domain the user hasn't allowed the same way
+// as a dead network, so there a failed request is all we know.
+function unreachableHost() {
   return new Promise(function (resolve) {
     var answered = 0;
-    PROBES.forEach(function (probe) {
+    REACH_HOSTS.forEach(function (host) {
       Promise.resolve()
-        .then(function () { return fetch(probe[1]); })
-        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+        .then(function () { return fetch('https://' + host + '/'); })
+        .then(function () { if (++answered === REACH_HOSTS.length) resolve(null); }, function () { resolve(host); });
     });
   });
 }
 
+// { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null.
+async function blockedHost() {
+  var permissions = typeof Pebble !== 'undefined' && Pebble.permissions;
+  if (permissions) {
+    for (var i = 0; i < REACH_HOSTS.length; i++) {
+      if (await permissions.query('Internet/' + REACH_HOSTS[i]) !== 'granted') return { host: REACH_HOSTS[i], sure: true };
+    }
+    return null;
+  }
+  var host = await unreachableHost();
+  return host ? { host: host, sure: false } : null;
+}
+
 async function checkReach() {
-  var host = await blockedHost();
+  var blocked = await blockedHost();
   try {
-    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    if (blocked) localStorage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else localStorage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 function lastBlocked() {
-  return localStorage.getItem(BLOCKED_KEY);
+  try {
+    return JSON.parse(localStorage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function blockedMessage(host) {
-  return 'Stocks doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host +
-    '" in Stocks\'s Permissions, or check your internet connection.';
+function blockedMessage(blocked) {
+  return 'Stocks doesn\'t have permission to connect to ' + blocked.host + '. Turn on "Connect to ' + blocked.host +
+    '" in Stocks\'s Permissions' + (blocked.sure ? '.' : ', or check your internet connection.');
 }
 
 // Probes have no deadline, so a failure answers from the last check and starts a new one.
 function recheckReach() {
-  var host = null;
+  var blocked = null;
   try {
-    host = lastBlocked();
+    blocked = lastBlocked();
     checkReach().catch(function () {});
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 /** The user's picks, in the order they added them: [{ symbol, name }]. */
@@ -86,7 +104,7 @@ function saveStocks(list) {
 
 async function quote(symbol) {
   var response = await http(QUOTE_URL + encodeURIComponent(symbol) + '?interval=1d&range=1d');
-  if (response.unreachable) return { unreachable: true };
+  if (response.unreachable) return { unreachable: true, denied: response.denied };
   var result = response.json && response.json.chart && response.json.chart.result;
   var meta = result && result[0] && result[0].meta;
   if (!meta || typeof meta.regularMarketPrice !== 'number') return null;
@@ -163,8 +181,9 @@ Pebble.registerConfigHandler(async function (message, respond) {
       }
       var quoted = await quote(symbol);
       if (!quoted || quoted.unreachable) {
-        var host = quoted && recheckReach();
-        respond({ error: host ? blockedMessage(host) : 'No quote for ' + symbol + '.', stocks: stocks() });
+        var blocked = quoted && recheckReach();
+        if (quoted && quoted.denied) blocked = { host: REACH_HOSTS[0], sure: true };
+        respond({ error: blocked ? blockedMessage(blocked) : 'No quote for ' + symbol + '.', stocks: stocks() });
         return;
       }
       var added = stocks().concat([{ symbol: quoted.symbol, name: quoted.name }]);

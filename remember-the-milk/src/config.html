@@ -55,6 +55,14 @@
   <div id="status">Starting the Remember The Milk plugin…</div>
 
   <script>
+    // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest && event.target.closest('a[target="_blank"]');
+      if (!link || !link.href || typeof Pebble.openUrl !== 'function') return;
+      event.preventDefault();
+      Pebble.openUrl(link.href).catch(function () {});
+    });
+
     var statusElement = document.getElementById('status');
     var allow = document.getElementById('allow');
     var finish = document.getElementById('finish');

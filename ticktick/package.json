@@ -1,7 +1,10 @@
 {
   "name": "ticktick",
   "author": "Pebble",
-  "version": "1.0.2",
+  "version": "1.0.3",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "pebble": {
     "displayName": "TickTick",
     "uuid": "b1740936-c2e8-4dd6-b4cf-a85058109ac0",

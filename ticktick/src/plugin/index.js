@@ -7,6 +7,48 @@ var BROKER_REFRESH_KEY = 'ticktick_broker_refresh';
 var EXPIRES_AT_KEY = 'ticktick_expires_at';
 var PROJECT_REFRESH_MS = 15 * 60 * 1000;
 
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [['api.ticktick.com', 'https://api.ticktick.com/']];
+var BLOCKED_KEY = 'ticktick.blocked.v1';
+
+// Resolves with the first domain whose request fails, or null once every request has answered.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'TickTick doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in TickTick\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so an error answers from the last check and starts a new one.
+function unreachableMessage(fallback) {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host ? blockedMessage(host) : fallback;
+}
+
 async function secureItem(key) {
   return String(await Pebble.secureStorage.getItem(key) || '').trim();
 }
@@ -87,7 +129,7 @@ function respondWithHttpError(response, respond, operation) {
     return;
   }
   if (response.status === 0) {
-    respond.error('PLUGIN_UNAVAILABLE', 'Could not reach TickTick.');
+    respond.error('PLUGIN_UNAVAILABLE', unreachableMessage('Could not reach TickTick.'));
     return;
   }
   respond.error(
@@ -322,6 +364,10 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 Pebble.registerConfigHandler(async function (message, respond) {
+  if (message && message.type === 'reach') {
+    respond({ blocked: await checkReach().catch(function () { return null; }) });
+    return;
+  }
   switch (message && message.type) {
     case 'status':
       respond({ configured: (await accessToken()).length > 0 });

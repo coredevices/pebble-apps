@@ -337,3 +337,20 @@ test('choosing a default of a different kind than the page shows is rejected and
   const s=await f.config({type:'status'});assert.equal(s.kind,'claude');assert.equal(s.selected,null);
   assert.equal((await f.config({type:'select',session_id:'chat:'+CHAT,kind:'claude'})).selected.session_id,'chat:'+CHAT);
 });
+const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)};};
+test('reach: first failure wins, a stalled probe does not block, the last check is remembered',async()=>{
+  const f=fixture(),s=f.sandbox;s.localStorage=memory();
+  assert.equal(await s.blockedHost(async()=>({status:403})),null);
+  assert.equal(await s.blockedHost(()=>Promise.reject(new TypeError('blocked'))),'claude.ai');
+  s.PROBES.push(['stalled.example','https://stalled.example/']);
+  assert.equal(await s.blockedHost(url=>url.includes('stalled')?new Promise(()=>{}):Promise.reject(new TypeError('blocked'))),'claude.ai');
+  s.PROBES.pop();
+  await s.checkReach(s.localStorage,()=>Promise.reject(new TypeError('blocked')));assert.equal(s.lastBlocked(s.localStorage),'claude.ai');
+  await s.checkReach(s.localStorage,async()=>({status:200}));assert.equal(s.lastBlocked(s.localStorage),null);
+});
+test('reach: an unreachable send names the blocked domain and keeps the uncertainty warning',async()=>{
+  const f=fixture({['POST '+CPOST]:()=>{throw new TypeError('fetch failed');}});f.sandbox.localStorage=memory();f.sandbox.localStorage.setItem('claude.blocked.v1','claude.ai');
+  await f.connect();const r=await sendCode(f);
+  assert.match(r.message,/^Claude doesn't have permission to connect to claude\.ai\. Turn on "Connect to claude\.ai" in Claude's Permissions, or check your internet connection\. Delivery is uncertain/);
+  f.sandbox.fetch=async()=>({status:200});assert.equal((await f.config({type:'reach'})).blocked,null);assert.equal(f.sandbox.localStorage.getItem('claude.blocked.v1'),null);
+});

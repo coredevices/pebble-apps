@@ -10,6 +10,32 @@ var MODES = ['new_chat', 'default_chat'];
 var KINDS = ['claude', 'code'];
 // chat_id values that always start a new Claude chat; not usable as nicknames.
 var NEW_CHAT = ['new', 'new chat'];
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [['claude.ai', 'https://claude.ai/']];
+var BLOCKED_KEY = 'claude.blocked.v1';
+
+// Resolves with the first domain whose request fails, or null once every request has answered.
+function blockedHost(request) {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return request(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+async function checkReach(storage, request) {
+  var host = await blockedHost(request);
+  try {
+    if (host) storage.setItem(BLOCKED_KEY, host);
+    else storage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+function lastBlocked(storage) { return storage.getItem(BLOCKED_KEY); }
+function blockedMessage(host) {
+  return 'Claude doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Claude\'s Permissions, or check your internet connection.';
+}
 
 function PluginError(code, message) {
   var error = new Error(message);
@@ -142,8 +168,9 @@ function createService(storage, fetch, now) {
         body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (e) {
       console.error('Claude ' + method + ' ' + route + ' failed: ' + String(e).split(path).join(route));
-      if (risky) throw uncertain();
-      throw PluginError('PLUGIN_UNAVAILABLE', 'Could not reach Claude. Try opening Claude in your browser.');
+      var failure = risky ? uncertain() : PluginError('PLUGIN_UNAVAILABLE', 'Could not reach Claude. Try opening Claude in your browser.');
+      failure.unreachable = true;
+      throw failure;
     }
     if (response.status < 200 || response.status >= 300) console.error('Claude ' + method + ' ' + route + ': HTTP ' + response.status);
     if (response.status === 401) throw PluginError('AUTH_REQUIRED', 'Claude sign-in expired. Sign in again in settings.');
@@ -412,13 +439,29 @@ function safeError(error) {
   return error && error.code ? { code: error.code, message: error.message } :
     { code: 'PLUGIN_UNAVAILABLE', message: 'Claude request failed. If sending, delivery may be uncertain; check Claude before retrying.' };
 }
+// Probes have no deadline, so a failed action answers from the last check and starts a new one.
+function withBlockedHost(error, safe) {
+  if (!error || !error.unreachable) return safe;
+  var host = null;
+  try {
+    host = lastBlocked(localStorage);
+    checkReach(localStorage, fetch).catch(function () {});
+  } catch (_) {}
+  if (!host) return safe;
+  return { code: safe.code, message: blockedMessage(host) + (/uncertain/.test(safe.message) ? ' ' + safe.message : '') };
+}
 var service = createService(Pebble.secureStorage, fetch, Date.now);
 Pebble.registerActionHandler(function (request, response) {
-  service.action(request).then(response.ok, function (error) { var e = safeError(error); response.error(e.code, e.message); });
+  service.action(request).then(response.ok, function (error) { var e = withBlockedHost(error, safeError(error)); response.error(e.code, e.message); });
 });
 Pebble.registerSourceHandler(function (request, response) {
-  service.source(request).then(response.data, function (error) { var e = safeError(error); response.error(e.code, e.message); });
+  service.source(request).then(response.data, function (error) { var e = withBlockedHost(error, safeError(error)); response.error(e.code, e.message); });
 });
 Pebble.registerConfigHandler(function (message, respond) {
+  if (message && message.type === 'reach') {
+    Promise.resolve().then(function () { return checkReach(localStorage, fetch); })
+      .catch(function () { return null; }).then(function (blocked) { respond({ blocked: blocked }); });
+    return;
+  }
   service.config(message).then(respond, function (error) { respond({ error: safeError(error).message }); });
 });

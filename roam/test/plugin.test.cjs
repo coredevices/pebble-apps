@@ -58,8 +58,8 @@ test('reach names a domain that cannot be reached and remembers it until it answ
     if (!reachable) throw new TypeError('fetch failed');
     return { status: 401 };
   });
-  assert.strictEqual((await reach(handlers)).blocked, HOST);
-  assert.strictEqual(local.get(KEY), HOST);
+  assert.deepEqual((await reach(handlers)).blocked, { host: HOST, sure: false });
+  assert.deepStrictEqual(JSON.parse(local.get(KEY)), { host: HOST, sure: false });
   reachable = true;
   assert.strictEqual((await reach(handlers)).blocked, null);
   assert.strictEqual(local.has(KEY), false);
@@ -68,11 +68,11 @@ test('reach names a domain that cannot be reached and remembers it until it answ
 test('the first failing domain is reported without waiting for a stalled one', async () => {
   const { context, handlers } = load({}, (url) => (url.includes('stalled') ? new Promise(() => {}) : offline()));
   context.PROBES = [['stalled.example', 'https://stalled.example/'], ['blocked.example', 'https://blocked.example/']];
-  assert.strictEqual((await reach(handlers)).blocked, 'blocked.example');
+  assert.strictEqual((await reach(handlers)).blocked.host, 'blocked.example');
 });
 
 test('an unreachable request names the remembered domain without waiting for a new check', async () => {
-  const stored = { secure: SIGNED_IN.secure, local: Object.assign({ [KEY]: HOST }, SIGNED_IN.local) };
+  const stored = { secure: SIGNED_IN.secure, local: Object.assign({ [KEY]: JSON.stringify({ host: HOST, sure: false }) }, SIGNED_IN.local) };
   const { handlers } = load(stored, (url) => (url === 'https://' + HOST + '/' ? new Promise(() => {}) : offline()));
   const r = responder();
   await handlers.action(ACTION, r);
@@ -85,5 +85,33 @@ test('without a remembered domain the error is unchanged and a check starts in t
   await handlers.action(ACTION, r);
   assert.strictEqual(r.out.error.message, 'Roam may have received this note, but Pebble could not confirm it. Check Roam before retrying.');
   await new Promise((resolve) => setImmediate(resolve));
-  assert.strictEqual(local.get(KEY), HOST);
+  assert.deepStrictEqual(JSON.parse(local.get(KEY)), { host: HOST, sure: false });
+});
+
+test('with Pebble.permissions, reach names the first domain not granted for sure, without any request', async () => {
+  const { context, handlers, local } = load({}, () => { throw new Error('no request expected'); });
+  const states = {};
+  context.Pebble.permissions = { query: async (key) => states[key] || 'granted' };
+  context.PROBES = [['a.example', 'https://a.example/'], ['b.example', 'https://b.example/']];
+  assert.strictEqual((await reach(handlers)).blocked, null);
+  states['Internet/b.example'] = 'denied';
+  assert.deepEqual((await reach(handlers)).blocked, { host: 'b.example', sure: true });
+  states['Internet/a.example'] = 'prompt';
+  assert.deepEqual((await reach(handlers)).blocked, { host: 'a.example', sure: true });
+  assert.deepStrictEqual(JSON.parse(local.get(KEY)), { host: 'a.example', sure: true });
+});
+
+test('a NotAllowedError names the domain for sure without waiting for a check', async () => {
+  const notAllowed = (url) => Promise.reject(Object.assign(new Error('fetch not allowed: ' + url), { name: 'NotAllowedError' }));
+  const { handlers } = load(SIGNED_IN, notAllowed);
+  const r = responder();
+  await handlers.action(ACTION, r);
+  assert.strictEqual(r.out.error.message, `Roam Research doesn't have permission to connect to ${HOST}. Turn on "Connect to ${HOST}" in Roam Research's Permissions. Roam may have received this note, so check Roam before retrying.`);
+});
+
+test('a remembered host from an older version is ignored', async () => {
+  const { handlers } = load({ secure: SIGNED_IN.secure, local: Object.assign({ [KEY]: HOST }, SIGNED_IN.local) }, (url) => (url === 'https://' + HOST + '/' ? new Promise(() => {}) : offline()));
+  const r = responder();
+  await handlers.action(ACTION, r);
+  assert.strictEqual(r.out.error.message, 'Roam may have received this note, but Pebble could not confirm it. Check Roam before retrying.');
 });

@@ -6,12 +6,12 @@ var TIMESTAMP_KEY = 'roam_prepend_timestamp';
 var DEFAULT_NEST_UNDER = '[[Pebble Captures]]';
 var DESTINATION_SOURCES = ['notes/destination'];
 
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+// Without Pebble.permissions the host fails a request to a domain the user hasn't allowed the same way as a dead network.
 var PROBES = [['append-api.roamresearch.com', 'https://append-api.roamresearch.com/']];
 var BLOCKED_KEY = 'roam.blocked.v1';
 
 // Resolves with the first domain whose request fails, or null once every request has answered.
-function blockedHost() {
+function unreachableHost() {
   return new Promise(function (resolve) {
     var answered = 0;
     PROBES.forEach(function (probe) {
@@ -21,31 +21,49 @@ function blockedHost() {
   });
 }
 
+// { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null.
+async function blockedHost() {
+  var permissions = typeof Pebble !== 'undefined' && Pebble.permissions;
+  if (permissions) {
+    for (var i = 0; i < PROBES.length; i++) {
+      if (await permissions.query('Internet/' + PROBES[i][0]) !== 'granted') return { host: PROBES[i][0], sure: true };
+    }
+    return null;
+  }
+  var host = await unreachableHost();
+  return host && { host: host, sure: false };
+}
+
 async function checkReach() {
-  var host = await blockedHost();
+  var blocked = await blockedHost();
   try {
-    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    if (blocked) localStorage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else localStorage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 function lastBlocked() {
-  return localStorage.getItem(BLOCKED_KEY);
+  try {
+    return JSON.parse(localStorage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function blockedMessage(host) {
-  return 'Roam Research doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Roam Research\'s Permissions, or check your internet connection.';
+function blockedMessage(blocked) {
+  return 'Roam Research doesn\'t have permission to connect to ' + blocked.host + '. Turn on "Connect to ' + blocked.host + '" in Roam Research\'s Permissions' + (blocked.sure ? '.' : ', or check your internet connection.');
 }
 
 // Probes have no deadline, so an error answers from the last check and starts a new one.
-function unreachableMessage(fallback) {
-  var host = null;
+// A NotAllowedError names PROBES[0][0] because every request goes there.
+function unreachableMessage(fallback, error) {
+  var blocked = null;
   try {
-    host = lastBlocked();
+    blocked = error && error.name === 'NotAllowedError' ? { host: PROBES[0][0], sure: true } : lastBlocked();
     checkReach().catch(function () {});
   } catch (e) {}
-  return host ? blockedMessage(host) : fallback;
+  return blocked ? blockedMessage(blocked) : fallback;
 }
 
 function stringValue(value) {
@@ -159,7 +177,7 @@ async function appendBlocks(config, location, strings) {
   } catch (error) {
     // Not the error itself: it can include the URL, whose path names the graph.
     console.error('Roam append-blocks request failed: ' + (error && error.name));
-    return { ok: false, status: 0, text: '' };
+    return { ok: false, status: 0, text: '', cause: error };
   }
 }
 
@@ -177,7 +195,7 @@ function actionFailure(response) {
   if (response.status === 429) {
     return { code: 'RATE_LIMITED', message: 'Roam is receiving captures too quickly. Try again shortly.' };
   }
-  var blocked = response.status === 0 && unreachableMessage(null);
+  var blocked = response.status === 0 && unreachableMessage(null, response.cause);
   if (blocked) {
     return { code: 'UNKNOWN', message: blocked + ' Roam may have received this note, so check Roam before retrying.' };
   }

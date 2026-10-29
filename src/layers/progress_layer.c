@@ -33,9 +33,11 @@ void progress_layer_destroy(ProgressLayer* progress_layer) {
 }
 
 void progress_layer_increment_progress(ProgressLayer* progress_layer, int16_t progress) {
-  ProgressLayerData *data = (ProgressLayerData *)layer_get_data(progress_layer);
-  data->progress_percent = MIN(100, data->progress_percent + progress);
-  layer_mark_dirty(progress_layer);
+  if (progress_layer) {
+    ProgressLayerData *data = (ProgressLayerData *)layer_get_data(progress_layer);
+    data->progress_percent = MIN(100, data->progress_percent + progress);
+    layer_mark_dirty(progress_layer);  
+  }
 }
 
 void progress_layer_set_progress(ProgressLayer* progress_layer, int16_t progress_percent) {

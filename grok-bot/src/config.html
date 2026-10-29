@@ -13,10 +13,12 @@ label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } but
 button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:var(--on-accent); border-color:var(--accent); font-weight:650; margin-top:16px; }
 .row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; font-weight:600; }
 details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
+#blocked { padding:12px 14px; border-radius:12px; margin:0 0 16px; background:#fdecc8; color:#5c3d00; font-size:14px; line-height:1.45; } #blocked strong { display:block; }
 @media(prefers-color-scheme:dark) { :root { --bg:#111113; --card:#1c1c1f; --ink:#f4f4f5; --muted:#a1a1aa; --line:#3a3a40; --accent:#f4f4f5; --on-accent:#111113; } }
 </style>
 </head>
 <body>
+<p id="blocked" role="alert" hidden></p>
 <h1>Grok Bot</h1>
 <p class="hint">Choose where your messages go.</p>
 <section id="signedIn" hidden>
@@ -242,8 +244,15 @@ document.addEventListener('click', function (event) {
           render(await send({ type: "disconnect" }));
           say("Signed out. Saved sign-in removed from this plugin.");
         });
+      function showBlocked(host) {
+        const banner = $("blocked"), title = document.createElement("strong");
+        title.textContent = "Grok Bot doesn't have permission to connect to " + host + ".";
+        banner.replaceChildren(title, 'Go back to Grok Bot\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+        banner.hidden = false;
+      }
       Pebble.addEventListener("ready", (event) => {
         if (event.target !== "plugin") return;
+        Pebble.sendMessage("plugin", { type: "reach" }).then((r) => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
         run(async () => {
           render(await send({ type: "status" }));
           if (state.configured) await load();

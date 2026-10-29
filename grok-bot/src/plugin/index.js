@@ -17,6 +17,9 @@ var SEND_BUDGET_MS = 18000;
 var READ_BUDGET_MS = 18000;
 // Below this much time left, a send is refused rather than risk an unknown delivery.
 var SEND_MIN_LEFT_MS = 8000;
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+var PROBES = [["cursor.sh", "https://cursor.sh/"]];
+var BLOCKED_KEY = "grok-bot.blocked.v1";
 
 class PluginError extends Error {
   constructor(code, message, status) {
@@ -88,7 +91,30 @@ function replyText(entry) {
 
 
 
-
+/** Resolves with the first domain whose request fails, or null once every request has answered. */
+function blockedHost(request) {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve().then(function () { return request(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+async function checkReach(storage, request) {
+  var host = await blockedHost(request);
+  try {
+    if (host) storage.setItem(BLOCKED_KEY, host);
+    else storage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+function lastBlocked(storage) {
+  return storage.getItem(BLOCKED_KEY);
+}
+function blockedMessage(host) {
+  return "Grok Bot doesn't have permission to connect to " + host + ". Turn on \"Connect to " + host + "\" in Grok Bot's Permissions, or check your internet connection.";
+}
 
 function createService(storage, fetch, cache) {
   function load() {
@@ -397,7 +423,9 @@ function createService(storage, fetch, cache) {
     } catch (e) {
       // A refusal is safe to report as not sent; anything else may have landed.
       if (e instanceof PluginError && e.status && e.status < 500) throw e;
-      throw new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
+      var uncertain = new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
+      uncertain.unreachable = !(e instanceof PluginError);
+      throw uncertain;
     }
     var record = await acceptance(call, clientNonce).catch(function () { return null; });
     if (record && record.status === "rejected")
@@ -464,6 +492,18 @@ function safeError(error) {
   if (error && (error.status === 401 || error.status === 403))
     return { code: "AUTH_REQUIRED", message: "Grok Bot sign-in expired. Sign in again in plugin settings." };
   return { code: "PLUGIN_UNAVAILABLE", message: "Could not reach Grok Bot. Try again shortly." };
+}
+
+// Probes have no deadline, so a failed action answers from the last check and starts a new one.
+function withBlockedHost(error, safe, storage, request) {
+  if (safe.code !== "PLUGIN_UNAVAILABLE" || (error instanceof PluginError && !error.unreachable)) return safe;
+  var host = null;
+  try {
+    host = lastBlocked(storage);
+    checkReach(storage, request).catch(function () {});
+  } catch (e) {}
+  if (!host) return safe;
+  return { code: safe.code, message: blockedMessage(host) + (error instanceof PluginError ? " " + safe.message : "") };
 }
 
 if (typeof Pebble !== "undefined") {
@@ -541,6 +581,7 @@ if (typeof Pebble !== "undefined") {
       respond.ok(await service.action(request));
     } catch (error) {
       var safe = safeError(error);
+      try { safe = withBlockedHost(error, safe, localStorage, fetch); } catch (e) {}
       console.error("Grok Bot " + (request && request.action) + " failed: " + safe.code);
       respond.error(safe.code, safe.message);
     }
@@ -555,6 +596,10 @@ if (typeof Pebble !== "undefined") {
     }
   });
   Pebble.registerConfigHandler(async function (message, respond) {
+    if (message && message.type === "reach") {
+      respond({ blocked: await checkReach(localStorage, fetch).catch(function () { return null; }) });
+      return;
+    }
     try {
       respond(await service.config(message));
     } catch (error) {
@@ -564,4 +609,5 @@ if (typeof Pebble !== "undefined") {
   });
 }
 
-if (typeof module !== "undefined") module.exports = { createService: createService, safeError: safeError };
+if (typeof module !== "undefined") module.exports = { createService: createService, safeError: safeError, blockedHost: blockedHost, checkReach: checkReach,
+  lastBlocked: lastBlocked, withBlockedHost: withBlockedHost, PROBES: PROBES };

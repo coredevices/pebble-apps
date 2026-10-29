@@ -471,3 +471,36 @@ test("untagged nicknames are adopted by the account that signs in", async () => 
   assert.equal(again.selected, "g1");
   assert.equal(again.bots.find((b) => b.id === "a1").nickname, "lab");
 });
+
+test("reach: first failure wins, a stalled probe does not block, the last check is remembered", async () => {
+  const { blockedHost, checkReach, lastBlocked, PROBES } = require("../src/plugin/index.js");
+  assert.equal(await blockedHost(async () => ({ status: 404 })), null);
+  assert.equal(await blockedHost(() => Promise.reject(new TypeError("blocked"))), "cursor.sh");
+  PROBES.push(["stalled.example", "https://stalled.example/"]);
+  try {
+    assert.equal(await blockedHost((url) => url.includes("stalled") ? new Promise(() => {}) : Promise.reject(new TypeError("blocked"))), "cursor.sh");
+  } finally {
+    PROBES.pop();
+  }
+  const storage = memoryStorage();
+  await checkReach(storage, () => Promise.reject(new TypeError("blocked")));
+  assert.equal(lastBlocked(storage), "cursor.sh");
+  await checkReach(storage, async () => ({ status: 200 }));
+  assert.equal(lastBlocked(storage), null);
+});
+
+test("reach: an unreachable action names the blocked domain, keeping any uncertainty warning", async () => {
+  const { withBlockedHost } = require("../src/plugin/index.js");
+  const storage = memoryStorage();
+  storage.setItem("grok-bot.blocked.v1", "cursor.sh");
+  const message = 'Grok Bot doesn\'t have permission to connect to cursor.sh. Turn on "Connect to cursor.sh" in Grok Bot\'s Permissions, or check your internet connection.';
+  const network = new TypeError("fetch failed");
+  assert.equal(withBlockedHost(network, safeError(network), storage, async () => ({ status: 200 })).message, message);
+  await tick();
+  assert.equal(storage.getItem("grok-bot.blocked.v1"), null);
+  storage.setItem("grok-bot.blocked.v1", "cursor.sh");
+  const service = await connected(fakeGrokBot({ onSend() { throw new TypeError("dropped"); } }));
+  const err = await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "g1" } }).catch((e) => e);
+  assert.equal(withBlockedHost(err, safeError(err), storage, () => new Promise(() => {})).message, message + " Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
+  assert.equal(withBlockedHost(Object.assign(err, { unreachable: false }), safeError(err), storage, () => {}).message, safeError(err).message);
+});

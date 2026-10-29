@@ -23,12 +23,12 @@ var PENDING_REVIEW_DELAY_MS = 2 * 60 * 1000;
 var MAX_COMPLETED_RECEIPTS = 20;
 var HEADING_TEXT = 'Todo';
 
-// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+// Without Pebble.permissions the host fails a request to a domain the user hasn't allowed the same way as a dead network.
 var PROBES = [['api.notion.com', 'https://api.notion.com/']];
 var BLOCKED_KEY = 'notion.blocked.v1';
 
 // Resolves with the first domain whose request fails, or null once every request has answered.
-function blockedHost() {
+function unreachableHost() {
   return new Promise(function (resolve) {
     var answered = 0;
     PROBES.forEach(function (probe) {
@@ -38,31 +38,49 @@ function blockedHost() {
   });
 }
 
+// { host, sure }: the first domain not allowed (sure) or not reachable (not sure), or null.
+async function blockedHost() {
+  var permissions = typeof Pebble !== 'undefined' && Pebble.permissions;
+  if (permissions) {
+    for (var i = 0; i < PROBES.length; i++) {
+      if (await permissions.query('Internet/' + PROBES[i][0]) !== 'granted') return { host: PROBES[i][0], sure: true };
+    }
+    return null;
+  }
+  var host = await unreachableHost();
+  return host && { host: host, sure: false };
+}
+
 async function checkReach() {
-  var host = await blockedHost();
+  var blocked = await blockedHost();
   try {
-    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    if (blocked) localStorage.setItem(BLOCKED_KEY, JSON.stringify(blocked));
     else localStorage.removeItem(BLOCKED_KEY);
   } catch (e) {}
-  return host;
+  return blocked;
 }
 
 function lastBlocked() {
-  return localStorage.getItem(BLOCKED_KEY);
+  try {
+    return JSON.parse(localStorage.getItem(BLOCKED_KEY)) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
-function blockedMessage(host) {
-  return 'Notion doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Notion\'s Permissions, or check your internet connection.';
+function blockedMessage(blocked) {
+  return 'Notion doesn\'t have permission to connect to ' + blocked.host + '. Turn on "Connect to ' + blocked.host + '" in Notion\'s Permissions' + (blocked.sure ? '.' : ', or check your internet connection.');
 }
 
 // Probes have no deadline, so an error answers from the last check and starts a new one.
-function unreachableMessage(fallback) {
-  var host = null;
+// A NotAllowedError names PROBES[0][0] because every request goes there.
+function unreachableMessage(fallback, error) {
+  var blocked = null;
   try {
-    host = lastBlocked();
+    blocked = error && error.name === 'NotAllowedError' ? { host: PROBES[0][0], sure: true } : lastBlocked();
     checkReach().catch(function () {});
   } catch (e) {}
-  return host ? blockedMessage(host) : fallback;
+  return blocked ? blockedMessage(blocked) : fallback;
 }
 
 function defaultDestination() {
@@ -408,7 +426,7 @@ async function http(method, path, token, body) {
     };
   } catch (error) {
     console.error('Notion ' + method + ' ' + path + ' failed: ' + error);
-    return { ok: false, status: 0, json: null, error: 'Could not reach Notion.' };
+    return { ok: false, status: 0, json: null, error: 'Could not reach Notion.', cause: error };
   }
 }
 
@@ -616,7 +634,7 @@ function prepareHeadingBullet(text, headingBlockId) {
 
 function pluginError(result) {
   console.error('Notion request failed (HTTP ' + result.status + '): ' + result.error);
-  if (result.status === 0) return { code: 'PLUGIN_UNAVAILABLE', message: unreachableMessage(result.error) };
+  if (result.status === 0) return { code: 'PLUGIN_UNAVAILABLE', message: unreachableMessage(result.error, result.cause) };
   if (result.status === 401 || result.status === 403) {
     return { code: 'AUTH_REQUIRED', message: result.error || 'Notion authorization failed.' };
   }

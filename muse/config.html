@@ -43,6 +43,14 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 </details>
 <p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-plugins/tree/main/muse" target="_blank" rel="noopener">Source code</a> is available.</em></p>
 <script>
+// Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
+document.addEventListener('click', function (event) {
+  var link = event.target.closest && event.target.closest('a[target="_blank"]');
+  if (!link || !link.href || typeof Pebble.openUrl !== 'function') return;
+  event.preventDefault();
+  Pebble.openUrl(link.href).catch(function () {});
+});
+
 const $ = (id) => document.getElementById(id);
 const MAIN = { id: "main", title: "Main chat" };
 let configured = null, selected = "main", chats = [], busy = false;

@@ -1,7 +1,10 @@
 {
   "name": "stocks",
   "author": "Pebble",
-  "version": "1.0.1",
+  "version": "1.0.2",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "pebble": {
     "displayName": "Stocks",
     "uuid": "2c4b7f10-9a3d-4e6b-8f21-5d0c7e9a1b34",

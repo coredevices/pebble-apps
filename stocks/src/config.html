@@ -25,9 +25,13 @@
     .name { flex: 1; opacity: .7; font-size: 14px; overflow: hidden; white-space: nowrap;
             text-overflow: ellipsis; }
     .hint { font-size: 13px; opacity: .7; margin: 0 0 8px; }
+    #blocked { padding: 12px 14px; border-radius: 8px; margin: 0 0 16px; background: #fdecc8;
+               color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
   </style>
 </head>
 <body>
+  <p id="blocked" role="alert" hidden></p>
   <h1>Stocks</h1>
   <p class="hint">Each ticker you add shows up on the watch as its own instance.</p>
 
@@ -82,9 +86,17 @@
     else $('symbol').value = '';
   };
 
+  function showBlocked(host) {
+    var banner = $('blocked'), title = document.createElement('strong');
+    title.textContent = 'Stocks doesn\'t have permission to connect to ' + host + '.';
+    banner.replaceChildren(title, 'Go back to Stocks\'s page and turn on "Connect to ' + host + '" under Permissions. If it\'s already on, check your internet connection.');
+    banner.hidden = false;
+  }
+
   // The plugin is only started when this page opens, so wait for it to say it is running.
   Pebble.addEventListener('ready', async function (event) {
     if (event.target !== 'plugin') return;
+    send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
     draw((await send({ type: 'list' })).stocks);
   });
 </script>

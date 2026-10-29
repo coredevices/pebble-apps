@@ -5,6 +5,8 @@
 // change in cash, and that change as a percentage — so a watchface shows whichever fits.
 
 var STORE_KEY = 'stocks';
+var BLOCKED_KEY = 'stocks.blocked.v1';
+var PROBES = [['query1.finance.yahoo.com', 'https://query1.finance.yahoo.com/']];
 var QUOTE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 var REFRESH_MS = 60 * 1000;
 var SOURCES = ['finance/stock'];
@@ -25,8 +27,48 @@ async function http(url) {
     return { ok: true, json: await response.json() };
   } catch (e) {
     console.error('Quote request to ' + url + ' failed: ' + e);
-    return { ok: false, json: null };
+    return { ok: false, json: null, unreachable: true };
   }
+}
+
+// The host fails a request to a domain the user hasn't allowed the same way as a dead network.
+function blockedHost() {
+  return new Promise(function (resolve) {
+    var answered = 0;
+    PROBES.forEach(function (probe) {
+      Promise.resolve()
+        .then(function () { return fetch(probe[1]); })
+        .then(function () { if (++answered === PROBES.length) resolve(null); }, function () { resolve(probe[0]); });
+    });
+  });
+}
+
+async function checkReach() {
+  var host = await blockedHost();
+  try {
+    if (host) localStorage.setItem(BLOCKED_KEY, host);
+    else localStorage.removeItem(BLOCKED_KEY);
+  } catch (e) {}
+  return host;
+}
+
+function lastBlocked() {
+  return localStorage.getItem(BLOCKED_KEY);
+}
+
+function blockedMessage(host) {
+  return 'Stocks doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host +
+    '" in Stocks\'s Permissions, or check your internet connection.';
+}
+
+// Probes have no deadline, so a failure answers from the last check and starts a new one.
+function recheckReach() {
+  var host = null;
+  try {
+    host = lastBlocked();
+    checkReach().catch(function () {});
+  } catch (e) {}
+  return host;
 }
 
 /** The user's picks, in the order they added them: [{ symbol, name }]. */
@@ -44,6 +86,7 @@ function saveStocks(list) {
 
 async function quote(symbol) {
   var response = await http(QUOTE_URL + encodeURIComponent(symbol) + '?interval=1d&range=1d');
+  if (response.unreachable) return { unreachable: true };
   var result = response.json && response.json.chart && response.json.chart.result;
   var meta = result && result[0] && result[0].meta;
   if (!meta || typeof meta.regularMarketPrice !== 'number') return null;
@@ -87,10 +130,11 @@ function propertiesOf(quoted) {
 
 Pebble.registerSourceHandler(async function (request, respond) {
   var quotes = await Promise.all(stocks().map(function (stock) { return quote(stock.symbol); }));
+  if (quotes.some(function (quoted) { return quoted && quoted.unreachable; })) recheckReach();
   respond.data({
     validUntilMs: Date.now() + REFRESH_MS,
     // A ticker that failed to fetch drops out rather than taking the others with it.
-    instances: quotes.filter(Boolean).map(function (quoted) {
+    instances: quotes.filter(function (quoted) { return quoted && !quoted.unreachable; }).map(function (quoted) {
       return { instanceId: quoted.symbol, properties: propertiesOf(quoted) };
     }),
   });
@@ -100,6 +144,9 @@ Pebble.registerSourceHandler(async function (request, respond) {
 
 Pebble.registerConfigHandler(async function (message, respond) {
   switch (message && message.type) {
+    case 'reach':
+      respond({ blocked: await checkReach().catch(function () { return null; }) });
+      return;
     case 'list':
       respond({ stocks: stocks() });
       return;
@@ -115,8 +162,9 @@ Pebble.registerConfigHandler(async function (message, respond) {
         return;
       }
       var quoted = await quote(symbol);
-      if (!quoted) {
-        respond({ error: 'No quote for ' + symbol + '.', stocks: stocks() });
+      if (!quoted || quoted.unreachable) {
+        var host = quoted && recheckReach();
+        respond({ error: host ? blockedMessage(host) : 'No quote for ' + symbol + '.', stocks: stocks() });
         return;
       }
       var added = stocks().concat([{ symbol: quoted.symbol, name: quoted.name }]);

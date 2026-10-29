@@ -63,10 +63,10 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `complication-face` | Complication Face (Plugin Demo) (watchface; needs the Pebble SDK) |
 | `find-my-phone` | Find My Phone (watchapp; needs the Pebble SDK) |
 | `google-tasks-keep` | Google Tasks & Keep |
-| `googlehome` | GoogleHome |
+| `googlehome` | Google Home |
 | `grok-bot` | Grok Bot |
 | `hue` | Hue |
-| `location-sharing` | LocationSharing |
+| `location-sharing` | Location Sharing |
 | `met-weather` | MET Norway Weather |
 | `muse` | Muse |
 | `notion` | Notion |

@@ -3,6 +3,7 @@
 static Window *s_window;
 static TextLayer *s_title_layer;
 static TextLayer *s_hint_layer;
+static bool s_has_rung;
 
 static void prv_show(const char *title, const char *hint) {
   text_layer_set_text(s_title_layer, title);
@@ -20,7 +21,10 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
     return;
   }
   if (ringing->value->int32) {
+    s_has_rung = true;
     prv_show("Ringing\nyour phone", "Select to stop");
+  } else if (!s_has_rung) {
+    prv_show("Find My\nPhone", "Select to ring your phone");
   } else {
     prv_show("Stopped\nringing", "Select to ring again");
   }

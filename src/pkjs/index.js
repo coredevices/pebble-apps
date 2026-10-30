@@ -137,6 +137,10 @@ function requestGame(opts) {
  * start. The timeline has no API to list local pins, so this is the only
  * record of what there is to delete.
  *
+ * A deleted pin stays as { ..., deleted: true }. The phone remembers deleted
+ * ids and ignores a later insert under one, so a game whose team is followed
+ * again gets its pin under a new id (see pinIdFor).
+ *
  * An entry is forgotten 4 days after its game starts, by which point the pin
  * has left the timeline. Pruning by age rather than by count: dropping the
  * entry of a pin still on the timeline would strand it there for good.
@@ -170,16 +174,27 @@ function savePins(pins) {
 function removeOrphanedPins() {
   var pins = loadPins();
   Object.keys(pins).forEach(function(pinId) {
+    if (pins[pinId].deleted) return;
     var followed = pins[pinId].teams.some(function(team) {
       return inArray(Sports.teams, team);
     });
     if (!followed) {
       Pebble.deleteTimelinePin(pinId);
-      delete pins[pinId];
+      pins[pinId].deleted = true;
       console.log('pin deleted: ' + pinId);
     }
   });
   savePins(pins);
+}
+
+// The id to insert a game's pin under: the one it already has, or the first
+// that was never deleted - sports-<id>, then sports-<id>-2, -3, ...
+function pinIdFor(gameId, pins) {
+  var pinId = `sports-${gameId}`;
+  for (var n = 2; pins[pinId] && pins[pinId].deleted; n++) {
+    pinId = `sports-${gameId}-${n}`;
+  }
+  return pinId;
 }
 
 function requestPin(opts) {
@@ -192,8 +207,9 @@ function requestPin(opts) {
       if (!res.league) return;
 
       var event = parseCardData(res);
+      var pins = loadPins();
       var pin = {
-        "id": `sports-${opts.id}`,
+        "id": pinIdFor(opts.id, pins),
         "time": new Date(res.startTime).toISOString(),
         // The watch launches the parent app itself for an openWatchApp action,
         // with launchCode in launch_get_args() - which is where sports.c's
@@ -276,7 +292,6 @@ function requestPin(opts) {
 
       // Remembered with the two teams that justify it, so unfollowing can
       // find every pin a team owns without asking the API again.
-      var pins = loadPins();
       pins[pin.id] = {
         teams: [event.league + ':' + event.nameAway,
                 event.league + ':' + event.nameHome],

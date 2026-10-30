@@ -2,8 +2,7 @@
 
 A Pebble watchapp that identifies the music around you. The watch streams its
 microphone to the phone for up to ten seconds; the phone-side JavaScript sends
-the PCM to [sirensong](https://github.com/coredevices/sirensong), our proxy for
-the AudD recognition API, and the watch shows the title, artist and album. The last ten matches are kept on
+the PCM to our proxy for the AudD recognition API, and the watch shows the title, artist and album. The last ten matches are kept on
 the phone and listed on the watch's main screen.
 
 Targets: **emery** (Pebble Time 2), **flint** (Pebble 2 Duo), **gabbro**
@@ -40,9 +39,8 @@ draws no microphone indicator of its own.
 
 ## Recognition service
 
-There is nothing to configure. pkjs posts the audio to sirensong at
-`https://sirensong.cluster.repebble.com/v1/recognize` (`SIRENSONG_URL` in
-`src/pkjs/index.js`). sirensong holds the AudD API token, so no token ships in
+There is nothing to configure. pkjs posts the audio to our recognition proxy
+(the URL is set in `src/pkjs/index.js`). The proxy holds the AudD API token, so no token ships in
 this app, and it rate-limits per client IP.
 
 The request is JSON:
@@ -51,11 +49,10 @@ The request is JSON:
 {"audio": "<base64 PCM>", "format": "pcm", "sampleRate": 16000, "channels": 1, "bitsPerSample": 16}
 ```
 
-sirensong wraps the PCM in a WAV header, calls AudD and answers with
+The proxy wraps the PCM in a WAV header, calls AudD and answers with
 `{"status":"match","title","artist","album","releaseDate","songLink",…}`,
 `{"status":"no_match"}` or `{"status":"error","error":"<code>"}`, using the
-same JSON shape on every HTTP status. The full contract is in the sirensong
-README.
+same JSON shape on every HTTP status.
 
 The body is plain ASCII (base64 inside JSON), so it works with any pkjs
 `XMLHttpRequest`, including runtimes that cannot send binary bodies. This costs
@@ -65,8 +62,8 @@ about a third more upload: ten seconds of 16 kHz audio is a 427 KB request.
 **Tested:** `test/pkjs_harness.js` checks the phone-side pipeline (ArrayBuffer
 PCM → base64 JSON → response → AppMessage sequence) against the built bundle,
 using a fake `Pebble`, a fake audio stream and a fake `XMLHttpRequest` that
-returns canned sirensong responses. The request it produces was also replayed
-against a local sirensong container with a fake AudD. The app has **not** yet
+returns canned proxy responses. The request it produces was also replayed
+against a local proxy container with a fake AudD. The app has **not** yet
 been run against the deployed service or on real hardware; see the test plan
 below.
 
@@ -83,16 +80,16 @@ mirrored in `src/pkjs/index.js`.
 | 4 `Identifying` | phone → watch | – | HTTP request in flight |
 | 5 `Result` | phone → watch | `TITLE`, `ARTIST`, `ALBUM` | A match (the watch vibrates) |
 | 6 `NoMatch` | phone → watch | – | The service found no match |
-| 7 `Error` | phone → watch | `ERROR` | `Too short`, `Network error`, `Timed out`, `HTTP <status>`, `Bad response`, or a sirensong error (see below) |
+| 7 `Error` | phone → watch | `ERROR` | `Too short`, `Network error`, `Timed out`, `HTTP <status>`, `Bad response`, or a service error (see below) |
 
 pkjs queues outgoing messages and sends the next one only after the previous
 one was acknowledged (or given up on after three attempts). Strings are clipped
 so every payload stays well under 1 KB.
 
-sirensong error codes are shown on the watch as follows:
+Service error codes are shown on the watch as follows:
 
-| sirensong `error` | Watch text |
-|-------------------|------------|
+| Service `error` | Watch text |
+|-----------------|------------|
 | `rate_limited` | Busy, try again in a minute |
 | `bad_audio` | Could not process the audio |
 | `too_large` | Recording too large |
@@ -113,16 +110,16 @@ The `pebble` block in `package.json` declares `manifestVersion: 2` and:
 ```json
 "usesPermissions": [
   "Microphone",
-  { "name": "Internet", "parameters": { "domains": ["sirensong.cluster.repebble.com"] } }
+  { "name": "Internet", "parameters": { "domains": ["<recognition service host>"] } }
 ]
 ```
 
 `Microphone` covers watch audio streaming; the scoped `Internet` permission
-covers uploads to sirensong. The phone reviews these permissions when installing
+covers uploads to the recognition service. The phone reviews these permissions when installing
 or updating the app, according to its permission policy. Permission enforcement
 is currently active only when experimental plugins are enabled in the phone
 app. Approve both on the app's page before identifying a song. If you change
-`SIRENSONG_URL`, change the declared hostname too; an undeclared host triggers
+the service URL in `src/pkjs/index.js`, change the declared hostname too; an undeclared host triggers
 a separate runtime approval request.
 
 These fields must reach `appinfo.json` inside the PBW. The SDK copies the
@@ -143,7 +140,7 @@ src/c/whatsplaying.h   shared constants, CMD values, module interfaces
 src/c/main.c           AppMessage in/out, history mirror
 src/c/menu_window.c    main menu: Identify + history rows
 src/c/card_window.c    listen / identify / result / message card; the only file using the mic API
-src/pkjs/index.js      audio collection, HTTP to sirensong, history
+src/pkjs/index.js      audio collection, HTTP to the recognition service, history
 test/pkjs_harness.js   Node smoke test for the built pkjs bundle
 ```
 
@@ -163,8 +160,7 @@ test/pkjs_harness.js   Node smoke test for the built pkjs bundle
    SELECT after 3 s) the card shows *Identifying…* and then the title, artist
    and album with a short vibration, within a few seconds.
    Phone log: `audiostreamstart`, `audiostreamstop after 10.0 s (320000 bytes)`,
-   `POST https://sirensong.cluster.repebble.com/v1/recognize (320000 byte PCM,
-   426746 byte body)`, `HTTP 200 {"status":"match",…}`, `Match: …`.
+   `POST <service URL> (320000 byte PCM, 426746 byte body)`, `HTTP 200 {"status":"match",…}`, `Match: …`.
 5. **History.** Press BACK: the new match is the first row under **Identify**.
    Relaunch the app: the rows are still there (sent on `ready`). Select a row:
    its card opens. After ten matches the oldest drops off.
@@ -185,6 +181,6 @@ test/pkjs_harness.js   Node smoke test for the built pkjs bundle
 ## Known limitations
 
 - The app was built and unit-tested (pkjs) but not run on hardware or against
-  the deployed sirensong service in this environment.
+  the deployed recognition service in this environment.
 - History rows carry title, artist and album to the watch; `time` and
   `song_link` are stored on the phone only, as there is no message key for them.

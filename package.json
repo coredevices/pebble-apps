@@ -1,7 +1,7 @@
 {
   "name": "Sports",
   "author": "Pebble",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js"

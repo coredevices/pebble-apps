@@ -1,0 +1,44 @@
+{
+  "name": "whatsplaying",
+  "author": "Core Devices LLC",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "license": "Apache-2.0",
+  "pebble": {
+    "displayName": "What's Playing",
+    "uuid": "4ee4fb46-4764-4271-87d5-8d0169dbd889",
+    "sdkVersion": "3",
+    "manifestVersion": 2,
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "capabilities": ["microphone"],
+    "usesPermissions": [
+      "WatchMicrophone",
+      {
+        "name": "Internet",
+        "parameters": { "domains": ["sirensong.cluster.repebble.com"] }
+      }
+    ],
+    "messageKeys": [
+      "CMD",
+      "SECONDS",
+      "TITLE",
+      "ARTIST",
+      "ALBUM",
+      "INDEX",
+      "TOTAL",
+      "ERROR"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}

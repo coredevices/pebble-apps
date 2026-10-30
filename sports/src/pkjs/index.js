@@ -1,0 +1,708 @@
+'use strict';
+
+const PEBBLE_SPORTS_API_ROOT = 'https://sports.cluster.repebble.com';
+
+var async = require('async');
+var Sports = require('./sports');
+var keys = require('./generated/keys');
+var inArray = require('./utils').inArray;
+var formatDate = require('./utils').formatDate;
+var appMessageQueue = require('./lib/appmessagequeue');
+var computeLeadChange = require('./lead-change')(PEBBLE_SPORTS_API_ROOT, localStorage);
+
+var TYPE = keys.TYPE;
+var METHOD = keys.METHOD;
+var LEAGUE = keys.LEAGUE;
+var GAMESTATE = keys.GAMESTATE;
+
+Sports.timelineToken = localStorage.getItem('timelineToken') || '';
+Sports.teams = [];
+Sports.favs = [];
+
+/*
+ * Aplite holds one league's games at a time (see s_loaded_league in sports.c).
+ * Its REQUESTCARDS sets `lazy`: the launch refresh then sends each league's
+ * SIZE and END but no DATA, and the watch asks for a league's games with
+ * REQUESTLEAGUE when it is opened. Sports.events keeps each league's last
+ * fetch so that answer needs no network; loadedLeague is the league the watch
+ * holds, whose DATA a later refresh still sends.
+ */
+Sports.lazy = false;
+Sports.loadedLeague = -1;
+Sports.events = {};
+
+function sendsGames(league) {
+  return !Sports.lazy || league === Sports.loadedLeague;
+}
+
+var parseCardData = function(evnt) {
+  var msg = {};
+
+  msg.id = parseInt(evnt.id, 10);
+  msg.league = evnt.league;
+  msg.subtitle = evnt.subtitle;
+  msg.nameAway = evnt.nameAway;
+  msg.nameHome = evnt.nameHome;
+  msg.rankAway = evnt.rankAway;
+  msg.rankHome = evnt.rankHome;
+  msg.recordAway = evnt.recordAway;
+  msg.recordHome = evnt.recordHome;
+  msg.scoreAway = evnt.scoreAway;
+  msg.scoreHome = evnt.scoreHome;
+  msg.subscribedAway = inArray(Sports.teams,
+                               msg.league + ':' + msg.nameAway) ? 1 : 0;
+  msg.subscribedHome = inArray(Sports.teams,
+                               msg.league + ':' + msg.nameHome) ? 1 : 0;
+
+  msg.gameState = GAMESTATE.PREGAME;
+  if (evnt.gameState === 'in') {
+    msg.gameState = GAMESTATE.INGAME;
+  } else if (evnt.gameState === 'post') {
+    msg.gameState = GAMESTATE.POSTGAME;
+  }
+
+  if (evnt.subtitle && msg.gameState === GAMESTATE.PREGAME) {
+    try {
+      msg.subtitle = evnt.subtitle === 'TBD' ? evnt.subtitle :
+                                               formatDate(evnt.subtitle);
+    } catch (e) {}
+  }
+
+  msg.broadcaster = evnt.broadcaster;
+
+  if (evnt.gameState === 'post') {
+    msg.broadcaster = '';
+  }
+
+  return msg;
+};
+
+function requestCard(opts) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
+  xhr.onload = function() {
+    try {
+      var res = JSON.parse(xhr.responseText);
+
+      if (!res.league) return;
+
+      var msg = parseCardData(res);
+
+      msg.type = TYPE.CARD;
+      msg.method = METHOD.DATA;
+
+      msg.leadChange = computeLeadChange(res, opts);
+
+      appMessageQueue.send(msg);
+
+    } catch (e) {
+      console.log('error requesting card: ' + e);
+    }
+  };
+  xhr.send(null);
+}
+
+function requestGame(opts) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
+  xhr.onload = function() {
+    try {
+      var res = JSON.parse(xhr.responseText);
+
+      if (!res.league) return;
+
+      var msg = parseCardData(res);
+
+      msg.type = TYPE.LEAGUE;
+      msg.method = METHOD.DATA;
+      msg.leagueIndex = opts.leagueIndex;
+      msg.index = opts.gameIndex;
+
+      msg.leadChange = computeLeadChange(res, opts);
+
+      console.log('Sending LEAGUE');
+
+      appMessageQueue.send(msg);
+
+    } catch (e) {
+      console.log('error requesting card: ' + e);
+    }
+  };
+  xhr.send(null);
+}
+
+/*
+ * Pins inserted from this phone, as pin id -> { teams: [away, home], time }
+ * with teams in the `LEAGUE:ABBR` form Sports.teams uses and time the game's
+ * start. The timeline has no API to list local pins, so this is the only
+ * record of what there is to delete.
+ *
+ * A deleted pin stays as { ..., deleted: true }. The phone remembers deleted
+ * ids and ignores a later insert under one, so a game whose team is followed
+ * again gets its pin under a new id (see pinIdFor).
+ *
+ * An entry is forgotten 4 days after its game starts, by which point the pin
+ * has left the timeline. Pruning by age rather than by count: dropping the
+ * entry of a pin still on the timeline would strand it there for good.
+ */
+var PINS_KEY = 'pins';
+var PINS_MAX_AGE_MS = 4 * 24 * 60 * 60 * 1000;
+
+function loadPins() {
+  try {
+    return JSON.parse(localStorage.getItem(PINS_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePins(pins) {
+  var cutoff = Date.now() - PINS_MAX_AGE_MS;
+  Object.keys(pins).forEach(function(pinId) {
+    if (Date.parse(pins[pinId].time) < cutoff) {
+      delete pins[pinId];
+    }
+  });
+
+  try {
+    localStorage.setItem(PINS_KEY, JSON.stringify(pins));
+  } catch (e) {}
+}
+
+// Deletes every pin whose teams are both unfollowed. A game with one team
+// still followed keeps its pin.
+function removeOrphanedPins() {
+  var pins = loadPins();
+  Object.keys(pins).forEach(function(pinId) {
+    if (pins[pinId].deleted) return;
+    var followed = pins[pinId].teams.some(function(team) {
+      return inArray(Sports.teams, team);
+    });
+    if (!followed) {
+      Pebble.deleteTimelinePin(pinId);
+      pins[pinId].deleted = true;
+      console.log('pin deleted: ' + pinId);
+    }
+  });
+  savePins(pins);
+}
+
+// The id to insert a game's pin under: the one it already has, or the first
+// that was never deleted - sports-<id>, then sports-<id>-2, -3, ...
+function pinIdFor(gameId, pins) {
+  var pinId = `sports-${gameId}`;
+  for (var n = 2; pins[pinId] && pins[pinId].deleted; n++) {
+    pinId = `sports-${gameId}-${n}`;
+  }
+  return pinId;
+}
+
+function requestPin(opts, done) {
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', PEBBLE_SPORTS_API_ROOT + '/card/' + opts.id, true);
+  xhr.onload = function() {
+    try {
+      var res = JSON.parse(xhr.responseText);
+
+      if (!res.league) {
+        done(false);
+        return;
+      } 
+
+      var event = parseCardData(res);
+      var pins = loadPins();
+      var pin = {
+        "id": pinIdFor(opts.id, pins),
+        "time": new Date(res.startTime).toISOString(),
+        // The watch launches the parent app itself for an openWatchApp action,
+        // with launchCode in launch_get_args() - which is where sports.c's
+        // APP_LAUNCH_TIMELINE_ACTION path reads the game id from. The phone
+        // always appends its own 'Remove' action, so this is the only one to
+        // send; other action types are dropped before they reach the watch.
+        "actions": [{
+          "title": "Open Game",
+          "type": "openWatchApp",
+          "launchCode": parseInt(opts.id, 10)
+        }],
+        "layout": {
+          "type": "sportsPin",
+          "title": `${res.nameAwayFull} at ${res.nameHomeFull}`,
+          "subtitle": event.subtitle,
+          "tinyIcon": "system://images/NOTIFICATION_FLAG",
+          "largeIcon": "system://images/NOTIFICATION_FLAG",
+          "lastUpdated": new Date().toISOString(),
+          // Empty for every team outside the college leagues, and sent anyway:
+          // the layout wants strings, not missing keys. In a playoff or
+          // tournament game the API's rank is the seed.
+          "rankAway": event.rankAway || '',
+          "rankHome": event.rankHome || '',
+          "nameAway": event.nameAway,
+          "nameHome": event.nameHome,
+          "recordAway": event.recordAway,
+          "recordHome": event.recordHome,
+          "scoreAway": event.scoreAway,
+          "scoreHome": event.scoreHome,
+          "sportsGameState": "pre-game"
+        }
+      };
+
+      // Keyed on the display name the API puts on a card, which is the league's
+      // usual abbreviation (NCAAF, NCAAM, NCAAW, WNBA) except for the Premier League,
+      // shortened to EPL in the API's alternateLeagueNames. A league with no
+      // case keeps the NOTIFICATION_FLAG set on the layout above.
+      var icon = '';
+
+      switch (event.league) {
+        case "NFL":
+        case "NCAAF": {
+          icon = 'system://images/AMERICAN_FOOTBALL';
+          break;
+        }
+        case "MLB": {
+          icon = 'system://images/TIMELINE_BASEBALL';
+          break;
+        }
+        case "NHL": {
+          icon = 'system://images/HOCKEY_GAME';
+          break;
+        }
+        case "NBA":
+        case "WNBA":
+        case "NCAAM":
+        case "NCAAW": {
+          icon = 'system://images/BASKETBALL';
+          break;
+        }
+        case "EPL": {
+          icon = 'system://images/SOCCER_GAME';
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+
+      if (icon) {
+        pin["layout"]["tinyIcon"] = icon;
+        pin["layout"]["largeIcon"] = icon;
+      }
+
+      if (event.gameState != GAMESTATE.PREGAME) {
+        pin["layout"]["sportsGameState"] = "in-game";
+      }
+
+      Pebble.insertTimelinePin(pin);
+
+      // Remembered with the two teams that justify it, so unfollowing can
+      // find every pin a team owns without asking the API again.
+      pins[pin.id] = {
+        teams: [event.league + ':' + event.nameAway,
+                event.league + ':' + event.nameHome],
+        time: pin.time
+      };
+      savePins(pins);
+
+      console.log('pin inserted for id: ' + opts.id);
+      done(true);
+    } catch (e) {
+      console.log('error requesting data for pin: ' + e);
+      done(false);
+    }
+  };
+  // done() on every path: refreshAllPins counts callbacks to know when to
+  // send END, so a pin that never answers would leave the watch waiting.
+  xhr.onerror = function() {
+    console.log('error requesting data for pin: request failed');
+    done(false);
+  };
+  xhr.ontimeout = function() {
+    console.log('error requesting data for pin: timed out');
+    done(false);
+  };
+  // The default of 0 never times out, so a hung request would never call done().
+  xhr.timeout = 10000;
+  xhr.send(null);
+}
+
+// Sends one league's games. Favourited games are pushed onto `favs`, the
+// caller's own array, never Sports.favs: see refreshAllLeagues.
+Sports.sendLeague = function(league, events, favs) {
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.SIZE,
+    index: league,
+    count: events.length
+  });
+  var i = 0;
+  events.forEach(function(evnt) {
+    var msg = parseCardData(evnt);
+    msg.type = TYPE.LEAGUE;
+    msg.method = METHOD.DATA;
+    msg.leagueIndex = league;
+    msg.index = i++;
+    if (sendsGames(league)) {
+      appMessageQueue.send(msg);
+    }
+
+    if (msg.subscribedAway || msg.subscribedHome) {
+    // if (inArray(Sports.teams, evnt.uidHome) ||
+    //     inArray(Sports.teams, evnt.uidAway)) {
+      favs.push(evnt);
+    }
+  });
+
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.END,
+    index: league
+  });
+};
+
+Sports.sendEvents = function(league, favs, callback) {
+  var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+
+  // callback() exactly once on every path, as loadFavs does: refreshAllLeagues
+  // runs the leagues in series, so one league that never calls back strands
+  // the rest and the TIMELINE list is never sent. A failed league keeps
+  // whatever the watch already had for it.
+  xhr.onload = function() {
+    try {
+      var res = JSON.parse(xhr.responseText);
+      if (!(res instanceof Array)) {
+        throw new Error('not a list');
+      }
+      Sports.events[league] = res;
+      Sports.sendLeague(league, res, favs);
+    } catch (e) {
+      console.log('error requesting events for league ' + league + ': ' + e);
+    }
+    // Outside the try, so a throw further down the series is not caught here
+    // and turned into a second callback.
+    callback();
+  };
+  xhr.onerror = function() {
+    console.log('error requesting events for league ' + league +
+                ': request failed');
+    callback();
+  };
+  xhr.ontimeout = function() {
+    console.log('error requesting events for league ' + league +
+                ': timed out');
+    callback();
+  };
+  xhr.send();
+};
+
+// Answers a lazy watch opening a league. The phone's JS may have restarted
+// since launch and lost Sports.events; then fetch it, and if that fails send
+// END anyway so the watch stops showing LOADING.
+Sports.sendRequestedLeague = function(league) {
+  Sports.lazy = true;
+  Sports.loadedLeague = league;
+
+  if (league === LEAGUE.FAVS) {
+    Sports.sendFavs();
+  } else if (Sports.events[league]) {
+    Sports.sendLeague(league, Sports.events[league], []);
+  } else {
+    Sports.sendEvents(league, [], function() {
+      if (!Sports.events[league]) {
+        appMessageQueue.send({
+          type: TYPE.LEAGUE,
+          method: METHOD.END,
+          index: league
+        });
+      }
+    });
+  }
+};
+
+Sports.sendFavs = function() {
+  var favs = [];
+
+  var i = 0;
+  Sports.favs.forEach(function(evnt) {
+    var msg = parseCardData(evnt);
+
+    msg.type = TYPE.LEAGUE;
+    msg.method = METHOD.DATA;
+    msg.leagueIndex = LEAGUE.FAVS;
+    msg.index = i++;
+
+    favs.push(msg);
+  });
+
+  favs.sort(function(a, b) { return a.gameState - b.gameState; });
+
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.SIZE,
+    index: LEAGUE.FAVS,
+    count: favs.length
+  });
+
+  if (sendsGames(LEAGUE.FAVS)) {
+    favs.forEach(function(fav) {
+      appMessageQueue.send(fav);
+    });
+  }
+
+  // A lazy watch waits on END to leave its LOADING state.
+  appMessageQueue.send({
+    type: TYPE.LEAGUE,
+    method: METHOD.END,
+    index: LEAGUE.FAVS
+  });
+};
+
+Sports.loadFavs = function(callback) {
+  // A wakeup starts a fresh JS instance. onReady loads teams, but do not rely
+  // on that ordering: with no teams, every event looks unsubscribed.
+  if (!Sports.teams || Sports.teams.length === 0) {
+    try {
+      Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+    } catch (e) {
+      Sports.teams = [];
+    }
+  }
+
+  // Collected locally and assigned once at the end. refreshAllLeagues fills
+  // Sports.favs too, so sharing the array mid-flight would interleave the two
+  // and push some games twice - duplicate rows in the TIMELINE list.
+  var collected = [];
+
+  async.eachSeries(Sports.supportedLeagues, function(league, next) {
+    var url = PEBBLE_SPORTS_API_ROOT + '/events/' + Sports.getLeagueName(league);
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+
+    // next() on every path, failures included: one dead league must not
+    // strand the series and leave favs partial.
+    xhr.onload = function() {
+      try {
+        var res = JSON.parse(xhr.responseText);
+        if (res instanceof Array) {
+          res.forEach(function(evnt) {
+            var msg = parseCardData(evnt);
+            if (msg.subscribedAway || msg.subscribedHome) {
+              collected.push(evnt);
+            }
+          });
+        }
+      } catch (e) {
+        console.log('error loading favs for league ' + league + ': ' + e);
+      }
+      next();
+    };
+    xhr.onerror = function() {
+      console.log('error loading favs for league ' + league + ': request failed');
+      next();
+    };
+    xhr.ontimeout = function() {
+      console.log('error loading favs for league ' + league + ': timed out');
+      next();
+    };
+    xhr.timeout = 10000;
+
+    xhr.send();
+  }, function() {
+    Sports.favs = collected;
+    console.log('loaded ' + Sports.favs.length + ' favorite games');
+    if (typeof callback === 'function') {
+      callback();
+    }
+  });
+};
+
+/*
+ * Refreshes overlap: following a team starts one while the launch refresh is
+ * still walking the leagues. When both filled Sports.favs, the second reset it
+ * and then both pushed the leagues still ahead of the first, so a game showed
+ * twice in the TIMELINE list. Each refresh now collects its own favourites, and
+ * only the newest one publishes them; an older one finishing late would send a
+ * list that predates the latest follow or unfollow.
+ */
+var refreshGeneration = 0;
+
+Sports.refreshAllLeagues = function(callback) {
+  var generation = ++refreshGeneration;
+  var collected = [];
+
+  async.eachSeries(Sports.supportedLeagues, function(league, next) {
+    Sports.sendEvents(league, collected, next);
+  }, function() {
+    if (generation === refreshGeneration) {
+      Sports.favs = collected;
+      Sports.sendFavs();
+      appMessageQueue.send({ type: TYPE.MARKDIRTY });
+    }
+    if (typeof callback === 'function') {
+      callback();
+    }
+  });
+};
+
+Sports.refreshAllPins = function () {
+  var totalPins = Sports.favs.length;
+  var sentPins = 0;
+
+  if (totalPins === 0) {
+    appMessageQueue.send({
+      type: TYPE.PIN,
+      method: METHOD.END
+    });
+    return;
+  }
+
+  // requestPin answers asynchronously, so END goes out from the callback of
+  // the last pin to finish rather than after the loop.
+  Sports.favs.forEach(function(evnt, idx) {
+    requestPin({ id: evnt.id }, function (result) {
+      if (result) { 
+        sentPins++;
+        appMessageQueue.send({
+          type: TYPE.PIN,
+          method: METHOD.SIZE,
+          index: idx,
+          count: totalPins,
+        });
+        if (sentPins === totalPins) {
+          appMessageQueue.send({
+            type: TYPE.PIN,
+            method: METHOD.END
+          });
+        }
+      } else {
+        appMessageQueue.send({
+          type: TYPE.PIN,
+          method: METHOD.END
+        });
+      }
+    });
+  });
+};
+
+function addFavoriteTeam(team) {
+  try {
+    Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+  } catch (e) {
+    Sports.teams = [];
+  }
+  if (Sports.teams.indexOf(team) === -1) { Sports.teams.push(team); }
+  localStorage.setItem('teams', JSON.stringify(Sports.teams));
+}
+
+function removeFavoriteTeam(team) {
+  try {
+    Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+  } catch (e) {
+    Sports.teams = [];
+  }
+  Sports.teams = Sports.teams.filter(function(t) { return t !== team; });
+  localStorage.setItem('teams', JSON.stringify(Sports.teams));
+}
+
+Sports.onReady = function() {
+  appMessageQueue.send({ type: TYPE.READY });
+
+
+  // updateTimelineToken();
+
+  try {
+    Sports.teams = JSON.parse(localStorage.getItem('teams')) || [];
+  } catch (e) {
+    Sports.teams = [];
+  }
+};
+
+// ANY CHANGES MUST BE UPDATED THE ANALYTICS H FILE
+var SCREENS = [
+  'FAVORITES',
+  'MLB',
+  'NHL',
+  'NFL',
+  'NBA',
+  'WNBA',
+  'NCAAF',
+  'NCAAM',
+  'NCAAW',
+  'LEAGUES',
+  'GAMECARD',
+  'NONE'
+];
+
+var BUTTONS = [
+  'BACK',
+  'UP',
+  'SELECT',
+  'DOWN'
+];
+
+Sports.onAppMessage = function(e) {
+  console.log('AppMessage received: ' + JSON.stringify(e.payload));
+  if (!e.payload.method) return;
+
+  switch (e.payload.method) {
+    case METHOD.REQUESTCARDS:
+      // A relaunch starts over: the watch holds no league yet.
+      Sports.lazy = !!e.payload.lazy;
+      Sports.loadedLeague = -1;
+      Sports.refreshAllLeagues(function() {
+        appMessageQueue.send({ type: TYPE.LOADED });
+      });
+      break;
+
+    case METHOD.REQUESTPINS: // the watch now tells the phone when to refresh Timeline
+      Sports.loadFavs(Sports.refreshAllPins);
+      break;
+
+    case METHOD.REQUESTLEAGUE:
+      Sports.sendRequestedLeague(e.payload.index);
+      break;
+
+    case METHOD.REQUESTCARD:
+      requestCard({
+        id: e.payload.id,
+        scoreAway: parseInt(e.payload.scoreAway, 10),
+        scoreHome: parseInt(e.payload.scoreHome, 10)
+      });
+      break;
+
+    case METHOD.REQUESTGAME:
+      requestGame({
+        id: e.payload.id,
+        leagueIndex: e.payload.leagueIndex,
+        gameIndex: e.payload.index,
+        scoreAway: parseInt(e.payload.scoreAway, 10),
+        scoreHome: parseInt(e.payload.scoreHome, 10)
+      });
+      break;
+
+    case METHOD.SUBSCRIBE:
+      console.log('added ' + e.payload.title + ' to favorites');
+      addFavoriteTeam(e.payload.title);
+      Sports.refreshAllLeagues(Sports.refreshAllPins);
+      break;
+
+    case METHOD.UNSUBSCRIBE:
+      console.log('removed ' + e.payload.title + ' from favorites');
+      removeFavoriteTeam(e.payload.title);
+      removeOrphanedPins();
+      Sports.refreshAllLeagues(Sports.refreshAllPins);
+      break;
+
+    case METHOD.SCREEN_CHANGE:
+      break;
+
+    case METHOD.BUZZ_CHANGE:
+      var buzz = (e.payload.buzzChange) ? 'true' : 'false';
+      break;
+  }
+};
+
+Pebble.addEventListener('ready', Sports.onReady);
+Pebble.addEventListener('appmessage', Sports.onAppMessage);
+Pebble.addEventListener('showConfiguration', Sports.onShowConfiguration);
+Pebble.addEventListener('webviewclosed', Sports.onWebViewClosed);

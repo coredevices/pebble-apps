@@ -1,0 +1,342 @@
+{
+  "name": "Sports",
+  "author": "Pebble",
+  "version": "2.15.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "keywords": [
+    "pebble-app"
+  ],
+  "pebble": {
+    "sdkVersion": "3",
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "capabilities": [],
+    "enableMultiJS": true,
+    "projectType": "native",
+    "displayName": "Sports",
+    "uuid": "1b356bed-dbbc-41d5-a0f3-ec60bd751b15",
+    "watchapp": {
+      "watchface": false,
+      "hiddenApp": false,
+      "onlyShownOnCommunication": false
+    },
+    "resources": {
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "png",
+          "name": "MENU_ICON",
+          "file": "Pebble_25x25_Basketball.png"
+        },
+        {
+          "type": "pbi",
+          "name": "ICON_CONFIG_REQUIRED",
+          "file": "config-required.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_FAVS",
+          "file": "icn-favs.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_BASEBALL",
+          "file": "icn-baseball.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_BASKETBALL",
+          "file": "icn-basketball.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_FOOTBALL",
+          "file": "icn-football.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_HOCKEY",
+          "file": "icn-hockey.png"
+        },
+        {
+          "targetPlatforms": [
+            "aplite",
+            "diorite",
+            "flint"
+          ],
+          "type": "pbi",
+          "name": "ICON_SOCCER",
+          "file": "icn-soccer.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_FAVS",
+          "file": "icn-favs.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_BASEBALL",
+          "file": "icn-baseball.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_BASKETBALL",
+          "file": "icn-basketball.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_FOOTBALL",
+          "file": "icn-football.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_HOCKEY",
+          "file": "icn-hockey.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_SOCCER",
+          "file": "icn-soccer.png"
+        },
+        {
+          "type": "png",
+          "name": "ICON_BUZZSET",
+          "file": "icn-buzzset.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_FAVS_RED",
+          "file": "icn-favs-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_BASEBALL_RED",
+          "file": "icn-baseball-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_BASKETBALL_RED",
+          "file": "icn-basketball-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_FOOTBALL_RED",
+          "file": "icn-football-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_HOCKEY_RED",
+          "file": "icn-hockey-blue.png"
+        },
+        {
+          "targetPlatforms": [
+            "basalt",
+            "chalk",
+            "emery",
+            "gabbro"
+          ],
+          "type": "png",
+          "name": "ICON_SOCCER_RED",
+          "file": "icn-soccer-blue.png"
+        },
+        {
+          "type": "raw",
+          "name": "ICON_CONFIRMATION",
+          "file": "Pebble_80x80_Generic_confirmation.pdc"
+        },
+        {
+          "type": "pbi",
+          "name": "NO_INTERNET_ICON",
+          "file": "no-internet.png"
+        },
+        {
+          "type": "font",
+          "characterRegex": "[0-9]",
+          "name": "FONT_LECO_36_LIGHT",
+          "file": "LECO1976-Light.otf",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint",
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "characterRegex": "[0-9]",
+          "name": "FONT_LECO_54_LIGHT",
+          "file": "LECO1976-Light.otf",
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "chalk",
+            "diorite",
+            "flint",
+            "emery",
+            "gabbro"
+          ]
+        },
+        {
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ],
+          "type": "font",
+          "characterRegex": "[0-9]",
+          "name": "FONT_LECO_72_LIGHT",
+          "file": "LECO1976-Light.otf"
+        },
+        {
+          "targetPlatforms": [
+            "emery",
+            "gabbro"
+          ],
+          "type": "font",
+          "characterRegex": "[0-9]",
+          "name": "FONT_LECO_48_LIGHT",
+          "file": "LECO1976-Light.otf"
+        }
+      ]
+    },
+    "messageKeys": {
+      "type": 50,
+      "method": 51,
+      "index": 52,
+      "count": 53,
+      "leagueIndex": 54,
+      "favs": 55,
+      "unsub": 56,
+      "lazy": 57,
+      "league": 100,
+      "title": 101,
+      "subtitle": 102,
+      "broadcaster": 103,
+      "nameAway": 104,
+      "nameHome": 105,
+      "rankAway": 106,
+      "rankHome": 107,
+      "recordAway": 108,
+      "recordHome": 109,
+      "scoreAway": 110,
+      "scoreHome": 111,
+      "gameState": 112,
+      "leadChange": 115,
+      "currentScreen": 116,
+      "previousScreen": 117,
+      "buzzChange": 118,
+      "eventButton": 119,
+      "screenUpClicks": 120,
+      "screenDownClicks": 121,
+      "subscribedAway": 150,
+      "subscribedHome": 151,
+      "id": 999
+    }
+  },
+  "dependencies": {
+    "async": "^3.2.6"
+  }
+}

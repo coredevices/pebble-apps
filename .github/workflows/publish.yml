@@ -12,6 +12,8 @@ concurrency:
 
 env:
   API_BASE: https://appstore-api.repebble.com
+  # Apps that are plugins or declare permissions; any other app is a legacy app, built as the SDK builds it.
+  USES_PERMISSIONS: '.pebble | has("plugin") or has("usesPermissions")'
 
 permissions: {}
 
@@ -64,16 +66,23 @@ jobs:
               fi
               continue
             fi
+            notes=$(git log -1 --format=%s -- "$proj/package.json")
+            if [ -f "$dir/CHANGELOG.md" ]; then
+              section=$(awk -v h="## $version" '$0 == h { f = 1; next } /^## / { f = 0 } f && NF' "$dir/CHANGELOG.md")
+              if [ -n "$section" ]; then notes=$section; else echo "::warning::$dir/CHANGELOG.md has no ## $version section"; fi
+            fi
             jq -cn --arg dir "$dir" --arg proj "$proj" --arg version "$version" \
               --arg app_id "$(jq -r .app_id <<<"$app")" \
-              --arg notes "$(git log -1 --format=%s -- "$proj/package.json")" \
+              --arg notes "$notes" \
               '{dir: $dir, proj: $proj, version: $version, app_id: $app_id, notes: $notes}' >> /tmp/plan.jsonl
           done
           plan=$(jq -sc . /tmp/plan.jsonl)
           echo "$plan" | jq -r '.[] | "\(.dir) \(.version) to publish"'
           echo "plan=$plan" >> "$GITHUB_OUTPUT"
           sdk=false
-          for proj in $(jq -r '.[].proj' <<<"$plan"); do [ -d "$proj/src/c" ] && sdk=true; done
+          for proj in $(jq -r '.[].proj' <<<"$plan"); do
+            if [ -d "$proj/src/c" ] || ! jq -e "$USES_PERMISSIONS" "$proj/package.json" >/dev/null; then sdk=true; fi
+          done
           echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
           echo "unbumped=${unbumped:-}" >> "$GITHUB_OUTPUT"
 
@@ -127,8 +136,14 @@ jobs:
                   npm run build --if-present
                   npm test --if-present) ;;
             esac
-            python3 scripts/pack-plugin-pbw.py "$proj"
-            cp "$proj/build/$(jq -r .name "$proj/package.json").pbw" "dist/$dir.pbw"
+            if jq -e "$USES_PERMISSIONS" "$proj/package.json" >/dev/null; then
+              python3 scripts/pack-plugin-pbw.py "$proj"
+              cp "$proj/build/$(jq -r .name "$proj/package.json").pbw" "dist/$dir.pbw"
+            else
+              # The packer marks a pbw manifestVersion 2, which drops an app's legacy implicit permissions.
+              (cd "$proj" && pebble build)
+              cp "$proj/build/$(basename "$proj").pbw" "dist/$dir.pbw"
+            fi
             echo "::endgroup::"
           done
 

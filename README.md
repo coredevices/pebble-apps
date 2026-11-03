@@ -29,7 +29,7 @@ Pushing to `main` publishes every plugin whose `package.json` version isn't in t
 directory's `CHANGELOG.md`, or else the subject of the commit that set that version. Bump the version
 to release. A plugin's first listing is created by hand.
 
-An app that isn't a plugin and declares no permissions (`sports`) is a legacy app: it's published as
+An app that isn't a plugin and declares no permissions (`sports`, `stopwatch`, `timer`) is a legacy app: it's published as
 `pebble build` builds it, without `pack-plugin-pbw.py`.
 
 | Plugin | Build | Test |
@@ -79,8 +79,10 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `remember-the-milk` | Remember The Milk |
 | `roam` | Roam Research |
 | `sports` | Sports (watchapp; needs the Pebble SDK) |
+| `stopwatch` | Stopwatch (watchapp; needs the Pebble SDK) |
 | `stocks` | Stocks |
 | `tasks-org` | Tasks.org |
 | `ticktick` | TickTick |
+| `timer` | Timer (watchapp; needs the Pebble SDK) |
 | `todoist` | Todoist |
 | `weather-face` | Weather Face (Plugin Demo) (watchface; needs the Pebble SDK) |

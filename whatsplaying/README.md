@@ -11,6 +11,10 @@ later) and a phone app that decodes the stream into `audiostream` events.
 
 ## Controls
 
+Opened by quick launch or from the phone (for example Index, through Watch State's `launch_app`),
+the app starts listening as soon as the phone answers its first message. From the launcher it opens
+on the menu.
+
 Main menu
 
 | Button | Action |
@@ -66,6 +70,14 @@ returns canned proxy responses. The request it produces was also replayed
 against a local proxy container with a fake AudD. The app has **not** yet
 been run against the deployed service or on real hardware; see the test plan
 below.
+
+## Plugin
+
+The pbw also carries a plugin (`src/plugin/index.js`) serving the history as `music/identified`:
+one instance per match, newest first, with `title`, `artist`, `album`, `identified` (a timestamp)
+and `url` (the song link). It reads the same `localStorage` the PKJS writes, so Index can answer
+"what was that song?". A plugin can't launch apps, so starting a listen from Index goes through
+Watch State's `launch_app`.
 
 ## Messages
 
@@ -141,7 +153,8 @@ src/c/main.c           AppMessage in/out, history mirror
 src/c/menu_window.c    main menu: Identify + history rows
 src/c/card_window.c    listen / identify / result / message card; the only file using the mic API
 src/pkjs/index.js      audio collection, HTTP to the recognition service, history
-test/pkjs_harness.js   Node smoke test for the built pkjs bundle
+src/plugin/index.js    the history as a plugin source
+test/plugin.test.cjs   plugin source tests (`npm test`)
 ```
 
 ## Test plan (hardware)

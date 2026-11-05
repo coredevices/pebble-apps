@@ -59,8 +59,16 @@ static void prv_handle_history_row(const DictionaryIterator *iter) {
   menu_window_refresh();
 }
 
+// Opened by quick launch or from the phone: listen once the phone has answered, so its first
+// seconds of audio aren't lost while PKJS is still starting.
+static bool s_listen_on_answer;
+
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   const int cmd = prv_get_int(iter, MESSAGE_KEY_CMD, 0);
+  if (s_listen_on_answer) {
+    s_listen_on_answer = false;
+    card_window_push_listen();
+  }
   switch (cmd) {
     case CmdHistory:
       prv_handle_history_row(iter);
@@ -136,6 +144,8 @@ static void prv_init(void) {
   app_message_open(1024, 64);
 
   menu_window_push();
+  const AppLaunchReason reason = launch_reason();
+  s_listen_on_answer = reason == APP_LAUNCH_QUICK_LAUNCH || reason == APP_LAUNCH_PHONE;
   prv_send_hello(NULL);
 }
 

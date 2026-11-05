@@ -1,10 +1,13 @@
 {
   "name": "whatsplaying",
   "author": "Core Devices LLC",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "keywords": ["pebble-app"],
   "private": true,
   "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
   "pebble": {
     "displayName": "What's Playing",
     "uuid": "4ee4fb46-4764-4271-87d5-8d0169dbd889",
@@ -39,6 +42,27 @@
     ],
     "resources": {
       "media": []
+    },
+    "plugin": {
+      "description": "The songs What's Playing identified on the watch, newest first. To identify a song, open the What's Playing watchapp (Watch State's launch_app): opened from the phone it starts listening right away, and the match shows on the watch and here.",
+      "script": "src/plugin/index.js",
+      "sources": [
+        {
+          "category": "music",
+          "items": ["identified"],
+          "properties": {
+            "title": ["longText"],
+            "artist": ["longText"],
+            "album": ["longText"],
+            "identified": ["timestamp"],
+            "url": ["longText"]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 300
+        }
+      ],
+      "actions": []
     }
   }
 }

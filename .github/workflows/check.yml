@@ -1,0 +1,68 @@
+name: Check apps
+
+on:
+  pull_request:
+    paths-ignore: ['**.md']
+
+permissions:
+  contents: read
+
+# Builds and tests the apps a pull request changes, as publish.yml will on merge. It mints no App
+# Store token, so it is safe to run on pull requests from forks.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Find changed apps
+        id: apps
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "$BASE"...HEAD -- ':(exclude)**/*.md')
+          all=false
+          grep -qE '^(scripts/|\.github/workflows/)' <<<"$changed" && all=true
+          apps=
+          for dir in */; do
+            dir=${dir%/}
+            proj=$dir; [ -f "$dir/pbw/package.json" ] && proj=$dir/pbw
+            [ -f "$proj/package.json" ] || continue
+            # location-sharing builds against chat/imessage.
+            if $all || grep -q "^$dir/" <<<"$changed" || { [ "$dir" = location-sharing ] && grep -q '^chat/imessage/' <<<"$changed"; }; then
+              apps="$apps $dir"
+              base_version=$(git show "$BASE:$proj/package.json" 2>/dev/null | jq -r .version || true)
+              if grep -q "^$dir/" <<<"$changed" && [ "$base_version" = "$(jq -r .version "$proj/package.json")" ]; then
+                # A warning, not an error: publish.yml only refuses this for apps already in the store.
+                echo "::warning::$dir changed without a package.json version bump; if it's in the store, publish.yml will refuse it on merge"
+              fi
+            fi
+          done
+          echo "apps=$apps" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v5
+        if: steps.apps.outputs.apps != ''
+        with:
+          node-version: 22
+
+      - name: Install Pebble SDK
+        if: steps.apps.outputs.apps != ''
+        run: |
+          pipx install uv  # pebble-tool 5.1+ builds the SDK's venv with uv
+          pipx install pebble-tool
+          pebble sdk install latest
+
+      - name: Build and test
+        if: steps.apps.outputs.apps != ''
+        env:
+          APPS: ${{ steps.apps.outputs.apps }}
+        run: |
+          set -euo pipefail
+          for dir in $APPS; do
+            echo "::group::$dir"
+            scripts/build-app.sh "$dir"
+            echo "::endgroup::"
+          done

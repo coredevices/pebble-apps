@@ -12,7 +12,8 @@ concurrency:
 
 env:
   API_BASE: https://appstore-api.repebble.com
-  # Apps that are plugins or declare permissions; any other app is a legacy app, built as the SDK builds it.
+  # Apps that are plugins or declare permissions; any other app is a legacy app, built as the SDK builds it
+  # (scripts/build-app.sh makes the same split).
   USES_PERMISSIONS: '.pebble | has("plugin") or has("usesPermissions")'
 
 permissions: {}
@@ -30,7 +31,7 @@ jobs:
       sdk: ${{ steps.plan.outputs.sdk }}
       unbumped: ${{ steps.plan.outputs.unbumped }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -107,9 +108,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -125,30 +126,13 @@ jobs:
           PLAN: ${{ needs.plan.outputs.plan }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          jq -c '.[]' <<<"$PLAN" | while read -r item; do
-            dir=$(jq -r .dir <<<"$item"); proj=$(jq -r .proj <<<"$item")
+          jq -r '.[].dir' <<<"$PLAN" | while read -r dir; do
             echo "::group::$dir"
-            case $dir in
-              location-sharing) (npm ci --prefix chat/imessage && cd "$dir" && npm ci && node scripts/build-plugin.mjs && node --test plugin.test.cjs test/*.test.cjs) ;;
-              chat) (cd "$dir" && npm ci --prefix imessage && node scripts/build-plugin.mjs && node --test *.test.cjs) ;;
-              *) (cd "$dir"
-                  [ -f package-lock.json ] && npm ci
-                  npm run build --if-present
-                  npm test --if-present) ;;
-            esac
-            if jq -e "$USES_PERMISSIONS" "$proj/package.json" >/dev/null; then
-              python3 scripts/pack-plugin-pbw.py "$proj"
-              cp "$proj/build/$(jq -r .name "$proj/package.json").pbw" "dist/$dir.pbw"
-            else
-              # The packer marks a pbw manifestVersion 2, which drops an app's legacy implicit permissions.
-              (cd "$proj" && pebble build)
-              cp "$proj/build/$(basename "$proj").pbw" "dist/$dir.pbw"
-            fi
+            scripts/build-app.sh "$dir"
             echo "::endgroup::"
           done
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pbws
           path: dist/
@@ -160,7 +144,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: pbws
           path: dist

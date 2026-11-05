@@ -1,0 +1,57 @@
+{
+  "name": "Compass",
+  "author": "MakeAwesomeHappen",
+  "version": "1.31",
+  "private": true,
+  "keywords": [
+    "pebble-app"
+  ],
+  "dependencies": {},
+  "pebble": {
+    "sdkVersion": "3",
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "enableMultiJS": false,
+    "capabilities": [
+      ""
+    ],
+    "projectType": "native",
+    "displayName": "Compass",
+    "uuid": "49827722-4f3b-4e3f-9e96-d660089f50c1",
+    "watchapp": {
+      "watchface": false,
+      "hiddenApp": false,
+      "onlyShownOnCommunication": false
+    },
+    "resources": {
+      "media": [
+        {
+          "file": "images/cross_hair_small.png",
+          "name": "CROSS_HAIR_SMALL",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/icon.png",
+          "menuIcon": true,
+          "name": "ICON",
+          "type": "bitmap"
+        },
+        {
+          "file": "images/cross_hair_large.png",
+          "name": "CROSS_HAIR_LARGE",
+          "type": "bitmap"
+        }
+      ]
+    },
+    "messageKeys": {
+      "dummy": 0
+    }
+  }
+}

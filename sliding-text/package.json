@@ -1,0 +1,77 @@
+{
+  "name": "Sliding Text",
+  "author": "Pebble Technology",
+  "version": "1.0.2",
+  "private": true,
+  "keywords": [
+    "pebble-app"
+  ],
+  "dependencies": {},
+  "pebble": {
+    "sdkVersion": "3",
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "emery",
+      "gabbro"
+    ],
+    "enableMultiJS": false,
+    "capabilities": [],
+    "projectType": "native",
+    "displayName": "Sliding Text",
+    "uuid": "c7a9d535-e9bd-4c36-9c30-b45ad0908634",
+    "watchapp": {
+      "watchface": true,
+      "hiddenApp": false,
+      "onlyShownOnCommunication": false
+    },
+    "resources": {
+      "media": [
+        {
+          "type": "font",
+          "name": "FONT_GOTHAM_BOLD_50",
+          "file": "fonts/Gotham-Bold.ttf",
+          "characterRegex": "[a-z' ]",
+          "compatibility": "2.7",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_GOTHAM_LIGHT_50",
+          "file": "fonts/Gotham-Light.ttf",
+          "characterRegex": "[a-z' ]",
+          "compatibility": "2.7",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_GOTHAM_BOLD_40",
+          "file": "fonts/Gotham-Bold.ttf",
+          "characterRegex": "[a-z' ]",
+          "compatibility": "2.7",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_GOTHAM_LIGHT_32",
+          "file": "fonts/Gotham-Light.ttf",
+          "characterRegex": "[a-z' ]",
+          "compatibility": "2.7",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        }
+      ]
+    },
+    "messageKeys": {
+      "dummy": 0
+    }
+  }
+}

@@ -180,7 +180,8 @@ test/pkjs_harness.js   Node smoke test for the built pkjs bundle
 
 ## Known limitations
 
-- The app was built and unit-tested (pkjs) but not run on hardware or against
-  the deployed recognition service in this environment.
+- Run in the SDK emulator (4.44) against the deployed recognition service, with
+  a song played into the emulated microphone (`pebble emu-mic --file`); not yet
+  on hardware.
 - History rows carry title, artist and album to the watch; `time` and
   `song_link` are stored on the phone only, as there is no message key for them.

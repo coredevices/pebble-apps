@@ -88,3 +88,4 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `timer` | Timer (watchapp; needs the Pebble SDK) |
 | `todoist` | Todoist |
 | `weather-face` | Weather Face (Plugin Demo) (watchface; needs the Pebble SDK) |
+| `whatsplaying` | What's Playing (watchapp; needs the Pebble SDK) |

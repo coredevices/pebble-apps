@@ -116,6 +116,7 @@ jobs:
       - name: Install Pebble SDK
         if: needs.plan.outputs.sdk == 'true'
         run: |
+          pipx install uv  # pebble-tool 5.1+ builds the SDK's venv with uv
           pipx install pebble-tool
           pebble sdk install latest
 

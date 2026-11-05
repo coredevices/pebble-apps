@@ -1,10 +1,10 @@
 # pebble-timer
 Simple pebble timer built to be published by Pebble in the store.
 
-![alt Timer Menu](https://github.com/pebble/pebble-timer/blob/release-1.0/assets/Menu.png)
-![alt Timer Setting](https://github.com/pebble/pebble-timer/blob/release-1.0/assets/Setting 1.png)
-![alt Timer Detail](https://github.com/pebble/pebble-timer/blob/release-1.0/assets/Bubbles.png)
-![alt Timer Pin](https://github.com/pebble/pebble-timer/blob/release-1.0/assets/Pin.png)
+![alt Timer Menu](assets/Menu.png)
+![alt Timer Setting](assets/Setting%201.png)
+![alt Timer Detail](assets/Detail.png)
+![alt Timer Pin](assets/Pin.png)
 
 Timers appear in a list on the main screen. Add a timer via the "+" icon at the top of the list similarly
 to the alarm app. When setting a timer, the time the timer will end is displayed under the entry fields if

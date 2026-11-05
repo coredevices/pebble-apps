@@ -1,18 +1,24 @@
 // PKJS half of the complication face (see plugins.md, "User preferences").
 //
-// The face has two slots, each drawing one fixed shape: a number (with a gauge when the reading
-// has a range) and a bitmap. Neither is configured here: each takes the first of the user's
-// preferred readings (`preferences/complications`) that comes in its shape and isn't already in
-// the other slot.
+// The face has two slots, each showing either a bitmap or a value (a number, with a gauge when it
+// has a range, or short text). Neither is configured here: the first slot takes the first of the
+// user's preferred readings (`preferences/complications`) the face can draw. The second prefers
+// the next reading offering the other kind, so the face shows one of each when it can, and
+// otherwise takes the next reading it can draw.
 
-var NUMBER = 'numericValue';
-var BITMAPS = ['image', 'icon'];
+var IMAGE = 'image';
+var VALUE = 'value';
+var KIND_SHAPES = {
+  image: ['image', 'icon'],
+  value: ['numericValue', 'shortText'],
+};
+var SLOT_COUNT = 2;
 
-// Until the watch says how big its bitmap slot is.
+// Until the watch says how big its bitmap slots are.
 var imageSize = 40;
 var preferred = [];
 var subscriptions = [];
-var sentPixels = '';
+var sentPixels = [];
 
 function log(message) {
   console.log('[ComplicationFace] ' + message);
@@ -31,29 +37,47 @@ function bytesOf(base64) {
 }
 
 /** The shapes some installed plugin declares for this reading. */
-function declaredShapes(slot) {
+function declaredShapes(reading) {
   var shapes = [];
   Pebble.enumeratePlugins().forEach(function (plugin) {
     plugin.sources.forEach(function (source) {
-      if (source.category !== slot.category || source.items.indexOf(slot.item) === -1) return;
-      shapes = shapes.concat((source.properties || {})[slot.property] || []);
+      if (source.category !== reading.category || source.items.indexOf(reading.item) === -1) return;
+      shapes = shapes.concat((source.properties || {})[reading.property] || []);
     });
   });
   return shapes;
 }
 
-/** The first preferred reading offering one of [shapes] that [taken] doesn't already have. */
-function pick(shapes, taken) {
-  return preferred.filter(function (slot) {
-    if (taken && slot.key === taken.key) return false;
-    var offered = declaredShapes(slot);
-    return shapes.some(function (shape) { return offered.indexOf(shape) !== -1; });
-  })[0];
+function offers(reading, kind) {
+  var shapes = declaredShapes(reading);
+  return KIND_SHAPES[kind].some(function (shape) { return shapes.indexOf(shape) !== -1; });
+}
+
+/** How a reading is drawn when nothing asks for a particular kind: as a bitmap if it has one. */
+function defaultKind(reading) {
+  if (offers(reading, IMAGE)) return IMAGE;
+  if (offers(reading, VALUE)) return VALUE;
+  return null;
+}
+
+/** What goes in each slot: `{ reading, kind }`, or null when there's nothing left to show. */
+function assign() {
+  var drawable = preferred.filter(defaultKind);
+  var first = drawable[0];
+  if (!first) return [null, null];
+  var firstKind = defaultKind(first);
+  var rest = drawable.slice(1);
+  var other = firstKind === IMAGE ? VALUE : IMAGE;
+  var contrasting = rest.filter(function (reading) { return offers(reading, other); })[0];
+  var second = contrasting
+    ? { reading: contrasting, kind: other }
+    : rest[0] ? { reading: rest[0], kind: defaultKind(rest[0]) } : null;
+  return [{ reading: first, kind: firstKind }, second];
 }
 
 /** A reading's instance name (London, Phone), else the reading itself. */
-function labelOf(instance, slot) {
-  return textOf(instance.properties.name) || slot.property.replace(/_/g, ' ');
+function labelOf(instance, reading) {
+  return (instance && textOf(instance.properties.name)) || reading.property.replace(/_/g, ' ');
 }
 
 function send(message) {
@@ -62,80 +86,86 @@ function send(message) {
   });
 }
 
-function onNumber(slot, envelope) {
-  var instance = envelope.instances[slot.index];
-  var payloads = instance && instance.properties[slot.property];
-  var number = payloads && payloads[NUMBER];
-  if (!number) {
-    send({ numText: '--', numLabel: '', numFill: -1 });
-    return;
-  }
-  var text = textOf(payloads) || (Math.round(number.value) + (number.unit || ''));
-  var hasRange = number.min !== undefined && number.max !== undefined && number.max > number.min;
-  var fill = hasRange ? Math.round((number.value - number.min) / (number.max - number.min) * 100) : -1;
-  send({ numText: text, numLabel: labelOf(instance, slot), numFill: Math.max(-1, Math.min(100, fill)) });
+function sendValue(slot, text, label, fill) {
+  send({ slot: slot, numText: text, numLabel: label, numFill: fill });
 }
 
-function onImage(slot, envelope) {
-  var instance = envelope.instances[slot.index];
-  var payloads = (instance && instance.properties[slot.property]) || {};
+function onValue(slot, reading, envelope) {
+  var instance = envelope.instances[reading.index];
+  var payloads = instance && instance.properties[reading.property];
+  var number = payloads && payloads.numericValue;
+  var text = textOf(payloads) || (number ? Math.round(number.value) + (number.unit || '') : '');
+  if (!text) {
+    sendValue(slot, '--', labelOf(instance, reading), -1);
+    return;
+  }
+  var hasRange = number && number.min !== undefined && number.max !== undefined && number.max > number.min;
+  var fill = hasRange ? Math.round((number.value - number.min) / (number.max - number.min) * 100) : -1;
+  sendValue(slot, text, labelOf(instance, reading), Math.max(-1, Math.min(100, fill)));
+}
+
+function onImage(slot, reading, envelope) {
+  var instance = envelope.instances[reading.index];
+  var payloads = (instance && instance.properties[reading.property]) || {};
   var bitmap = payloads.image || payloads.icon;
-  if (!bitmap || bitmap.pixels === sentPixels) return;
-  sentPixels = bitmap.pixels;
+  if (!bitmap || bitmap.pixels === sentPixels[slot]) return;
+  sentPixels[slot] = bitmap.pixels;
   Pebble.sendAppMessage({
-    imgLabel: labelOf(instance, slot),
+    slot: slot,
+    imgLabel: labelOf(instance, reading),
     iconWidth: bitmap.width,
     iconHeight: bitmap.height,
     iconPalette: bytesOf(bitmap.palette),
     iconPixels: bytesOf(bitmap.pixels),
   }, function () {}, function (e) {
-    sentPixels = '';
+    sentPixels[slot] = '';
     log('sending the bitmap failed: ' + JSON.stringify(e));
   });
+}
+
+function subscribe(slot, assigned) {
+  var reading = assigned.reading;
+  var image = assigned.kind === IMAGE;
+  var request = {
+    category: reading.category,
+    item: reading.item,
+    properties: ['name', reading.property],
+    onData: function (envelope) {
+      if (image) onImage(slot, reading, envelope);
+      else onValue(slot, reading, envelope);
+    },
+    onError: function (err) {
+      log(reading.key + ': ' + err.code);
+      sendValue(slot, '--', err.code === 'PERMISSION_DENIED' ? 'Needs permission' : '', -1);
+    },
+  };
+  if (image) request.iconPixelSize = { w: imageSize, h: imageSize };
+  subscriptions.push(Pebble.subscribeToSource(request));
 }
 
 function subscribeSlots() {
   subscriptions.forEach(function (subscription) { subscription.unsubscribe(); });
   subscriptions = [];
-  sentPixels = '';
-  var number = pick([NUMBER]);
-  var image = pick(BITMAPS, number);
-  log('number: ' + (number ? number.key : 'none') + '; image: ' + (image ? image.key : 'none'));
-  if (number) {
-    subscriptions.push(Pebble.subscribeToSource({
-      category: number.category,
-      item: number.item,
-      properties: ['name', number.property],
-      onData: function (envelope) { onNumber(number, envelope); },
-      onError: function (err) {
-        log(number.key + ': ' + err.code);
-        send({ numText: '--', numLabel: err.code === 'PERMISSION_DENIED' ? 'Needs permission' : '', numFill: -1 });
-      },
-    }));
-  }
-  if (image) {
-    subscriptions.push(Pebble.subscribeToSource({
-      category: image.category,
-      item: image.item,
-      properties: ['name', image.property],
-      iconPixelSize: { w: imageSize, h: imageSize },
-      onData: function (envelope) { onImage(image, envelope); },
-      onError: function (err) { log(image.key + ': ' + err.code); },
-    }));
+  sentPixels = [];
+  var slots = assign();
+  log(slots.map(function (s) { return s ? s.kind + ' ' + s.reading.key : 'none'; }).join('; '));
+  for (var slot = 0; slot < SLOT_COUNT; slot++) {
+    if (slots[slot]) subscribe(slot, slots[slot]);
+    else sendValue(slot, '', '', -1);
   }
 }
 
 function onPreferred(envelope) {
   preferred = envelope.instances.map(function (instance) {
     var p = instance.properties;
-    var slot = {
+    var reading = {
       category: textOf(p.category),
       item: textOf(p.item),
       index: p.index && p.index.numericValue ? p.index.numericValue.value : 0,
       property: textOf(p.property),
     };
-    slot.key = [slot.category, slot.item, slot.index, slot.property].join('/');
-    return slot;
+    reading.key = [reading.category, reading.item, reading.index, reading.property].join('/');
+    return reading;
   });
   subscribeSlots();
 }
@@ -159,7 +189,7 @@ function hello(retries) {
   });
 }
 
-// Nothing on the watch can scale a bitmap, so it says how big the image slot is.
+// Nothing on the watch can scale a bitmap, so it says how big the image slots are.
 Pebble.addEventListener('appmessage', function (e) {
   var size = (e.payload || {}).imageSize;
   if (size === undefined || size === imageSize) return;

@@ -1,7 +1,7 @@
 {
   "name": "complication-face",
   "author": "Pebble",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "keywords": [
     "pebble-app"
   ],
@@ -27,6 +27,7 @@
     "messageKeys": [
       "hello",
       "imageSize",
+      "slot",
       "numText",
       "numLabel",
       "numFill",

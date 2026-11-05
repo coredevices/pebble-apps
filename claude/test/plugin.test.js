@@ -372,3 +372,116 @@ test('reach: a send the host refuses as not allowed names the domain for sure, w
   assert.match(r.message,/^Claude doesn't have permission to connect to claude\.ai\. Turn on "Connect to claude\.ai" in Claude's Permissions\. Delivery is uncertain/);
   const reply=await f.config({type:'reach'});assert.deepEqual({...reply.blocked},{host:'claude.ai',sure:true});
 });
+
+const DUET='/v1/code/aibo/project?omit_timeline=true', CHANNEL='chan_example123';
+const duet=()=>({id:CHANNEL,template:'aibo',archived_at:null,disabled_at:null,disabled_by_plan:false});
+function duetFixture(overrides={}) {
+  return fixture({['GET '+DUET]:()=>json({channel:duet()}),
+    ['POST /v1/code/channels/'+CHANNEL+'/messages']:()=>json({message_id:'cmsg_accepted123',deduplicated:false}),...overrides});
+}
+test('Duet stays off for existing installs, direct IDs and list requests until opted in',async()=>{
+  const f=duetFixture();await f.connect();
+  assert.equal((await f.config({type:'status'})).kind,'claude');
+  await f.source('chats');assert.ok(!f.calls.some(c=>c.key.includes('/aibo/')));
+  assert.equal((await f.action('send_to_agent',{message:'hello',chat_id:'duet:main'})).code,'INVALID_ARGS');
+  assert.ok((await f.config({type:'list',kind:'duet'})).error);
+  assert.equal(posts(f).length,0);
+});
+test('Duet opt-in discovers existing main chat with client-app header and returns acknowledgment',async()=>{
+  const f=duetFixture();await f.connect();
+  const state=await f.config({type:'kind',kind:'duet'});
+  assert.equal(state.kind,'duet');assert.equal(state.selected.session_id,'duet:main');
+  assert.equal(state.mode,'default_chat');
+  assert.equal(f.calls.at(-1).init.headers['anthropic-client-app'],'com.anthropic.aibo.web');
+  assert.equal(posts(f).length,0);
+  assert.equal((await f.source()).instances[0].properties.configured.boolean.value,true);
+  const rows=(await f.source('chats')).instances;
+  assert.ok(rows.some(r=>r.instanceId==='duet:main'&&r.properties.url.longText.text==='https://claude.ai/duet'));
+  const result=await f.action('send_to_agent',{message:'hello'});
+  assert.equal(result.ok,true);assert.equal(result.message_id,'cmsg_accepted123');assert.equal(result.url,'https://claude.ai/duet');
+  const post=posts(f)[0],body=JSON.parse(post.init.body);
+  assert.deepEqual(Object.keys(body).sort(),['body','client_message_id']);
+  assert.equal(body.body,'hello ⌚');assert.match(body.client_message_id,/^[0-9a-f-]{36}$/);
+  assert.equal(post.init.headers['anthropic-client-app'],'com.anthropic.aibo.web');
+  assert.equal(posts(f).length,1);
+});
+test('Duet aliases route to main; switching away disables Duet and preserves regular default',async()=>{
+  const f=duetFixture();await f.connect();await useDefault(f);await f.config({type:'select',session_id:'chat:'+CHAT});
+  await f.config({type:'kind',kind:'duet'});
+  for(const id of ['duet','Claude Duet','duet:main']) assert.equal((await f.action('send_to_agent',{message:'test',chat_id:id})).ok,true);
+  await f.config({type:'kind',kind:'claude'});
+  assert.equal((await f.config({type:'status'})).selected.session_id,'chat:'+CHAT);
+  const count=posts(f).length;
+  assert.equal((await f.action('send_to_agent',{message:'test',chat_id:'duet:main'})).code,'INVALID_ARGS');
+  assert.equal(posts(f).length,count);
+});
+test('Duet availability is checked before opt-in and every send without creating a project',async()=>{
+  for(const channel of [null,{...duet(),id:'../bad'},{...duet(),template:'other'},{...duet(),archived_at:'now'},{...duet(),disabled_at:'now'},{...duet(),disabled_by_plan:true}]) {
+    const f=duetFixture();await f.connect();
+    f.routes['GET '+DUET]=()=>json({channel});
+    assert.ok((await f.config({type:'kind',kind:'duet'})).error);
+    assert.equal((await f.config({type:'status'})).kind,'claude');
+    f.routes['GET '+DUET]=()=>json({channel:duet()});await f.config({type:'kind',kind:'duet'});
+    f.routes['GET '+DUET]=()=>json({channel});
+    assert.ok(!(await f.action('send_to_agent',{message:'test'})).ok);assert.equal(posts(f).length,0);
+  }
+});
+test('Duet malformed acknowledgments and failed sends are uncertain and never retried',async()=>{
+  for(const response of [()=>json({}),()=>json({message_id:''}),()=>json({message_id:'bad/id'}),()=>json({},500),()=>{throw new Error('offline');}]) {
+    const f=duetFixture({['POST /v1/code/channels/'+CHANNEL+'/messages']:response});await f.connect();await f.config({type:'kind',kind:'duet'});
+    assert.match((await f.action('send_to_agent',{message:'test'})).message,/uncertain/i);
+    assert.equal(posts(f).length,1);
+  }
+});
+test('changing organization clears Duet opt-in; explicit new still creates a regular chat',async()=>{
+  const f=duetFixture();await f.connect();await f.config({type:'kind',kind:'duet'});newChatRoutes(f);
+  assert.equal((await f.action('send_to_agent',{message:'test',chat_id:'new'})).ok,true);
+  assert.ok(!posts(f).some(c=>c.key.includes('/channels/')));
+  await f.config({type:'organization',id:ORG});
+  assert.equal((await f.config({type:'status'})).kind,'claude');
+});
+test('existing exact nicknames take precedence over Duet name aliases',async()=>{
+  const f=duetFixture();await f.connect();
+  await f.config({type:'save_session',session_id:'chat:'+CHAT,nickname:'Duet'});
+  await f.config({type:'kind',kind:'duet'});
+  assert.equal((await f.action('send_to_agent',{message:'test',chat_id:'Duet'})).session_id,'chat:'+CHAT);
+});
+test('Duet detection finds existing conversation without changing destination or creating anything',async()=>{
+  const f=duetFixture();
+  assert.equal((await f.config({type:'duet_available'})).available,false);assert.equal(f.calls.length,0);
+  await f.connect();const before=JSON.stringify([...f.storage]);
+  assert.equal((await f.config({type:'duet_available'})).available,true);
+  assert.equal(JSON.stringify([...f.storage]),before);assert.equal(posts(f).length,0);
+});
+test('Duet detection hides missing, disabled, and unverified conversations without breaking sign-in',async()=>{
+  for(const response of [()=>json({}),()=>json({channel:{...duet(),disabled_by_plan:true}}),()=>json({},403),()=>json({},500),()=>{throw new Error('offline');}]) {
+    const f=duetFixture({['GET '+DUET]:response});await f.connect();
+    assert.equal((await f.config({type:'duet_available'})).available,false);
+    assert.equal((await f.config({type:'status'})).configured,true);
+    assert.equal(posts(f).length,0);
+  }
+});
+test('Duet detection waits for an organization and uses the newly selected organization',async()=>{
+  const f=duetFixture({'GET /api/organizations':()=>json([{uuid:ORG,name:'A'},{uuid:OTHER,name:'B'}])});await f.connect();
+  assert.equal((await f.config({type:'duet_available'})).available,false);
+  assert.ok(!f.calls.some(c=>c.key.includes('/aibo/')));
+  await f.config({type:'organization',id:OTHER});
+  assert.equal((await f.config({type:'duet_available'})).available,true);
+  assert.equal(f.calls.at(-1).init.headers['x-organization-uuid'],OTHER);
+});
+
+test('unavailable Duet does not block regular chat discovery or title sends',async()=>{
+  for(const response of [()=>json({}),()=>json({channel:{...duet(),disabled_by_plan:true}}),()=>json({},403),()=>json({},404),()=>json({},500),()=>{throw new Error('offline');}]) {
+    const f=duetFixture();await f.connect();await f.config({type:'kind',kind:'duet'});
+    f.routes['GET '+DUET]=response;
+    const rows=(await f.source('chats')).instances;
+    assert.deepEqual(Array.from(rows,r=>r.instanceId).sort(),['chat:'+CHAT,'code:'+CODE].sort());
+    for(const [title,id] of [['Planning','chat:'+CHAT],['CoreApp','code:'+CODE]]) {
+      const result=await f.action('send_to_agent',{message:'test',chat_id:title});
+      assert.equal(result.ok,true);assert.equal(result.session_id,id);
+    }
+    assert.ok(!(await f.action('send_to_agent',{message:'test',chat_id:'duet:main'})).ok);
+    assert.equal(posts(f).length,2);
+    assert.ok(!posts(f).some(c=>c.key.includes('/channels/')));
+  }
+});

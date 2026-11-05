@@ -30,6 +30,7 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 <div class="eyebrow">Send messages to</div>
 <label class="check"><input type="radio" name="kind" value="claude">Claude</label>
 <label class="check"><input type="radio" name="kind" value="code">Claude Code</label>
+<label id="duetChoice" class="check" hidden><input type="radio" name="kind" value="duet">Claude Duet</label>
 </div>
 <div class="card modes">
 <div class="eyebrow">When you don’t name a chat</div>
@@ -37,6 +38,7 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 <label class="check"><input type="radio" name="mode" value="new_chat">Start a new chat each time</label>
 <label class="check"><input type="radio" name="mode" value="default_chat">Send to a default chat</label>
 </div>
+<p id="duetMode" class="hint" style="margin-bottom:0" hidden>Messages go to your main Claude Duet conversation. Requires Duet access on your Claude account. <a href="https://claude.ai/duet" target="_blank" rel="noopener">Open Duet</a></p>
 <p id="codeMode" class="hint" style="margin-bottom:0" hidden>Claude Code messages go to a session you choose below.</p>
 </div>
 <div class="card" id="defaultCard">
@@ -149,11 +151,11 @@ function render(next) {
     });
     $('organization').value = state.organization || '';
   }
-  const code = state.kind === 'code';
+  const code = state.kind === 'code', duet = state.kind === 'duet';
   document.querySelectorAll('input[name=kind]').forEach(input => { input.checked = input.value === state.kind; });
   document.querySelectorAll('input[name=mode]').forEach(input => { input.checked = input.value === state.mode; });
-  $('modeChoices').hidden = code; $('codeMode').hidden = !code;
-  $('defaultCard').hidden = state.mode !== 'default_chat';
+  $('modeChoices').hidden = code || duet; $('duetMode').hidden = !duet; $('codeMode').hidden = !code;
+  $('defaultCard').hidden = duet || state.mode !== 'default_chat';
   $('defaultLabel').textContent = code ? 'Your default Claude Code session' : 'Your default chat';
   $('selected').textContent = state.selected ? sessionName(state.selected) : (code ? 'Choose a session below' : 'Choose a chat below');
   [defaults, nicks].forEach(p => p.rows.forEach(row => { row.isDefault = state.selected?.session_id === row.session_id; }));
@@ -162,13 +164,19 @@ async function run(fn) {
   if (busy) return;
   busy = true;
   document.querySelectorAll('button,select,input').forEach(el => { el.disabled = true; });
-  try { await fn(); } catch (e) { say(e.message || 'Could not connect to Claude.'); }
+  try { await fn(); } catch (e) { render(state); say(e.message || 'Could not connect to Claude.'); }
   finally { busy = false; document.querySelectorAll('button,select,input').forEach(el => { el.disabled = false; }); controls(); }
+}
+async function detectDuet() {
+  $('duetChoice').hidden = true;
+  if (!state.configured || !state.organization) return;
+  try { $('duetChoice').hidden = (await send({type:'duet_available'})).available !== true; }
+  catch (_) { /* Keep unavailable or unverified destinations hidden. */ }
 }
 // Loads whatever lists are on screen for the current settings.
 async function refresh() {
   if (!state.organization) return;
-  if (state.mode === 'default_chat') await defaults.load();
+  if (state.mode === 'default_chat' && state.kind !== 'duet') await defaults.load();
   if ($('nicknames').open) await nicks.load();
 }
 $('signin').onclick = () => run(async () => {
@@ -177,11 +185,12 @@ $('signin').onclick = () => run(async () => {
   const cookies = await Pebble.webSignIn({url:'https://claude.ai/login',cookies:['sessionKey'],domain:'claude.ai'});
   if (!cookies) { say('Sign-in cancelled.'); return; }
   render(await send({type:'connect',session_key:cookies.sessionKey}));
-  if (state.organization) await refresh(); else say('Choose an organization.');
+  await detectDuet();
+  if (state.organization) { await refresh(); say(describe()); } else say('Choose an organization.');
 });
 $('organization').onchange = () => run(async () => {
   defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render();
-  render(await send({type:'organization',id:$('organization').value})); await refresh();
+  render(await send({type:'organization',id:$('organization').value})); await detectDuet(); await refresh(); say(describe());
 });
 function describe() {
   if (state.mode === 'new_chat') return 'Each message will start a new Claude chat.';
@@ -192,7 +201,7 @@ document.querySelectorAll('input[name=kind]').forEach(input => {
   input.onchange = () => run(async () => {
     render(await send({type:'kind',kind:input.value}));
     defaults.rows = []; defaults.cursor = null; defaults.render();
-    if (state.mode === 'default_chat') await defaults.load();
+    if (state.mode === 'default_chat' && state.kind !== 'duet') await defaults.load();
     say(describe());
   });
 });
@@ -223,7 +232,7 @@ $('saveNickname').onclick = () => run(async () => {
   say(name ? 'Saved. Say “' + name + '” to send to this chat.' : 'Nickname removed.');
 });
 $('disconnect').onclick = () => run(async () => {
-  render(await send({type:'disconnect'})); defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render(); say('Disconnected. Saved sign-in removed.');
+  render(await send({type:'disconnect'})); await detectDuet(); defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render(); say('Disconnected. Saved sign-in removed.');
 });
 function showBlocked({ host, sure }) {
   const banner = $('blocked'), title = document.createElement('strong');
@@ -234,7 +243,7 @@ function showBlocked({ host, sure }) {
 Pebble.addEventListener('ready', event => {
   if (event.target !== 'plugin') return;
   Pebble.sendMessage('plugin', {type:'reach'}).then(r => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
-  run(async () => { render(await send({type:'status'})); if (state.configured && state.organization) { await refresh(); say(describe()); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
+  run(async () => { render(await send({type:'status'})); await detectDuet(); if (state.configured && state.organization) { await refresh(); say(describe()); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
 });
 </script>
 </body>

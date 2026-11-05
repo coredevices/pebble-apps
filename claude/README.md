@@ -14,7 +14,7 @@ must support `web_sign_in` and secure storage; iOS has not been live-tested.
 2. Open Claude plugin settings and sign in with Claude. On hosts without sign-in popup support,
    choose **Continue with email**; the Google popup flow does not complete on those hosts.
 3. Select an organization (required when the account has multiple organizations).
-4. Under **Send messages to**, choose **Claude** (the default) or **Claude Code**.
+4. Under **Send messages to**, choose **Claude** (the default), **Claude Code**, or **Claude Duet**. See the Duet section below.
 5. For Claude, keep **Start a new chat each time** (the default) or choose **Send to a default
    chat**. Claude Code always sends to a default session: a new Code session needs a repository
    and environment, which the plugin does not create.
@@ -26,6 +26,33 @@ Sign-in uses `Pebble.webSignIn` to capture `sessionKey`, verifies membership wit
 `GET /api/organizations`, and stores the credential in `Pebble.secureStorage`. This grants
 account access, not a narrowly scoped messaging permission. Disconnect removes the plugin's saved
 credential; it does not revoke the browser session.
+
+## Claude Duet (opt-in)
+
+After sign-in, organization changes, and reopening settings, the plugin checks for an existing
+Duet conversation. **Claude Duet** appears under **Send messages to** only when that check succeeds.
+Choose it to send messages there. The plugin verifies that your
+account already has an available Duet main conversation before saving the choice. Messages
+without a named chat then go there; `duet`, `Claude Duet`, and `duet:main` target the same
+conversation. This release supports Duet's main conversation, not its rooms or task threads.
+Regular chat IDs, Code IDs, and `new` keep their existing meanings.
+
+Duet is off for new and upgraded installations. Switching away disables Duet routing; changing
+organization clears the opt-in. Existing regular-chat/Code defaults are preserved when switching
+to Duet and back. `agent/chats` includes `duet:main` only while Duet is selected.
+
+The plugin reads `GET /v1/code/aibo/project?omit_timeline=true` with
+`anthropic-client-app: com.anthropic.aibo.web` to discover the main channel, then sends
+`{body, client_message_id}` to `POST /v1/code/channels/{id}/messages`. A valid `message_id`
+is required for the receipt. It rechecks availability before each send and never retries a POST,
+creates a Duet project, or changes connector access, routines, or permissions.
+
+Verified November 5, 2026 in signed-in Chrome: main-channel discovery with the client-app header,
+a plain-text UI send, its server acknowledgment, and Duet's reply. Also verified on a simlock
+Android emulator using the existing CoreApp debug APK from the main checkout: sign-in,
+organization-specific Duet detection (shown for the personal organization, hidden for the team
+organization), selection, and persistence after reopening settings. Android sending and iOS
+remain unverified. Duet uses the existing securely stored Claude session cookie.
 
 ## Contract
 
@@ -39,7 +66,7 @@ The plugin is an Index agent destination (see `agent` in [plugins.md](../plugins
   `instanceId` from `agent/chats`; a nickname or part of a title also resolves. Exact nicknames
   take priority; ambiguous matches fail without sending. Returns a submission receipt, not
   Claude's answer.
-- `agent/chats`: one instance per chat across both kinds (first page of each, most recent first).
+- `agent/chats`: one instance per chat across Claude and Code (plus Duet when selected) (first page of each, most recent first).
   `instanceId` is the chat id (`chat:<uuid>` or `code:<cse_… or session_…>`), `name` is the
   nickname when one is set and otherwise the title; `title` and `url` are also served.
 - `agent/configured`: true when a send without `chat_id` would work: for Claude + new chat, signed

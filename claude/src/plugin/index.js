@@ -7,7 +7,9 @@ var CODE_ID = /^(?:cse_|session_)[A-Za-z0-9_-]{1,120}$/;
 // Parent of the first message in a conversation.
 var ROOT_MESSAGE = '00000000-0000-4000-8000-000000000000';
 var MODES = ['new_chat', 'default_chat'];
-var KINDS = ['claude', 'code'];
+var KINDS = ['claude', 'code', 'duet'];
+var CHANNEL_ID = /^chan_[A-Za-z0-9_-]{1,120}$/;
+var DUET_PROJECT = '/v1/code/aibo/project?omit_timeline=true';
 // chat_id values that always start a new Claude chat; not usable as nicknames.
 var NEW_CHAT = ['new', 'new chat'];
 var HOSTS = ['claude.ai'];
@@ -77,6 +79,7 @@ function validCookie(value) {
 }
 function sessionRef(value) {
   if (typeof value !== 'string') throw invalid('Choose a Claude session.');
+  if (value === 'duet:main') return { kind: 'duet', id: 'main', ref: value };
   var parts = value.split(':');
   if (parts.length !== 2 || !((parts[0] === 'chat' && UUID.test(parts[1])) ||
       (parts[0] === 'code' && CODE_ID.test(parts[1])))) throw invalid('Use a chat id from agent/chats.');
@@ -155,12 +158,13 @@ function createService(storage, fetch, now) {
     if (KINDS.indexOf(state.kind) >= 0) return state.kind;
     return state.mode === 'default_chat' && state.selected && /^code:/.test(state.selected.session_id) ? 'code' : 'claude';
   }
-  // Claude Code has no new-session option: a new Code session needs a repo and environment.
+  // Code needs an existing session; Duet always uses its existing main conversation.
   function mode(state) {
-    return chosenKind(state) === 'code' || (state && state.mode === 'default_chat') ? 'default_chat' : 'new_chat';
+    return chosenKind(state) !== 'claude' || (state && state.mode === 'default_chat') ? 'default_chat' : 'new_chat';
   }
   // The saved default, when it is of the chosen kind.
   function defaultChat(state) {
+    if (state && chosenKind(state) === 'duet' && UUID.test(state.org)) return { session_id: 'duet:main', title: 'Claude Duet' };
     var prefix = chosenKind(state) === 'code' ? 'code:' : 'chat:';
     return state && state.selected && state.selected.session_id.indexOf(prefix) === 0 ? state.selected : null;
   }
@@ -182,10 +186,13 @@ function createService(storage, fetch, now) {
       headers['anthropic-client-platform'] = 'web_claude_ai';
       headers['x-organization-uuid'] = state.org;
     }
+    if (path.indexOf('/v1/code/aibo/') === 0 || path.indexOf('/v1/code/channels/') === 0) {
+      headers['anthropic-client-app'] = 'com.anthropic.aibo.web';
+    }
     if (path.endsWith('/completion')) headers.Accept = 'text/event-stream';
     var response;
     // Org, chat and session ids identify the user's chats.
-    var route = path.split('?')[0].replace(/\/(organizations|chat_conversations|sessions)\/[^/]+/g, '/$1/:id');
+    var route = path.split('?')[0].replace(/\/(organizations|chat_conversations|sessions|channels)\/[^/]+/g, '/$1/:id');
     try {
       response = await fetch(ORIGIN + path, { method: method, headers: headers,
         body: body === undefined ? undefined : JSON.stringify(body) });
@@ -225,9 +232,30 @@ function createService(storage, fetch, now) {
     if (typeof cursor !== 'string' || cursor.length > 4096) throw invalid('Invalid pagination cursor.');
     return '&cursor=' + encodeURIComponent(cursor);
   }
+  function requireDuet(state) {
+    if (chosenKind(state) !== 'duet') throw invalid('Choose Claude Duet in settings before sending to Duet.');
+  }
+  // Read-only lookup: never creates a Duet project or changes its permissions/routines.
+  async function duetProject(state) {
+    orgPath(state);
+    var data = await json(state, DUET_PROJECT), channel = data && data.channel;
+    if (!channel) throw PluginError('NOT_FOUND', 'No Claude Duet conversation is available. Open Duet in Claude first.');
+    if (!CHANNEL_ID.test(channel.id) || channel.template !== 'aibo') throw unavailable();
+    if (channel.archived_at || channel.disabled_at || channel.disabled_by_plan) {
+      throw PluginError('PLUGIN_UNAVAILABLE', 'This Claude Duet conversation is unavailable. Open Duet in Claude first.');
+    }
+    return channel;
+  }
   async function list(state, args) {
     orgPath(state);
     var kind = args.kind || 'chat';
+    if (kind === 'duet') {
+      requireDuet(state);
+      var channel = await duetProject(state);
+      return { sessions: [{ session_id: 'duet:main', kind: 'duet', title: 'Claude Duet',
+        nickname: nickname(state, 'duet:main'), isDefault: true,
+        updated_at: channel.last_message_at || '', url: ORIGIN + '/duet' }], next_cursor: null };
+    }
     if (kind !== 'chat' && kind !== 'code') throw invalid('Choose chat or code.');
     var path = kind === 'chat' ? orgPath(state) + '/chat_conversations' : '/v1/code/sessions';
     var data = await json(state, path + '?limit=100' + cursorParam(args.cursor));
@@ -237,7 +265,7 @@ function createService(storage, fetch, now) {
       var id = kind === 'chat' ? row.uuid : row.id;
       sessionRef(kind + ':' + id);
       return { session_id: kind + ':' + id, kind: kind,
-        nickname: nickname(state, kind + ':' + id), isDefault: !!defaultChat(state) && state.selected.session_id === kind + ':' + id,
+        nickname: nickname(state, kind + ':' + id), isDefault: !!defaultChat(state) && defaultChat(state).session_id === kind + ':' + id,
         title: (kind === 'chat' ? row.name : row.title) || 'Untitled',
         status: row.status || '', connection: row.connection_status || '',
         updated_at: row.updated_at || row.last_event_at || '',
@@ -249,6 +277,10 @@ function createService(storage, fetch, now) {
     return { sessions: sessions, next_cursor: next };
   }
   async function detail(state, ref) {
+    if (ref.kind === 'duet') {
+      requireDuet(state);
+      return Object.assign({}, await duetProject(state), { title: 'Claude Duet' });
+    }
     var path = ref.kind === 'chat' ? orgPath(state) + '/chat_conversations/' + ref.id +
       '?tree=True&rendering_mode=messages&render_all_tools=true' : '/v1/code/sessions/' + ref.id;
     var data = await json(state, path);
@@ -259,6 +291,12 @@ function createService(storage, fetch, now) {
   async function config(message) {
     switch (message && message.type) {
       case 'status': return status(await load());
+      case 'duet_available': {
+        var state = await load();
+        if (!state || !UUID.test(state.org)) return { available: false };
+        try { await duetProject(state); return { available: true }; }
+        catch (_) { return { available: false }; }
+      }
       case 'connect': {
         if (!validCookie(message.session_key)) throw invalid('Claude sign-in did not return a valid session.');
         var orgs = await organizations(message.session_key);
@@ -275,7 +313,8 @@ function createService(storage, fetch, now) {
       }
       case 'kind': {
         var state = await required();
-        if (KINDS.indexOf(message.kind) < 0) throw invalid('Choose claude or code.');
+        if (KINDS.indexOf(message.kind) < 0) throw invalid('Choose claude, code, or duet.');
+        if (message.kind === 'duet') await duetProject(state);
         state.kind = message.kind;
         await save(state);
         return status(state);
@@ -287,6 +326,7 @@ function createService(storage, fetch, now) {
         state.org = message.id;
         state.organizations = orgs;
         state.selected = null;
+        if (state.kind === 'duet') state.kind = 'claude';
         await save(state);
         return status(state);
       }
@@ -294,7 +334,7 @@ function createService(storage, fetch, now) {
       case 'save_session':
       case 'select': {
         var state = await required(), ref = sessionRef(message.session_id);
-        if (message.kind !== undefined && message.kind !== (ref.kind === 'code' ? 'code' : 'claude')) {
+        if (message.kind !== undefined && message.kind !== (ref.kind === 'chat' ? 'claude' : ref.kind)) {
           throw invalid(message.kind === 'code' ? 'Choose a Claude Code session.' : 'Choose a Claude chat.');
         }
         orgPath(state);
@@ -312,7 +352,7 @@ function createService(storage, fetch, now) {
         }
         if (message.type === 'select' || message.makeDefault === true) {
           state.selected = { session_id: ref.ref, title: (ref.kind === 'chat' ? data.name : data.title) || 'Untitled' };
-          state.kind = ref.kind === 'code' ? 'code' : 'claude';
+          state.kind = ref.kind === 'chat' ? 'claude' : ref.kind;
         }
         await save(state);
         return status(state);
@@ -361,6 +401,16 @@ function createService(storage, fetch, now) {
         message_id: messageId, url: ORIGIN + '/chat/' + chat.uuid };
     }
     var data = await detail(state, ref), id = requestId();
+    if (ref.kind === 'duet') {
+      var response = await call(state, 'POST', '/v1/code/channels/' + data.id + '/messages', {
+        body: text, client_message_id: id,
+      });
+      var receipt;
+      try { receipt = await response.json(); } catch (_) { throw uncertain(); }
+      if (!receipt || typeof receipt.message_id !== 'string' || !/^cmsg_[A-Za-z0-9_-]{1,160}$/.test(receipt.message_id)) throw uncertain();
+      return { text: 'Message submitted to Claude Duet.', session_id: ref.ref,
+        message_id: receipt.message_id, url: ORIGIN + '/duet' };
+    }
     if (ref.kind === 'code') {
       if (data.status === 'archived') throw invalid('This Code session is archived. Reopen it in Claude first.');
       if (data.environment_kind === 'bridge' && data.connection_status !== 'connected') {
@@ -391,20 +441,26 @@ function createService(storage, fetch, now) {
         'No default Claude chat yet. Pick one in settings, or name a chat.');
       return sessionRef(selected.session_id);
     }
-    if (/^(chat|code):/.test(query)) return sessionRef(chatId.trim());
+    if (/^(chat|code|duet):/.test(query)) return sessionRef(chatId.trim());
     var names = nicknames(state), ids = Object.keys(names);
     var exact = ids.filter(function (id) { return names[id].toLowerCase() === query; });
     if (exact.length === 1) return sessionRef(exact[0]);
+    if (chosenKind(state) === 'duet' && (query === 'duet' || query === 'claude duet')) return sessionRef('duet:main');
     var partial = ids.filter(function (id) { return names[id].toLowerCase().indexOf(query) >= 0; });
     if (partial.length === 1) return sessionRef(partial[0]);
     if (partial.length > 1) throw invalid('Multiple Claude nicknames match. Use an exact nickname or chat id.');
     var matches = [];
-    for (var kind of ['chat', 'code']) {
+    for (var kind of (chosenKind(state) === 'duet' ? ['chat', 'code', 'duet'] : ['chat', 'code'])) {
       var cursor = null, seen = Object.create(null), pages = 0;
       do {
         if (++pages > 50 || (cursor && seen[cursor])) throw invalid('Could not search every chat. Use an exact nickname or chat id.');
         if (cursor) seen[cursor] = true;
-        var page = await list(state, { kind: kind, cursor: cursor });
+        var page;
+        try { page = await list(state, { kind: kind, cursor: cursor }); }
+        catch (error) {
+          if (kind !== 'duet') throw error;
+          break; // Optional Duet availability must not block regular chat searches.
+        }
         page.sessions.forEach(function (row) {
           if (row.session_id.split(':')[1].toLowerCase() === query || row.title.toLowerCase().indexOf(query) >= 0) {
             if (!matches.some(function (other) { return other.session_id === row.session_id; })) matches.push(row);
@@ -446,7 +502,10 @@ function createService(storage, fetch, now) {
     state = await required();
     orgPath(state);
     var rows = [];
-    for (var kind of ['chat', 'code']) rows = rows.concat((await list(state, { kind: kind })).sessions);
+    for (var kind of (chosenKind(state) === 'duet' ? ['chat', 'code', 'duet'] : ['chat', 'code'])) {
+      try { rows = rows.concat((await list(state, { kind: kind })).sessions); }
+      catch (error) { if (kind !== 'duet') throw error; }
+    }
     rows.sort(function (a, b) { return (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0); });
     return { validUntilMs: now() + 900000, instances: rows.map(function (row) {
       return { instanceId: row.session_id, properties: {

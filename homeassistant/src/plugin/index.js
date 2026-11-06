@@ -461,18 +461,56 @@ function automationInstances(snap) {
     });
 }
 
+// What a binary sensor's on and off mean, by device class, in Home Assistant's own words.
+var BINARY_STATES = {
+  door: ['Open', 'Closed'], garage_door: ['Open', 'Closed'], window: ['Open', 'Closed'], opening: ['Open', 'Closed'],
+  lock: ['Unlocked', 'Locked'],
+  motion: ['Detected', 'Clear'], occupancy: ['Detected', 'Clear'], presence: ['Home', 'Away'],
+  moisture: ['Wet', 'Dry'], smoke: ['Detected', 'Clear'], gas: ['Detected', 'Clear'],
+  carbon_monoxide: ['Detected', 'Clear'], sound: ['Detected', 'Clear'], vibration: ['Detected', 'Clear'],
+  tamper: ['Tampered', 'Clear'], problem: ['Problem', 'OK'], safety: ['Unsafe', 'Safe'],
+  battery: ['Low', 'Normal'], battery_charging: ['Charging', 'Not charging'],
+  cold: ['Cold', 'Normal'], heat: ['Hot', 'Normal'], light: ['Light', 'No light'],
+  connectivity: ['Connected', 'Disconnected'], plug: ['Plugged in', 'Unplugged'], power: ['Power', 'No power'],
+  moving: ['Moving', 'Stopped'], running: ['Running', 'Not running'], update: ['Update', 'Up to date'],
+};
+
+/**
+ * A sensor's reading as the shapes it has: a number with its unit; a binary sensor's state as a
+ * boolean and its words ("Closed"); a moment as a timestamp; anything else as text.
+ */
+function sensorValue(e) {
+  if (!isOnline(e)) return { shortText: { text: '--' }, longText: { text: 'Unavailable' } };
+  var unit = e.attrs.unit_of_measurement;
+  if (e.domain === 'binary_sensor') {
+    var on = e.state === 'on';
+    var words = BINARY_STATES[e.attrs.device_class] || ['On', 'Off'];
+    var word = on ? words[0] : words[1];
+    return { boolean: { value: on }, shortText: { text: word }, longText: { text: word } };
+  }
+  if (e.state !== '' && isFinite(Number(e.state)) && (unit != null || e.attrs.state_class)) {
+    var reading = number(Number(e.state), unit);
+    reading.longText = { text: reading.shortText.text };
+    return reading;
+  }
+  if (e.attrs.device_class === 'timestamp') {
+    var at = Date.parse(e.state);
+    if (!isNaN(at)) return { timestamp: { value: Math.floor(at / 1000) }, longText: { text: e.state } };
+  }
+  return { shortText: { text: e.state }, longText: { text: e.state + (unit ? ' ' + unit : '') } };
+}
+
 function sensorInstances(snap) {
   return snap.entities
-    .filter(function (e) {
-      return e.domain === 'sensor' && e.state !== '' && isFinite(Number(e.state)) && e.attrs.unit_of_measurement != null;
-    })
+    .filter(function (e) { return e.domain === 'sensor' || e.domain === 'binary_sensor'; })
     .map(function (e) {
       var properties = {
         name: shortText(e.name),
         room: shortText(e.areaName || 'Unassigned'),
-        value: number(Number(e.state), e.attrs.unit_of_measurement),
+        value: sensorValue(e),
       };
-      if (e.attrs.device_class) properties.kind = shortText(e.attrs.device_class);
+      var kind = e.attrs.device_class || (e.domain === 'binary_sensor' ? 'binary' : null);
+      if (kind) properties.kind = shortText(kind);
       return { instanceId: e.id, properties: properties };
     });
 }

@@ -1,6 +1,6 @@
 # Home Assistant
 
-The user's own Home Assistant: lights, rooms, switches, fans, covers, speakers, thermostats, locks, sensors, scenes, scripts and automations. Reads their state; turns things on and off, dims lights, sets colour, volume and temperature, locks and unlocks, and runs scenes, scripts and automations. It cannot add, change or delete anything in Home Assistant's configuration.
+The user's own Home Assistant: lights, rooms, switches, fans, covers, speakers, thermostats, locks, sensors (including door, window, motion and leak sensors), scenes, scripts and automations. Reads their state; turns things on and off, dims lights, sets colour, volume and temperature, locks and unlocks, and runs scenes, scripts and automations. It cannot add, change or delete anything in Home Assistant's configuration.
 
 In plugin settings, enter Home Assistant's local address, optionally a remote address for when you're away, and a long-lived access token (Home Assistant → your profile → Security). The plugin uses whichever address answered last and falls back to the other.
 
@@ -78,4 +78,4 @@ Read by Index and agents; `instanceId` values in the functions above come from t
 - `home/home_lights`: name, on, brightness
 - `home/device`: name, room, type, online, on, brightness, color_temperature, speed, position, volume, muted, media_title, locked, thermostat_mode, setpoint, ambient_temperature
 - `home/automation`: name, type, manually_runnable, enabled, last_run
-- `home/sensor`: name, room, value, kind
+- `home/sensor`: name, room, value, kind. Every `sensor` and `binary_sensor`: numbers with their unit, binary sensors as a boolean and their state in words (`Open`/`Closed`, `Detected`/`Clear`…), timestamps, and anything else as text. `kind` is the device class, such as `door` or `temperature`.

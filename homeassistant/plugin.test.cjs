@@ -198,9 +198,38 @@ test('automations and sensors', async () => {
   assert.deepStrictEqual(Object.keys(automations).sort(), ['automation.morning', 'scene.movie', 'script.good_night']);
   assert.strictEqual(automations['automation.morning'].last_run.timestamp.value, Date.parse('2026-11-05T07:00:00Z') / 1000);
   const sensors = plugin.byId((await plugin.source('sensor')).data.instances);
-  assert.deepStrictEqual(Object.keys(sensors), ['sensor.temp']);
+  assert.deepStrictEqual(Object.keys(sensors), ['sensor.temp', 'sensor.weather']);
   assert.strictEqual(sensors['sensor.temp'].value.shortText.text, '21.4°C');
+  assert.strictEqual(sensors['sensor.temp'].value.numericValue.value, 21.37);
   assert.strictEqual(sensors['sensor.temp'].room.shortText.text, 'Living Room');
+  assert.strictEqual(sensors['sensor.weather'].value.longText.text, 'sunny');
+});
+
+test('a door sensor reports open or closed, next to its battery and voltage', async () => {
+  const home = fakeHome();
+  home.states.push(
+    entity('binary_sensor.myggbett_door', 'off', { friendly_name: 'MYGGBETT door/window sensor', device_class: 'door' }),
+    entity('sensor.myggbett_battery', '87', { friendly_name: 'MYGGBETT door/window sensor Battery', unit_of_measurement: '%', device_class: 'battery' }),
+    entity('sensor.myggbett_voltage', '2.9', { friendly_name: 'MYGGBETT door/window sensor Voltage', unit_of_measurement: 'V', device_class: 'voltage' }),
+    entity('binary_sensor.hall_motion', 'on', { friendly_name: 'Hall Motion', device_class: 'motion' }),
+    entity('binary_sensor.leak', 'unavailable', { friendly_name: 'Leak', device_class: 'moisture' }),
+    entity('binary_sensor.thing', 'on', { friendly_name: 'Thing' }),
+    entity('sensor.last_boot', '2026-11-06T08:00:00+00:00', { friendly_name: 'Last Boot', device_class: 'timestamp' }),
+  );
+  const plugin = await connected({ home });
+  const sensors = JSON.parse(JSON.stringify(plugin.byId((await plugin.source('sensor')).data.instances)));
+  assert.deepStrictEqual(sensors['binary_sensor.myggbett_door'], {
+    name: { shortText: { text: 'MYGGBETT door/window sensor' } },
+    room: { shortText: { text: 'Unassigned' } },
+    value: { boolean: { value: false }, shortText: { text: 'Closed' }, longText: { text: 'Closed' } },
+    kind: { shortText: { text: 'door' } },
+  });
+  assert.strictEqual(sensors['sensor.myggbett_battery'].value.shortText.text, '87%');
+  assert.strictEqual(sensors['binary_sensor.hall_motion'].value.shortText.text, 'Detected');
+  assert.strictEqual(sensors['binary_sensor.leak'].value.longText.text, 'Unavailable');
+  assert.strictEqual(sensors['binary_sensor.thing'].value.shortText.text, 'On');
+  assert.strictEqual(sensors['binary_sensor.thing'].kind.shortText.text, 'binary');
+  assert.strictEqual(sensors['sensor.last_boot'].value.timestamp.value, Date.parse('2026-11-06T08:00:00Z') / 1000);
 });
 
 test('a hidden room disappears everywhere', async () => {

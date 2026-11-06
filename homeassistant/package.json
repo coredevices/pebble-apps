@@ -22,7 +22,7 @@
       }
     ],
     "plugin": {
-      "description": "The user's own Home Assistant: lights, rooms, switches, fans, covers, speakers, thermostats, locks, sensors, scenes, scripts and automations. Reads their state; turns things on and off, dims lights, sets colour, volume and temperature, locks and unlocks, and runs scenes, scripts and automations. It cannot add, change or delete anything in Home Assistant's configuration.",
+      "description": "The user's own Home Assistant: lights, rooms, switches, fans, covers, speakers, thermostats, locks, sensors (including door, window, motion and leak sensors), scenes, scripts and automations. Reads their state; turns things on and off, dims lights, sets colour, volume and temperature, locks and unlocks, and runs scenes, scripts and automations. It cannot add, change or delete anything in Home Assistant's configuration.",
       "script": "src/plugin/index.js",
       "definesPermissions": [
         {
@@ -185,7 +185,10 @@
             ],
             "value": [
               "numericValue",
-              "shortText"
+              "boolean",
+              "timestamp",
+              "shortText",
+              "longText"
             ],
             "kind": [
               "shortText"

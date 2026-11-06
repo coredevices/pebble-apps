@@ -1,0 +1,1049 @@
+{
+  "name": "homeassistant",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test plugin.test.cjs"
+  },
+  "pebble": {
+    "displayName": "Home Assistant",
+    "uuid": "31f5b241-8019-4680-a20f-765488b829d3",
+    "sdkVersion": "3",
+    "configPage": "src/config.html",
+    "usesPermissions": [
+      "LocalNetwork",
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "ui.nabu.casa"
+          ]
+        }
+      }
+    ],
+    "plugin": {
+      "description": "The user's own Home Assistant: lights, rooms, switches, fans, covers, speakers, thermostats, locks, sensors, scenes, scripts and automations. Reads their state; turns things on and off, dims lights, sets colour, volume and temperature, locks and unlocks, and runs scenes, scripts and automations. It cannot add, change or delete anything in Home Assistant's configuration.",
+      "script": "src/plugin/index.js",
+      "definesPermissions": [
+        {
+          "name": "HomeControl",
+          "label": "Control your home",
+          "kind": "write"
+        }
+      ],
+      "sources": [
+        {
+          "category": "home",
+          "items": [
+            "room_lights",
+            "light"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "on": [
+              "boolean",
+              "shortText"
+            ],
+            "brightness": [
+              "numericValue",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "home_lights"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "on": [
+              "boolean",
+              "shortText"
+            ],
+            "brightness": [
+              "numericValue",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "device"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "room": [
+              "shortText"
+            ],
+            "type": [
+              "shortText"
+            ],
+            "online": [
+              "boolean",
+              "shortText"
+            ],
+            "on": [
+              "boolean",
+              "shortText"
+            ],
+            "brightness": [
+              "numericValue",
+              "shortText"
+            ],
+            "color_temperature": [
+              "numericValue",
+              "shortText"
+            ],
+            "speed": [
+              "numericValue",
+              "shortText"
+            ],
+            "position": [
+              "numericValue",
+              "shortText"
+            ],
+            "volume": [
+              "numericValue",
+              "shortText"
+            ],
+            "muted": [
+              "boolean",
+              "shortText"
+            ],
+            "media_title": [
+              "longText"
+            ],
+            "locked": [
+              "boolean",
+              "shortText"
+            ],
+            "thermostat_mode": [
+              "shortText"
+            ],
+            "setpoint": [
+              "numericValue",
+              "shortText"
+            ],
+            "ambient_temperature": [
+              "numericValue",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "suggestedRefreshIntervalSec": 30
+        },
+        {
+          "category": "home",
+          "items": [
+            "automation"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "type": [
+              "shortText"
+            ],
+            "manually_runnable": [
+              "boolean",
+              "shortText"
+            ],
+            "enabled": [
+              "boolean",
+              "shortText"
+            ],
+            "last_run": [
+              "timestamp"
+            ]
+          },
+          "supportsMultiple": true,
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "home",
+          "items": [
+            "sensor"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "room": [
+              "shortText"
+            ],
+            "value": [
+              "numericValue",
+              "shortText"
+            ],
+            "kind": [
+              "shortText"
+            ]
+          },
+          "supportsMultiple": true,
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
+      "actions": [
+        {
+          "name": "toggle",
+          "description": "Turn a device, a room or the whole home on if it is off, or off if anything in it is on. Covers open and close.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/home_lights/on",
+            "home/room_lights/on",
+            "home/light/on",
+            "home/device/on"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_on",
+          "description": "Turn devices, a room or the whole home on or off. A room alone means everything in it; for just its lights add type light. \"Turn on the lights\" with no room is type light. Covers open and close.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "on": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "on"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/home_lights/on",
+            "home/room_lights/on",
+            "home/light/on",
+            "home/device/on"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_brightness",
+          "description": "Set light brightness as a percentage. 0 turns them off.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "percent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "percent"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/home_lights/brightness",
+            "home/room_lights/brightness",
+            "home/light/brightness",
+            "home/device/brightness"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_color_temperature",
+          "description": "Set white colour temperature in Kelvin on matching lights, for example 2700 warm or 6500 cool.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "kelvin": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 10000
+              }
+            },
+            "required": [
+              "kelvin"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/home_lights/on",
+            "home/room_lights/on",
+            "home/light/on",
+            "home/device/color_temperature"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_color",
+          "description": "Set matching colour lights to a named colour, such as red, blue or orange.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "color": {
+                "type": "string",
+                "description": "A CSS colour name."
+              }
+            },
+            "required": [
+              "color"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/home_lights/on",
+            "home/room_lights/on",
+            "home/light/on"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_volume",
+          "description": "Set volume as a percentage on matching speakers and TVs.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "percent": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "percent"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device/volume"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_muted",
+          "description": "Mute or unmute matching speakers and TVs.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "muted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "muted"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device/muted"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "media_control",
+          "description": "Play, pause, stop or skip on matching speakers and TVs.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "command": {
+                "type": "string",
+                "enum": [
+                  "play",
+                  "pause",
+                  "play_pause",
+                  "stop",
+                  "next",
+                  "previous"
+                ]
+              }
+            },
+            "required": [
+              "command"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "set_thermostat",
+          "description": "Set the target temperature and/or mode of matching thermostats. Give Celsius or Fahrenheit and/or a mode.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "temperature_c": {
+                "type": "number",
+                "description": "Target in Celsius."
+              },
+              "temperature_f": {
+                "type": "number",
+                "description": "Target in Fahrenheit."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "heat",
+                  "cool",
+                  "heat_cool",
+                  "auto",
+                  "dry",
+                  "fan_only"
+                ]
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device/setpoint",
+            "home/device/thermostat_mode"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "lock",
+          "description": "Lock matching smart locks.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device/locked"
+          ],
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "unlock",
+          "description": "Unlock matching smart locks, only when the user explicitly asks to.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "home_lights",
+                  "room_lights",
+                  "light",
+                  "device",
+                  "automation"
+                ],
+                "description": "Which kind of thing instanceId names."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from the matching home/* source: an entity id, an area id, or \"home\"."
+              },
+              "name": {
+                "type": "string",
+                "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated."
+              },
+              "room": {
+                "type": "string",
+                "description": "Room (Home Assistant area) name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type such as light, switch, outlet, fan, cover, speaker, tv, thermostat or lock, or all for every kind."
+              },
+              "code": {
+                "type": "string",
+                "description": "Lock code, if the lock needs one."
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/device/locked"
+          ],
+          "destructive": true,
+          "requiresConfirmation": true,
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        },
+        {
+          "name": "run_automation",
+          "description": "Run an existing scene, script or automation by name or id. This never creates, changes or deletes one.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string",
+                "enum": [
+                  "automation"
+                ],
+                "description": "Always automation."
+              },
+              "instanceId": {
+                "type": "string",
+                "description": "Id from home/automation, such as scene.movie_night."
+              },
+              "name": {
+                "type": "string",
+                "description": "Scene, script or automation name, exact preferred; otherwise case-insensitive substring."
+              }
+            },
+            "anyOf": [
+              {
+                "required": [
+                  "instanceId"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              }
+            ]
+          },
+          "targets": [
+            "home/automation"
+          ],
+          "destructive": true,
+          "requiresConfirmation": false,
+          "callerPermissions": [
+            "HomeControl"
+          ]
+        }
+      ]
+    },
+    "projectType": "plugin"
+  }
+}

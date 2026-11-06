@@ -36,6 +36,7 @@ An app that isn't a plugin and declares no permissions (`compass`, `sliding-text
 |---|---|---|
 | `apple-notes` | `npm ci && npm run build` | `npm test` |
 | `googlehome` | `npm ci && npm run build` | `npm test` |
+| `homeassistant` | none | `npm test` |
 | `chatgpt` | `npm ci && npm run build` | `npm test` |
 | `location-sharing` | `npm ci --prefix ../chat/imessage && npm ci && node scripts/build-plugin.mjs` | `node --test plugin.test.cjs test/*.test.cjs` |
 | `chat` | `npm ci --prefix imessage && node scripts/build-plugin.mjs` | `node --test *.test.cjs` |
@@ -70,6 +71,7 @@ takes PNGs on white: `rsvg-convert -w 144 -h 144 -b white src/icon.svg` (large) 
 | `google-tasks-keep` | Google Tasks & Keep |
 | `googlehome` | Google Home |
 | `grok-bot` | Grok Bot |
+| `homeassistant` | Home Assistant |
 | `hue` | Hue |
 | `location-sharing` | Location Sharing |
 | `met-weather` | MET Norway Weather |

@@ -6,8 +6,9 @@ the PCM to our proxy for the AudD recognition API, and the watch shows the title
 the phone and listed on the watch's main screen.
 
 Targets: **emery** (Pebble Time 2), **flint** (Pebble 2 Duo), **gabbro**
-(Pebble Round 2). Requires an SDK with the `MicStream` API (revision 110 or
-later) and a phone app that decodes the stream into `audiostream` events.
+(Pebble Round 2). Requires SDK 4.44 or later, for the `MicStream` API and
+`layer_get_mic_accessory_bounds()`, so the watch needs firmware 4.44.3 or
+later. The phone app must decode the stream into `audiostream` events.
 
 ## Controls
 
@@ -28,7 +29,7 @@ Card
 
 | State | SELECT | UP / DOWN | BACK |
 |-------|--------|-----------|------|
-| Listening… (countdown) | After 3 s: stop and identify what was captured so far. Before 3 s: ignored | – | Back to the menu (the stream stops; if the phone already had 3 s it still identifies and the history updates) |
+| Listening (countdown) | After 3 s: stop and identify what was captured so far. Before 3 s: ignored | – | Back to the menu (the stream stops; if the phone already had 3 s it still identifies and the history updates) |
 | Identifying… | – | – | Back to the menu |
 | Result / No match / Error | Start a new listen | Scroll long titles | Back to the menu |
 
@@ -36,10 +37,15 @@ The countdown shows `10 − seconds the phone has actually received`, driven by
 `SECONDS` messages from pkjs. The watch enforces the 10 s limit with its own
 timer and stops the stream itself.
 
-While streaming, the firmware draws its own "Listening" banner and shrinks the
-app's unobstructed area; the card lays itself out from
+While streaming, the firmware draws its own "Listening" indicator and shrinks
+the app's unobstructed area; the card lays itself out from
 `layer_get_unobstructed_bounds()` and redraws when the area changes. The app
-draws no microphone indicator of its own.
+draws no microphone indicator or "Listening" title of its own: the card shows
+just the countdown. On emery and flint the indicator shrinks into the
+bottom-left corner after 3 s, and the card shows its hint (*Waiting for
+phone…*, *SELECT to identify*) next to it, in the area
+`layer_get_mic_accessory_bounds()` returns. On gabbro there is no room beside
+the indicator, so the hint stays in the card.
 
 ## Recognition service
 
@@ -168,10 +174,11 @@ test/plugin.test.cjs   plugin source tests (`npm test`)
    returns `MicStreamStartErrUnavailable`; the card shows *Can't listen* with
    that diagnostic.
 4. **Identify.** Play a song near the watch, press SELECT on **Identify**. The
-   watch shows *Listening…*, the firmware's "Listening" banner appears at the
-   bottom, the countdown falls as the phone receives audio. After 10 s (or on
-   SELECT after 3 s) the card shows *Identifying…* and then the title, artist
-   and album with a short vibration, within a few seconds.
+   firmware's "Listening" indicator appears at the bottom and the card's
+   countdown falls as the phone receives audio. On emery and flint, *SELECT to
+   identify* appears next to the indicator after 3 s. After 10 s (or on SELECT
+   after 3 s) the card shows *Identifying…* and then the title, artist and
+   album with a short vibration, within a few seconds.
    Phone log: `audiostreamstart`, `audiostreamstop after 10.0 s (320000 bytes)`,
    `POST <service URL> (320000 byte PCM, 426746 byte body)`, `HTTP 200 {"status":"match",…}`, `Match: …`.
 5. **History.** Press BACK: the new match is the first row under **Identify**.

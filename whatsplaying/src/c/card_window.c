@@ -4,14 +4,19 @@
 #include "whatsplaying.h"
 
 // One window, four looks:
-//   Listening   "Listening…" + countdown (fed by SECONDS from the phone)
+//   Listening   countdown (fed by SECONDS from the phone); the system's mic
+//               indicator already says it is listening
 //   Identifying "Identifying…" while pkjs talks to the recognition service
 //   Result      title / artist / album (from a fresh match or from history)
 //   Message     "No match", errors and start-failure texts
 //
 // The content is three TextLayers stacked inside a ScrollLayer, laid out from
-// layer_get_unobstructed_bounds() so the firmware's "Listening" banner never
+// layer_get_unobstructed_bounds() so the firmware's "Listening" indicator never
 // covers anything. Long titles scroll with UP/DOWN.
+//
+// While listening, the hint (line 2) goes next to the indicator once it has
+// shrunk into the corner (layer_get_mic_accessory_bounds()). Where there is no
+// room beside it, as on round displays, the hint stays in the card.
 
 typedef enum CardMode {
   CardModeListening,
@@ -28,6 +33,8 @@ static ScrollLayer *s_scroll;
 static TextLayer *s_lines[3];
 static GFont s_fonts[3];
 static char s_text[3][96];
+static Layer *s_accessory;      // full-window overlay that draws next to the mic indicator
+static char s_short_hint[32];   // the listening hint as it fits next to the indicator
 
 static CardMode s_mode;
 static bool s_session_active;   // a listen was started from this card and is not resolved yet
@@ -65,6 +72,51 @@ static const char *prv_stop_reason_name(MicStreamStopReason reason) {
 }
 
 // ---------------------------------------------------------------------------
+// Next to the mic indicator
+// ---------------------------------------------------------------------------
+
+// The listening hint goes beside the indicator when the system leaves room for it
+static bool prv_hint_beside_indicator(GRect *area_out) {
+  GRect area;
+  if (!area_out) {
+    area_out = &area;
+  }
+  return s_mode == CardModeListening && s_short_hint[0] != '\0' &&
+         layer_get_mic_accessory_bounds(s_accessory, area_out);
+}
+
+static void prv_accessory_update(Layer *layer, GContext *ctx) {
+  GRect area;
+  if (!prv_hint_beside_indicator(&area)) {
+    return;
+  }
+  area = grect_inset(area, GEdgeInsets(0, area.size.w >= 140 ? 8 : 6));
+
+  // The largest font that fits on one line; Gothic draws a few pixels below the box top
+  static const struct { const char *key; int line_h; int top_pad; } fonts[] = {
+    { FONT_KEY_GOTHIC_18_BOLD, 18, 4 },
+    { FONT_KEY_GOTHIC_14_BOLD, 14, 3 },
+    { FONT_KEY_GOTHIC_14, 14, 3 },
+  };
+  const size_t count = sizeof(fonts) / sizeof(fonts[0]);
+  size_t pick = count - 1;
+  for (size_t i = 0; i < count - 1; i++) {
+    const GSize size = graphics_text_layout_get_content_size(
+        s_short_hint, fonts_get_system_font(fonts[i].key), GRect(0, 0, 1000, 100),
+        GTextOverflowModeFill, GTextAlignmentLeft);
+    if (size.w <= area.size.w && fonts[i].line_h + 4 <= area.size.h) {
+      pick = i;
+      break;
+    }
+  }
+  const int y = area.origin.y + (area.size.h - fonts[pick].line_h) / 2 - fonts[pick].top_pad;
+  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_draw_text(ctx, s_short_hint, fonts_get_system_font(fonts[pick].key),
+                     GRect(area.origin.x, y, area.size.w, fonts[pick].line_h + 6),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+}
+
+// ---------------------------------------------------------------------------
 // Layout
 // ---------------------------------------------------------------------------
 
@@ -75,12 +127,18 @@ static void prv_layout(void) {
   Layer *root = window_get_root_layer(s_window);
   const GRect bounds = layer_get_unobstructed_bounds(root);
   layer_set_frame(scroll_layer_get_layer(s_scroll), bounds);
+  if (s_accessory) {
+    layer_mark_dirty(s_accessory);
+  }
+
+  // Leave the hint out of the card while it is shown beside the indicator
+  const bool hint_beside = prv_hint_beside_indicator(NULL);
 
   const int width = bounds.size.w - 2 * PADDING;
   int heights[3];
   int total = 0;
   for (int i = 0; i < 3; i++) {
-    if (s_text[i][0] == '\0') {
+    if (s_text[i][0] == '\0' || (i == 2 && hint_beside)) {
       heights[i] = 0;
       continue;
     }
@@ -117,6 +175,13 @@ static void prv_set_line(int i, const char *text, GFont font) {
   text_layer_set_text(s_lines[i], s_text[i]);
 }
 
+// Line 2 while listening, and the shorter form shown beside the mic indicator
+static void prv_set_hint(const char *text, const char *short_text) {
+  prv_set_line(2, text, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  strncpy(s_short_hint, short_text, sizeof(s_short_hint) - 1);
+  s_short_hint[sizeof(s_short_hint) - 1] = '\0';
+}
+
 static void prv_show_message(const char *headline, const char *detail, GFont detail_font,
                              const char *hint) {
   s_mode = CardModeMessage;
@@ -148,9 +213,9 @@ static void prv_update_countdown(int seconds_received) {
 
 static void prv_show_listening(void) {
   s_mode = CardModeListening;
-  prv_set_line(0, "Listening…", fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  prv_set_line(0, "", fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   prv_update_countdown(0);
-  prv_set_line(2, "Waiting for phone…", fonts_get_system_font(FONT_KEY_GOTHIC_14));
+  prv_set_hint("Waiting for phone…", "Waiting for phone…");
   prv_layout();
 }
 
@@ -192,7 +257,7 @@ static void prv_tick(void *context) {
     return;
   }
   if (s_mode == CardModeListening && s_elapsed_seconds == MIN_LISTEN_SECONDS) {
-    prv_set_line(2, "SELECT to identify now", fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    prv_set_hint("SELECT to identify now", "SELECT to identify");
     prv_layout();
   }
   s_tick_timer = app_timer_register(1000, prv_tick, NULL);
@@ -205,7 +270,7 @@ static void prv_stream_started(void *context) {
   prv_cancel_tick();
   s_tick_timer = app_timer_register(1000, prv_tick, NULL);
   if (s_mode == CardModeListening) {
-    prv_set_line(2, "", fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    prv_set_hint("", "");
     prv_layout();
   }
 }
@@ -252,6 +317,8 @@ static void prv_begin_listen(void) {
     return;
   }
   s_streaming = true;
+  // The mic is on: the hint can move next to the indicator
+  prv_layout();
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +376,10 @@ static void prv_window_load(Window *window) {
   }
   layer_add_child(root, scroll_layer_get_layer(s_scroll));
 
+  s_accessory = layer_create(layer_get_bounds(root));
+  layer_set_update_proc(s_accessory, prv_accessory_update);
+  layer_add_child(root, s_accessory);
+
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers) {
     .did_change = prv_unobstructed_did_change,
   }, NULL);
@@ -326,6 +397,8 @@ static void prv_window_unload(Window *window) {
     text_layer_destroy(s_lines[i]);
     s_lines[i] = NULL;
   }
+  layer_destroy(s_accessory);
+  s_accessory = NULL;
   scroll_layer_destroy(s_scroll);
   s_scroll = NULL;
   window_destroy(s_window);

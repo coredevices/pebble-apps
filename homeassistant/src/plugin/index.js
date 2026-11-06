@@ -608,11 +608,16 @@ function kindNamed(name) {
  * `item` + `instanceId`, or any of `name`, `room` and `type` together.
  *
  * Lights stay lights: anything read from home/home_lights or home/room_lights, the id "home", a
- * type of light, or a name that only says "lights" never reaches other kinds of device. A room
- * on its own, with no kind, means everything in it.
+ * room's id, a type of light, or a name that only says "lights" never reaches other kinds of
+ * device. The `room` selector on its own, with no kind, means everything in the room.
  */
+// Items that are lights by name: whatever else an action's arguments say, they only reach lights.
+var LIGHT_ITEMS = ['light', 'room_lights', 'home_lights'];
+
 function resolve(snap, args, domains) {
   var capable = snap.entities.filter(function (e) { return domains.indexOf(e.domain) !== -1; });
+  // Before anything else, so no other selector can widen it.
+  if (LIGHT_ITEMS.indexOf(args.item) !== -1) capable = lightsOnly(capable);
   var id = args.instanceId != null ? String(args.instanceId) : '';
   var type = lower(args.type);
   if (ALL_TYPES.indexOf(type) !== -1) type = '';
@@ -629,12 +634,18 @@ function resolve(snap, args, domains) {
     if (args.item === 'home_lights' || id === HOME_ID) return lightsOnly(capable);
     var entity = capable.filter(function (e) { return e.id === id; });
     if (entity.length) return entity;
-    // A room's id, from home/room_lights (its lights) or given as a bare area id (all of it).
-    var area = snap.areas.filter(function (a) { return a.id === id; })[0];
+    // A room as an instance: only home/room_lights has rooms as instances, so it's that room's
+    // lights, whether or not the caller said so with `item` (the dashboard demo only sends `item`
+    // when an action requires it). A whole room is the `room` selector's job. A type other than
+    // light can still be asked for explicitly.
+    var area = snap.areas.filter(function (a) { return a.id === id; })[0] ||
+      snap.areas.filter(function (a) { return lower(a.name) === lower(id); })[0];
     if (area) {
       var inArea = capable.filter(function (e) { return e.areaId === area.id; });
-      if (args.item === 'room_lights') return lightsOnly(inArea);
-      return type ? inArea.filter(function (e) { return typeMatches(e, type); }) : inArea;
+      if (args.item && args.item !== 'room_lights' && type) {
+        return inArea.filter(function (e) { return typeMatches(e, type); });
+      }
+      return lightsOnly(inArea);
     }
     if (snap.entities.some(function (e) { return e.id === id; })) {
       throw PluginError('INVALID_ARGS', 'That device cannot do this.');
@@ -643,6 +654,12 @@ function resolve(snap, args, domains) {
   }
 
   var room = lower(args.room);
+  // A room_lights call naming its room as a name means the room.
+  if (args.item === 'room_lights' && name && !room &&
+      snap.areas.some(function (a) { return lower(a.name) === name; })) {
+    room = name;
+    name = '';
+  }
   if (!name && !room && !type && !args.type) {
     throw PluginError('INVALID_ARGS', 'Say which device: give instanceId, or a name, room or type. For every light in the home, use type "light".');
   }

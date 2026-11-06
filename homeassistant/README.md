@@ -28,7 +28,7 @@ Turn a device, a room or the whole home on if it is off, or off if anything in i
 
 Turn devices, a room or the whole home on or off. Covers open and close.
 
-A room alone means everything in it; add type `light` for just its lights. Lights stay lights: the `home` id, anything from `home/home_lights` or `home/room_lights`, type `light`, and a name like "the lights" never switch other kinds of device.
+The `room` selector alone means everything in the room; add type `light` for just its lights. Lights stay lights: the `home` id, a room's id (from `home/room_lights`, with or without `item`), anything else from `home/home_lights` or `home/room_lights`, type `light`, and a name like "the lights" never switch other kinds of device.
 
 ### `set_brightness(selector, percent)`
 

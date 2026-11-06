@@ -298,9 +298,57 @@ test('lights in a room, however they are named', async () => {
   assert.deepStrictEqual(plugin.services().map((s) => s.body.entity_id.join()), ['light.sofa,light.ceiling', 'light.sofa,light.ceiling']);
 });
 
-test('a bare area id is the whole room', async () => {
+// However a room_lights call names the room, it reaches the room's lights and nothing else.
+for (const [label, args] of [
+  ['its area id', { item: 'room_lights', instanceId: 'living_room' }],
+  ['its name as instanceId', { item: 'room_lights', instanceId: 'Living Room' }],
+  ['a room selector', { item: 'room_lights', room: 'Living Room' }],
+  ['an area id and type all', { item: 'room_lights', instanceId: 'living_room', type: 'all' }],
+  ['a room selector and type all', { item: 'room_lights', room: 'living room', type: 'all' }],
+  ['its name as name', { item: 'room_lights', name: 'Living Room' }],
+]) {
+  test(`room_lights by ${label} switches only that room's lights`, async () => {
+    const home = fakeHome();
+    home.areas[0].entities.push('climate.hall', 'media_player.kitchen', 'switch.kettle');
+    const plugin = await connected({ home });
+    for (const action of [['set_on', { on: true }], ['toggle', {}], ['set_on', { on: false }]]) {
+      plugin.calls.length = 0;
+      const result = await plugin.action(action[0], { ...args, ...action[1] });
+      assert.ok(result.ok, `${action[0]}: ${result.message}`);
+      assert.deepStrictEqual(plugin.services().map((s) => s.service + ' ' + s.body.entity_id.join()),
+        [`light/${action[0] === 'set_on' && !action[1].on ? 'turn_off' : action[0] === 'toggle' ? 'turn_off' : 'turn_on'} light.sofa,light.ceiling`]);
+    }
+  });
+}
+
+test('home_lights and light items never reach other devices either', async () => {
   const plugin = await connected();
-  await plugin.action('set_on', { item: 'device', instanceId: 'living_room', on: false });
+  await plugin.action('set_on', { item: 'home_lights', instanceId: 'home', type: 'all', on: false });
+  await plugin.action('set_on', { item: 'light', room: 'living room', on: true });
+  const result = await plugin.action('set_on', { item: 'light', instanceId: 'switch.kettle', on: true });
+  assert.strictEqual(result.code, 'INVALID_ARGS');
+  assert.deepStrictEqual(plugin.services().map((s) => s.service), ['light/turn_off', 'light/turn_on']);
+});
+
+// The dashboard demo sends only { instanceId } for a tap when an action doesn't require `item`.
+for (const [label, args] of [
+  ['an area id alone', { instanceId: 'living_room' }],
+  ['a room name alone', { instanceId: 'Living Room' }],
+  ['an area id with item device', { item: 'device', instanceId: 'living_room' }],
+]) {
+  test(`a room tile tap with ${label} toggles only that room's lights`, async () => {
+    const home = fakeHome();
+    home.areas[0].entities.push('climate.hall', 'media_player.kitchen', 'switch.kettle');
+    const plugin = await connected({ home });
+    const result = await plugin.action('toggle', args);
+    assert.ok(result.ok, result.message);
+    assert.deepStrictEqual(plugin.services(), [{ service: 'light/turn_off', body: { entity_id: ['light.sofa', 'light.ceiling'] } }]);
+  });
+}
+
+test('the room selector is still the whole room', async () => {
+  const plugin = await connected();
+  await plugin.action('set_on', { room: 'living room', on: false });
   assert.deepStrictEqual(plugin.services().map((s) => s.service).sort(), ['cover/close_cover', 'light/turn_off']);
 });
 

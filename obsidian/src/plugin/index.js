@@ -3,6 +3,10 @@ var REFRESHED = ['notes/destination', 'notes/configured', 'reminders/list', 'rem
 var MAX_SCANNED_FILES = 2000;
 var MAX_READ_FILES = 200;
 var writeQueue = Promise.resolve();
+var DEFAULT_FILENAME = '{timestamp}-{slug}';
+var DEFAULT_LIST_ID = 'markdown-reminders';
+var LIST_ID_PREFIX = 'list:';
+var MAX_NAME_BYTES = 240;
 
 function cleanPath(raw, fallback) {
   var parts = String(raw || '').replace(/\\/g, '/').split('/').map(function (part) {
@@ -33,6 +37,52 @@ function cleanRecent(raw) {
   return recent;
 }
 
+// Characters a file system or an Obsidian link rejects in a file name.
+function cleanName(raw) {
+  return fitBytes(String(raw || '').replace(/[\u0000-\u001f\\\/:*?"<>|#^\[\]]+/g, ' ').replace(/\s+/g, ' ').replace(/^[.\s]+/, '').trim());
+}
+
+// File systems cap a name at 255 UTF-8 bytes; leave room for ".md" and a "-1000" suffix.
+function fitBytes(value) {
+  var out = '';
+  var bytes = 0;
+  for (var ch of value) {
+    var code = ch.codePointAt(0);
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+    if (bytes > MAX_NAME_BYTES) break;
+    out += ch;
+  }
+  return out.trim();
+}
+
+function cleanLists(raw) {
+  var seen = new Set();
+  return (Array.isArray(raw) ? raw : String(raw || '').split('\n')).map(cleanName).filter(function (name) {
+    var key = name.toLowerCase();
+    if (!name || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 50);
+}
+
+function cleanFilename(raw) {
+  var value = String(raw || '').trim();
+  return value ? value.substring(0, 200) : DEFAULT_FILENAME;
+}
+
+function listPath(current, name) {
+  return segments(current.remindersPath).slice(0, -1).concat(name + '.md').join('/');
+}
+
+// The file a reminders/list instance writes to, or null for an unknown id.
+function reminderPath(current, instanceId) {
+  if (instanceId === undefined || instanceId === DEFAULT_LIST_ID) return current.remindersPath;
+  if (typeof instanceId !== 'string' || instanceId.indexOf(LIST_ID_PREFIX) !== 0) return null;
+  var wanted = instanceId.substring(LIST_ID_PREFIX.length).toLowerCase();
+  var name = current.reminderLists.filter(function (list) { return list.toLowerCase() === wanted; })[0];
+  return name ? listPath(current, name) : null;
+}
+
 function storedValue() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; }
 }
@@ -51,6 +101,8 @@ function config() {
     appendPlacement: value.appendPlacement === 'top' ? 'top' : 'bottom',
     notesFolder: cleanPath(value.notesFolder || 'Index Notes', 'Index Notes'),
     remindersPath: cleanPath(value.remindersPath || 'Index Reminders.md', 'Index Reminders.md'),
+    reminderLists: cleanLists(value.reminderLists),
+    noteFilename: cleanFilename(value.noteFilename),
     tag: cleanTag(value.tag || ''),
     includeLocation: value.includeLocation !== false,
     openObsidianLinks: value.openObsidianLinks === true,
@@ -70,6 +122,8 @@ function saveConfig(value) {
     appendPlacement: value.appendPlacement === 'top' ? 'top' : 'bottom',
     notesFolder: cleanPath(value.notesFolder || 'Index Notes', 'Index Notes'),
     remindersPath: cleanPath(value.remindersPath || 'Index Reminders.md', 'Index Reminders.md'),
+    reminderLists: cleanLists(value.reminderLists),
+    noteFilename: cleanFilename(value.noteFilename),
     tag: cleanTag(value.tag || ''),
     includeLocation: value.includeLocation !== false,
     openObsidianLinks: value.openObsidianLinks === true,
@@ -122,6 +176,19 @@ function timestamp(date) {
   return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
     '-' + pad(date.getHours()) + pad(date.getMinutes()) + pad(date.getSeconds()) +
     '-' + pad(date.getMilliseconds(), 3);
+}
+
+function noteFilename(template, text, now) {
+  var firstLine = text.split('\n')[0];
+  var values = {
+    title: Array.from(cleanName(firstLine)).slice(0, 80).join(''),
+    slug: slug(firstLine),
+    date: now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()),
+    time: pad(now.getHours()) + pad(now.getMinutes()),
+    timestamp: timestamp(now),
+  };
+  var name = template.replace(/\{(title|slug|date|time|timestamp)\}/g, function (match, key) { return values[key]; });
+  return cleanName(name) || 'note';
 }
 
 function displayTimestamp(date) {
@@ -387,8 +454,8 @@ async function appendOrCreate(root, path, block) {
   recordRecent(path, Date.now());
 }
 
-async function createUniqueFile(root, folder, text, now, content) {
-  var base = folder + '/' + timestamp(now) + '-' + slug(text.split('\n')[0]);
+async function createUniqueFile(root, folder, name, content) {
+  var base = folder + '/' + name;
   for (var number = 1; number <= 1000; number++) {
     var path = base + (number === 1 ? '' : '-' + number) + '.md';
     if (await fileExists(root, path)) continue;
@@ -502,13 +569,22 @@ Pebble.registerSourceHandler(async function (request, respond) {
     respond.data({
       validUntilMs: Date.now() + 60000,
       instances: configured ? [{
-        instanceId: 'markdown-reminders',
+        instanceId: DEFAULT_LIST_ID,
         properties: {
           name: shortText('Obsidian/Markdown Notes'),
           destination: shortText('Obsidian-compatible task file'),
           path: longText(current.remindersPath),
         },
-      }] : [],
+      }].concat(current.reminderLists.map(function (name) {
+        return {
+          instanceId: LIST_ID_PREFIX + name,
+          properties: {
+            name: shortText(name),
+            destination: shortText('Obsidian-compatible task file'),
+            path: longText(listPath(current, name)),
+          },
+        };
+      })) : [],
     });
     return;
   }
@@ -556,7 +632,7 @@ async function createNote(args, respond) {
     await serialized(async function () {
       if (current.noteMode === 'create') {
         var content = newNoteContent(text, args, current, now);
-        path = await createUniqueFile(root.handle, current.notesFolder, text, now, content);
+        path = await createUniqueFile(root.handle, current.notesFolder, noteFilename(current.noteFilename, text, now), content);
       } else {
         await appendExisting(root.handle, path, noteBlock(text, args, current, now), current.appendPlacement);
       }
@@ -572,9 +648,9 @@ async function createNote(args, respond) {
 }
 
 async function createReminder(args, respond) {
-  if (args.instanceId !== undefined && args.instanceId !== 'markdown-reminders') {
-    respond.error('INVALID_ARGS', 'Unknown Obsidian/Markdown Notes destination.'); return;
-  }
+  var current = config();
+  var path = reminderPath(current, args.instanceId);
+  if (!path) { respond.error('INVALID_ARGS', 'Unknown Obsidian/Markdown Notes reminder list.'); return; }
   var title = typeof args.title === 'string' ? markdownEscape(args.title) : '';
   if (!title) { respond.error('INVALID_ARGS', 'The reminder title cannot be empty.'); return; }
   var due = null;
@@ -595,7 +671,6 @@ async function createReminder(args, respond) {
   var reminderLocationError = locationError(args.location);
   if (reminderLocationError) { respond.error('INVALID_ARGS', reminderLocationError); return; }
   var root = await requireRoot(respond, true); if (!root) return;
-  var current = config();
   var id = 'index-' + Date.now().toString(36);
   var block = '- [ ] ' + title;
   if (due) {
@@ -610,14 +685,14 @@ async function createReminder(args, respond) {
   block += ' ^' + id + '\n';
   var metadata = locationInlineLines(args.location, current.includeLocation);
   if (metadata.length) block += '  ' + metadata.join('\n  ') + '\n';
-  try { await serialized(function () { return appendOrCreate(root.handle, current.remindersPath, block); }); }
+  try { await serialized(function () { return appendOrCreate(root.handle, path, block); }); }
   catch (error) {
-    failWrite(respond, current.remindersPath, error); return;
+    failWrite(respond, path, error); return;
   }
   respond.ok(resultWithOptionalUrl({
     text: 'Created “' + title.replace(/\s+/g, ' ') + '” in Obsidian/Markdown Notes.',
     refreshed: REFRESHED,
-  }, current, root, current.remindersPath));
+  }, current, root, path));
 }
 
 function filenameTitle(path) {

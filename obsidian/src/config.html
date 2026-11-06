@@ -4,7 +4,7 @@
 <style>
   body{font:16px system-ui,sans-serif;background:#151413;color:#f6f2ee;margin:0;padding:24px}main{max-width:680px;margin:auto}
   h1{margin-top:0}section{border:1px solid #494542;border-radius:14px;padding:18px;margin:16px 0;background:#201e1c}
-  label{display:block;margin:14px 0 6px;color:#ddd5cf}input,select,button{font:inherit;box-sizing:border-box;border-radius:8px;border:1px solid #625d58;padding:11px;background:#2b2927;color:#fff;width:100%}
+  label{display:block;margin:14px 0 6px;color:#ddd5cf}input,select,textarea,button{font:inherit;box-sizing:border-box;border-radius:8px;border:1px solid #625d58;padding:11px;background:#2b2927;color:#fff;width:100%}
   input[type=radio],input[type=checkbox]{width:auto;margin-right:8px}button{background:#ff4033;border:0;font-weight:650;margin-top:10px}button.secondary{background:#45413e}button:disabled{opacity:.55}
   small,#status,#noteStatus,#rootHint{color:#aaa29c}.row{display:flex;gap:10px}.row button{width:auto;flex:1}.choice{padding:8px 0}.hidden{display:none}.error{color:#ff8b83!important}
 </style></head><body><main>
@@ -13,7 +13,7 @@
 <section><h2>Incoming notes</h2>
 <label class="choice"><input id="modeCreate" name="noteMode" type="radio" value="create"> Create a new Markdown note each time</label>
 <label class="choice"><input id="modeAppend" name="noteMode" type="radio" value="append"> Append to one existing Markdown note</label>
-<div id="createOptions"><label for="notesFolder">Folder for new notes</label><input id="notesFolder" value="Index Notes"><small>Each filename contains a timestamp and the start of the note.</small></div>
+<div id="createOptions"><label for="notesFolder">Folder for new notes</label><input id="notesFolder" value="Index Notes"><label for="noteFilename">Filename format</label><input id="noteFilename" value="{timestamp}-{slug}"><small>Use {title}, {date}, {time}, {timestamp} and {slug} (the title with dashes). For example, “{date} {title}” gives “2026-11-04 Buy milk.md”.</small></div>
 <div id="appendOptions" class="hidden">
   <label for="selectedNotePath">Recent Markdown notes</label><select id="selectedNotePath"></select>
   <label for="noteQuery">Filter notes by title or file path</label><input id="noteQuery" placeholder="Search the selected folder">
@@ -26,7 +26,7 @@
 <label><input id="openObsidianLinks" type="checkbox"> Open action links in Obsidian</label>
 <small>Enable links only when the selected folder is an Obsidian vault. Leave them off for other Markdown folders.</small>
 </section>
-<section><h2>Reminders</h2><label for="remindersPath">Obsidian Tasks-compatible reminder file</label><input id="remindersPath" value="Index Reminders.md"></section>
+<section><h2>Reminders</h2><label for="remindersPath">Obsidian Tasks-compatible reminder file</label><input id="remindersPath" value="Index Reminders.md"><label for="reminderLists">Other lists, one per line</label><textarea id="reminderLists" rows="4" placeholder="Shopping"></textarea><small>Each list is its own file next to the reminder file, e.g. “Shopping.md”. Ask Index to add something to a list by name.</small></section>
 <button id="save">Save settings</button><p id="status"></p>
 <script>
 var target='plugin',loadedConfig={},currentRoot={},operationPending=false;
@@ -77,7 +77,7 @@ function loadNotes(){return runExclusive(loadNotesCore)}
 async function loadCore(){
   var result=await send({type:'status'}),c=result.config||{};loadedConfig=c;showRoot(result.root);
   byId(c.noteMode==='append'?'modeAppend':'modeCreate').checked=true;
-  ['notesFolder','remindersPath','tag','appendPlacement'].forEach(function(id){if(c[id]!==undefined)byId(id).value=c[id]});
+  ['notesFolder','noteFilename','remindersPath','tag','appendPlacement'].forEach(function(id){if(c[id]!==undefined)byId(id).value=c[id]});byId('reminderLists').value=(c.reminderLists||[]).join('\n');
   byId('includeLocation').checked=c.includeLocation!==false;byId('openObsidianLinks').checked=c.openObsidianLinks===true;
   var append=selectedMode()==='append';byId('appendOptions').className=append?'':'hidden';byId('createOptions').className=append?'hidden':'';if(append)await loadNotesCore();
 }
@@ -105,7 +105,7 @@ byId('clear').onclick=function(){return runExclusive(async function(){
 })};
 byId('save').onclick=function(){return runExclusive(async function(){
   byId('status').className='';byId('status').textContent='Saving…';
-  var c={noteMode:selectedMode(),selectedNotePath:byId('selectedNotePath').value,appendPlacement:byId('appendPlacement').value,notesFolder:byId('notesFolder').value,remindersPath:byId('remindersPath').value,tag:byId('tag').value,includeLocation:byId('includeLocation').checked,openObsidianLinks:byId('openObsidianLinks').checked};
+  var c={noteMode:selectedMode(),selectedNotePath:byId('selectedNotePath').value,appendPlacement:byId('appendPlacement').value,notesFolder:byId('notesFolder').value,noteFilename:byId('noteFilename').value,remindersPath:byId('remindersPath').value,reminderLists:byId('reminderLists').value,tag:byId('tag').value,includeLocation:byId('includeLocation').checked,openObsidianLinks:byId('openObsidianLinks').checked};
   try{var result=await send({type:'save',config:c});if(!result.ok)throw new Error(result.error||'Could not save.');loadedConfig=result.config||c;byId('status').textContent='Saved. You can close this page.'}
   catch(e){byId('status').className='error';byId('status').textContent=e.message}
 })};

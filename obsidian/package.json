@@ -1,7 +1,7 @@
 {
   "name": "obsidian",
   "author": "Core Devices",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "pebble": {
     "displayName": "Obsidian/Markdown Notes",
     "uuid": "8ee7164e-0afd-4a79-9a8a-d0bcf35570d8",
@@ -66,7 +66,7 @@
               "longText"
             ]
           },
-          "supportsMultiple": false,
+          "supportsMultiple": true,
           "callerPermissions": [],
           "suggestedRefreshIntervalSec": 60
         },
@@ -92,7 +92,7 @@
       "actions": [
         {
           "name": "create_note",
-          "description": "Save a note as a Markdown file in the configured folder: a new timestamped note, or a block appended to the selected existing note. Use only when the user explicitly asks to save or send a note to Obsidian/Markdown. Optional location metadata is included only when the user supplied it.",
+          "description": "Save a note as a Markdown file in the configured folder: a new note named by the filename format, or a block appended to the selected existing note. Use only when the user explicitly asks to save or send a note to Obsidian/Markdown. Optional location metadata is included only when the user supplied it.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -147,16 +147,13 @@
         },
         {
           "name": "create_reminder",
-          "description": "Append an Obsidian Tasks-compatible checklist item to the configured reminder file. Use only when the user explicitly asks for a reminder or task in Obsidian/Markdown. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone.",
+          "description": "Append an Obsidian Tasks-compatible checklist item to the configured reminder file, or to one of the user's named lists from reminders/list. Use only when the user explicitly asks for a reminder or task in Obsidian/Markdown. due_iso is an absolute ISO-8601 instant and timezone is the user's IANA time zone.",
           "parameters": {
             "type": "object",
             "properties": {
               "instanceId": {
                 "type": "string",
-                "enum": [
-                  "markdown-reminders"
-                ],
-                "description": "Optional destination id from the reminders/list source."
+                "description": "Optional list id from the reminders/list source. Omit for the default reminder file."
               },
               "title": {
                 "type": "string",

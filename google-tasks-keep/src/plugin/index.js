@@ -535,6 +535,15 @@ function recheckReach() {
   return blocked;
 }
 
+// Keep's notes API and the tasks-pa sync protocol are consumer-only. A Google Workspace (work or
+// school) account signs in fine but is refused with 403 on the write, so say that instead of a bare
+// status. "HTTP 403" keeps classifyError routing it to AUTH_REQUIRED, which prompts reconnecting.
+function forbiddenMessage(status) {
+  if (status !== 403) return null;
+  return 'Google refused the request (HTTP 403). Google Workspace (work or school) accounts ' +
+    'aren\'t supported by Keep and Tasks here. Connect a personal Google account instead.';
+}
+
 function classifyError(error) {
   var message = errorText(error);
   var unreachable = /^.*?\(HTTP 0\)\./;
@@ -730,7 +739,7 @@ async function sendKeepRequest(account, authToken, request, failureText) {
     response = await postKeep(authToken, request);
   }
   if (!response.ok) {
-    throw new Error(failureText + ' (HTTP ' + response.status + ').');
+    throw new Error(forbiddenMessage(response.status) || failureText + ' (HTTP ' + response.status + ').');
   }
   var parsed;
   try { parsed = JSON.parse(response.text); } catch (error) {
@@ -934,7 +943,9 @@ async function tasksSync(body) {
     requireCurrentAccount(account);
     response = await postTasks(authToken, body);
   }
-  if (!response.ok) throw new Error('Google Tasks sync failed (HTTP ' + response.status + ').');
+  if (!response.ok) {
+    throw new Error(forbiddenMessage(response.status) || 'Google Tasks sync failed (HTTP ' + response.status + ').');
+  }
   return response.text;
 }
 

@@ -100,3 +100,20 @@ test('a fetch the user has not allowed takes the same path, without the internet
   assert.strictEqual(out.error.code, 'PLUGIN_UNAVAILABLE');
   assert.strictEqual(out.error.message, 'Google Tasks & Keep doesn\'t have permission to connect to android.clients.google.com. Turn on "Connect to android.clients.google.com" in Google Tasks & Keep\'s Permissions.');
 });
+
+test('a 403 on write (Google Workspace account) is explained, not shown as a bare status', async () => {
+  const fetch = (url) => {
+    if (url.includes('android.clients.google.com')) return Promise.resolve({ ok: true, status: 200, text: async () => 'Auth=fake-auth-token\n' });
+    if (url.includes('tasks-pa')) return Promise.resolve({ ok: false, status: 403, text: async () => '' });
+    return Promise.resolve({ ok: true, status: 200, text: async () => '' });
+  };
+  const { handlers } = load({ google_master_token: 'aas_et/x', google_android_id: '0123456789abcdef', google_email: 'a@b.com' }, fetch,
+    permissions({}));
+  const out = {};
+  await handlers.action({ action: 'create_reminder', args: { title: 'Milk' } }, {
+    ok: (v) => (out.ok = v),
+    error: (code, message) => (out.error = { code, message }),
+  });
+  assert.strictEqual(out.error.code, 'AUTH_REQUIRED');
+  assert.match(out.error.message, /HTTP 403.*Workspace.*personal Google account/);
+});

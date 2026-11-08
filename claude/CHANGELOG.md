@@ -1,3 +1,7 @@
+## 0.4.1
+
+- Explain why each permission is needed, and mark which are required.
+
 ## 0.4.0
 
 - Add Claude Duet as an opt-in message destination in settings, using its existing main conversation.

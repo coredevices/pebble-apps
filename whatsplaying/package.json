@@ -1,7 +1,7 @@
 {
   "name": "whatsplaying",
   "author": "Core Devices LLC",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "keywords": ["pebble-app"],
   "private": true,
   "license": "Apache-2.0",

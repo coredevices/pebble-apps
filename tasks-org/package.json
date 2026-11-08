@@ -1,7 +1,7 @@
 {
   "name": "tasks-org",
   "author": "Core Devices",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "pebble": {
     "displayName": "Tasks.org",
     "uuid": "05d91712-e6fa-4a67-a4ab-be5bb284b87e",

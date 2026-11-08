@@ -16,7 +16,9 @@
           "domains": [
             "query1.finance.yahoo.com"
           ]
-        }
+        },
+        "reason": "To get the share prices it shows",
+        "required": true
       }
     ],
     "plugin": {

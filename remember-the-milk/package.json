@@ -16,7 +16,9 @@
           "domains": [
             "api.rememberthemilk.com"
           ]
-        }
+        },
+        "reason": "To add your reminders to Remember The Milk",
+        "required": true
       }
     ],
     "plugin": {

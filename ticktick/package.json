@@ -16,7 +16,9 @@
           "domains": [
             "api.ticktick.com"
           ]
-        }
+        },
+        "reason": "To add your reminders to TickTick",
+        "required": true
       }
     ],
     "plugin": {

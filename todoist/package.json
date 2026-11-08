@@ -16,7 +16,9 @@
           "domains": [
             "api.todoist.com"
           ]
-        }
+        },
+        "reason": "To add your reminders to Todoist",
+        "required": true
       }
     ],
     "plugin": {

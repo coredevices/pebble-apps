@@ -16,7 +16,9 @@
           "domains": [
             "api.notion.com"
           ]
-        }
+        },
+        "reason": "To save your notes in Notion",
+        "required": true
       }
     ],
     "plugin": {

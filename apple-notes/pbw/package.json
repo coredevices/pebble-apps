@@ -16,7 +16,9 @@
           "domains": [
             "icloud.com"
           ]
-        }
+        },
+        "reason": "To save your notes in Apple Notes",
+        "required": true
       }
     ],
     "plugin": {

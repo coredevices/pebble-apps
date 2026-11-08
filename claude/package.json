@@ -20,7 +20,9 @@
           "domains": [
             "claude.ai"
           ]
-        }
+        },
+        "reason": "To send your messages to Claude",
+        "required": true
       }
     ],
     "plugin": {

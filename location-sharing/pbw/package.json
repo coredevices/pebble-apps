@@ -10,14 +10,20 @@
       "web_sign_in"
     ],
     "usesPermissions": [
-      "Location",
+      {
+        "name": "Location",
+        "reason": "To show travel times from where you are to each person",
+        "required": false
+      },
       {
         "name": "Internet",
         "parameters": {
           "domains": [
             "google.com"
           ]
-        }
+        },
+        "reason": "To get the locations people share with you in Google Maps",
+        "required": true
       }
     ],
     "plugin": {

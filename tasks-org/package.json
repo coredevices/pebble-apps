@@ -82,7 +82,11 @@
     "configPage": "src/config.html",
     "projectType": "plugin",
     "usesPermissions": [
-      "TasksOrg"
+      {
+        "name": "TasksOrg",
+        "reason": "To add your reminders to Tasks.org",
+        "required": true
+      }
     ]
   }
 }

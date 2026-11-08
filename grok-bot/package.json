@@ -18,10 +18,21 @@
         "name": "Internet",
         "parameters": {
           "domains": [
-            "cursor.sh",
+            "cursor.sh"
+          ]
+        },
+        "reason": "To sign in and start your Grok Bots",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
             "cursorvm.com"
           ]
-        }
+        },
+        "reason": "To send messages to your Grok Bots and read their replies",
+        "required": true
       }
     ],
     "plugin": {

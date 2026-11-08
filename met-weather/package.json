@@ -7,14 +7,20 @@
     "uuid": "323dc117-55bd-455f-9ee4-4d0faba56ea1",
     "sdkVersion": "3",
     "usesPermissions": [
-      "Location",
+      {
+        "name": "Location",
+        "reason": "To get the weather for your weather locations, including where you are",
+        "required": true
+      },
       {
         "name": "Internet",
         "parameters": {
           "domains": [
             "api.met.no"
           ]
-        }
+        },
+        "reason": "To get the forecast from MET Norway",
+        "required": true
       }
     ],
     "plugin": {

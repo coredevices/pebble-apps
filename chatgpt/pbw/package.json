@@ -19,10 +19,21 @@
         "name": "Internet",
         "parameters": {
           "domains": [
-            "chatgpt.com",
+            "chatgpt.com"
+          ]
+        },
+        "reason": "To send your messages to ChatGPT",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
             "auth.openai.com"
           ]
-        }
+        },
+        "reason": "To send messages to your Codex sessions",
+        "required": false
       }
     ],
     "plugin": {

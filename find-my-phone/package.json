@@ -40,7 +40,11 @@
       ]
     },
     "usesPermissions": [
-      "FindMyPhone"
+      {
+        "name": "FindMyPhone",
+        "reason": "To ring your phone when you ask from your watch",
+        "required": true
+      }
     ]
   }
 }

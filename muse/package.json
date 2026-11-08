@@ -30,10 +30,21 @@
         "name": "Internet",
         "parameters": {
           "domains": [
-            "muse.ai",
+            "muse.ai"
+          ]
+        },
+        "reason": "To sign in to Muse",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
             "hatch.metaaivm.com"
           ]
-        }
+        },
+        "reason": "To send your messages to Muse",
+        "required": true
       }
     ],
     "plugin": {

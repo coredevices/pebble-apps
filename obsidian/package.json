@@ -216,8 +216,16 @@
     "configPage": "src/config.html",
     "projectType": "plugin",
     "usesPermissions": [
-      "ReadFiles",
-      "WriteFiles"
+      {
+        "name": "ReadFiles",
+        "reason": "To find the note to add to in the folder you pick",
+        "required": true
+      },
+      {
+        "name": "WriteFiles",
+        "reason": "To save your notes in the folder you pick",
+        "required": true
+      }
     ]
   }
 }

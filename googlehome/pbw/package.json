@@ -14,10 +14,21 @@
         "name": "Internet",
         "parameters": {
           "domains": [
-            "android.clients.google.com",
+            "android.clients.google.com"
+          ]
+        },
+        "reason": "To sign in to your Google account",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
             "googlehomefoyer-pa.clients6.google.com"
           ]
-        }
+        },
+        "reason": "To show and control your Google Home devices",
+        "required": true
       }
     ],
     "plugin": {

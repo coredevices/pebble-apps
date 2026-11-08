@@ -17,11 +17,31 @@
         "name": "Internet",
         "parameters": {
           "domains": [
-            "android.clients.google.com",
-            "tasks-pa.clients6.google.com",
+            "android.clients.google.com"
+          ]
+        },
+        "reason": "To sign in to your Google account",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
             "www.googleapis.com"
           ]
-        }
+        },
+        "reason": "To save your notes in Google Keep",
+        "required": true
+      },
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "tasks-pa.clients6.google.com"
+          ]
+        },
+        "reason": "To add your reminders to Google Tasks",
+        "required": true
       }
     ],
     "plugin": {

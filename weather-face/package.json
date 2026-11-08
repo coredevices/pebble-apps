@@ -53,7 +53,11 @@
       "configurable"
     ],
     "usesPermissions": [
-      "Location"
+      {
+        "name": "Location",
+        "reason": "To show the weather where you are",
+        "required": true
+      }
     ]
   }
 }

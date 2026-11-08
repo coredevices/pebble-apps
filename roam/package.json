@@ -16,7 +16,9 @@
           "domains": [
             "append-api.roamresearch.com"
           ]
-        }
+        },
+        "reason": "To add your notes to your Roam daily note",
+        "required": true
       }
     ],
     "plugin": {

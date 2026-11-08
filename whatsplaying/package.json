@@ -24,10 +24,20 @@
     },
     "capabilities": ["microphone"],
     "usesPermissions": [
-      "WatchMicrophone",
+      {
+        "name": "WatchMicrophone",
+        "reason": "To hear the song playing near your watch",
+        "required": true
+      },
       {
         "name": "Internet",
-        "parameters": { "domains": ["sirensong.cluster.repebble.com"] }
+        "parameters": {
+          "domains": [
+            "sirensong.cluster.repebble.com"
+          ]
+        },
+        "reason": "To identify the song",
+        "required": true
       }
     ],
     "messageKeys": [

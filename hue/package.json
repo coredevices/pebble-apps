@@ -8,14 +8,20 @@
     "sdkVersion": "3",
     "configPage": "src/config.html",
     "usesPermissions": [
-      "LocalNetwork",
+      {
+        "name": "LocalNetwork",
+        "reason": "To control your lights through your Hue bridge",
+        "required": true
+      },
       {
         "name": "Internet",
         "parameters": {
           "domains": [
             "discovery.meethue.com"
           ]
-        }
+        },
+        "reason": "To find your Hue bridge when you pair it",
+        "required": true
       }
     ],
     "plugin": {

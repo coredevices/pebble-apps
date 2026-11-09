@@ -46,6 +46,7 @@ export class FoyerAuth {
   private cachedToken: string | null = null;
   private expiresAtEpoch = 0;
   private scopeIndex = 0;
+  private minting: Promise<string> | null = null;
 
   constructor(
     private masterToken: string,
@@ -62,10 +63,13 @@ export class FoyerAuth {
   async bearer(): Promise<string> {
     const now = this.nowEpochSeconds();
     if (this.cachedToken != null && now < this.expiresAtEpoch) return this.cachedToken;
-    return this.mint(now);
+    this.minting ??= this.mint(now).finally(() => (this.minting = null));
+    return this.minting;
   }
 
-  invalidate(): void {
+  /** Drops `rejected` and moves to the next scope; a no-op if another request already did. */
+  invalidate(rejected: string): void {
+    if (rejected !== this.cachedToken) return;
     this.cachedToken = null;
     this.expiresAtEpoch = 0;
     this.scopeIndex = this.scopes.length === 0 ? 0 : (this.scopeIndex + 1) % this.scopes.length;
@@ -256,9 +260,10 @@ export class FoyerClient {
     const url = `${BASE}${service}/${method}`;
     const bodyJson = JSON.stringify(body);
 
-    let response = await this.post(url, bodyJson, await this.auth.bearer());
+    const bearer = await this.auth.bearer();
+    let response = await this.post(url, bodyJson, bearer);
     if (response.status === 401 || response.status === 403) {
-      this.auth.invalidate();
+      this.auth.invalidate(bearer);
       response = await this.post(url, bodyJson, await this.auth.bearer());
     }
     if (response.status < 200 || response.status > 299) {

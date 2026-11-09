@@ -165,3 +165,26 @@ describe('capability-aware device-name aliases', () => {
     expect(setOnOff).not.toHaveBeenCalled();
   });
 });
+
+describe('group control', () => {
+  it('sends every device command at once and keeps rows in device order', async () => {
+    const lights = Array.from({ length: 14 }, (_, i) => device(`Light ${i}`, ['on_off']));
+    const { foyer, setOnOff } = fakeFoyer([...lights, device('Lock', ['lock'])]);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    setOnOff.mockImplementation(async (id: string) => {
+      await gate;
+      if (id === 'light-3') throw new Error('offline');
+      return state(id);
+    });
+
+    const pending = callServerTool(foyer, passcodes, 'turn_off', { type: 'light' });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(setOnOff).toHaveBeenCalledTimes(14);
+    release();
+    const rows = (await pending) as { id: string; ok: boolean }[];
+
+    expect(rows.map((r) => r.id)).toEqual([...lights.map((d) => d.id), 'lock']);
+    expect(rows.filter((r) => !r.ok).map((r) => r.id)).toEqual(['light-3', 'lock']);
+  });
+});

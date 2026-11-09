@@ -560,19 +560,18 @@ async function applyControl(
   action: (d: codec.Device) => Promise<codec.DeviceState>,
 ): Promise<unknown> {
   const devices = await resolve(foyer, selectorFrom(args), requiredCap);
-  const rows: Record<string, unknown>[] = [];
-  for (const d of devices) {
-    if (!d.capabilities.has(requiredCap)) {
-      rows.push(resultRow(d.id, d.name, false, undefined, `skipped: does not support ${capLabel}`));
-      continue;
-    }
-    try {
-      rows.push(resultRow(d.id, d.name, true, await action(d)));
-    } catch (e) {
-      rows.push(resultRow(d.id, d.name, false, undefined, e instanceof Error ? e.message : String(e)));
-    }
-  }
-  return rows;
+  return Promise.all(
+    devices.map(async (d) => {
+      if (!d.capabilities.has(requiredCap)) {
+        return resultRow(d.id, d.name, false, undefined, `skipped: does not support ${capLabel}`);
+      }
+      try {
+        return resultRow(d.id, d.name, true, await action(d));
+      } catch (e) {
+        return resultRow(d.id, d.name, false, undefined, e instanceof Error ? e.message : String(e));
+      }
+    }),
+  );
 }
 
 const agent = (d: codec.Device): string => d.agentId ?? '';

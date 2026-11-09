@@ -15,6 +15,8 @@ var MAX_NICKNAME = 40;
 // Whole-request budgets, under the host's limits (120s per send action, 60s per read).
 var SEND_BUDGET_MS = 18000;
 var READ_BUDGET_MS = 18000;
+// The settings page's sign-in milestones, the only step names traceSignIn logs.
+var SIGN_IN_STEPS = ["cancelled", "returned", "session", "sessionFailed", "timeout", "done"];
 // Below this much time left, a send is refused rather than risk an unknown delivery.
 var SEND_MIN_LEFT_MS = 8000;
 var HOSTS = ["cursor.sh", "cursorvm.com"];
@@ -203,7 +205,8 @@ function createService(storage, fetch, cache) {
         text = await response.text();
       })());
     } catch (e) {
-      console.error("Grok Bot POST " + path + " failed: " + ((e && e.message) || e));
+      // The error type only: exception text can carry the private box host.
+      console.error("Grok Bot POST " + path + " failed: " + ((e && (e.code || e.name)) || "error"));
       throw e;
     }
     if (!response.ok) {
@@ -389,10 +392,49 @@ function createService(storage, fetch, cache) {
     if (!/^[0-9a-f-]{36}$/i.test(String(uuid)) || !/^[A-Za-z0-9_-]{43,128}$/.test(String(verifier)))
       throw new PluginError("INVALID_ARGS", "Grok Bot sign-in was not started correctly. Please try again.");
     var url = POLL_URL + "?uuid=" + encodeURIComponent(uuid) + "&verifier=" + encodeURIComponent(verifier);
-    var response = await fetch(url, { method: "GET" });
-    if (response.status !== 200) return null;
+    var response;
+    try {
+      response = await fetch(url, { method: "GET" });
+    } catch (e) {
+      console.error("Grok Bot sign-in poll failed: " + ((e && e.name) || "error"));
+      throw e;
+    }
+    if (response.status !== 200) {
+      // 404 means Cursor hasn't tied this login's uuid to a session (yet).
+      console.log("Grok Bot sign-in poll: HTTP " + response.status);
+      return null;
+    }
     var body = await response.json();
-    return body && typeof body.accessToken === "string" ? body.accessToken : null;
+    var token = body && typeof body.accessToken === "string" ? body.accessToken : null;
+    console.log("Grok Bot sign-in poll: HTTP 200, " + (token ? "token" : "no token, " + Object.keys(body || {}).length + " fields"));
+    return token;
+  }
+
+  /**
+   * The JWT inside Cursor's WorkosCursorSessionToken cookie ("<user>::<jwt>", usually URL-encoded),
+   * or null. Used when auth/poll never hands over a token: the sign-in window closes as soon as the
+   * cookie exists, which can be before Cursor's page has tied the login uuid to the session.
+   */
+  function sessionJwt(cookie) {
+    var value = String(cookie || "");
+    try {
+      value = decodeURIComponent(value);
+    } catch (e) {}
+    var at = value.lastIndexOf("::");
+    if (at < 0) return null;
+    var jwt = value.slice(at + 2);
+    return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(jwt) ? jwt : null;
+  }
+
+  // What the settings page saw during sign-in; never carries a token or the uuid.
+  function traceSignIn(message) {
+    var step = SIGN_IN_STEPS.indexOf(message.step) >= 0 ? message.step : "unknown";
+    var cookie = message.cookie || {};
+    console.log("Grok Bot sign-in: " + step + " after " + (Number(message.ms) | 0) + " ms" +
+      (message.cookie ? ", cookie " + (cookie.present ? (Number(cookie.length) | 0) + " chars" +
+        (cookie.jwt ? ", has session JWT" : ", no session JWT") : "missing") : "") +
+      (message.polls !== undefined ? ", " + (Number(message.polls) | 0) + " polls" : ""));
+    return {};
   }
 
   async function config(message) {
@@ -405,6 +447,23 @@ function createService(storage, fetch, cache) {
       case "finishSignIn": {
         var token = await pollSignIn(message.uuid, message.verifier);
         return token ? connectWith(token) : { pending: true };
+      }
+      case "traceSignIn":
+        return traceSignIn(message);
+      case "sessionSignIn": {
+        var jwt = sessionJwt(message.session);
+        if (!jwt) {
+          console.error("Grok Bot session sign-in: cookie has no session JWT");
+          throw new PluginError("AUTH_REQUIRED", "Grok Bot sign-in did not finish. Please try again.");
+        }
+        try {
+          var connected = await connectWith(jwt);
+          console.log("Grok Bot session sign-in: connected");
+          return connected;
+        } catch (e) {
+          console.error("Grok Bot session sign-in failed: " + safeError(e).code + (e && e.status ? " HTTP " + e.status : ""));
+          throw e;
+        }
       }
       case "listBots": {
         var current = required();

@@ -163,6 +163,18 @@ test("finishSignIn polls once: pending until Cursor hands over the token, then c
   );
 });
 
+test("sessionSignIn connects with the JWT in Cursor's session cookie", async () => {
+  const grok = fakeGrokBot();
+  const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.c2ln";
+  const service = createService(memoryStorage(), grok.fetch);
+  const settings = await service.config({ type: "sessionSignIn", session: "user_1%3A%3A" + jwt });
+  assert.equal(settings.configured, true);
+  assert.equal(grok.calls[0].headers.authorization, "Bearer " + jwt);
+  assert.equal((await createService(memoryStorage(), grok.fetch).config({ type: "sessionSignIn", session: "user_1::" + jwt })).configured, true);
+  await assert.rejects(service.config({ type: "sessionSignIn", session: "not-a-session" }), /did not finish/);
+  await assert.rejects(service.config({ type: "sessionSignIn", session: jwt }), /did not finish/);
+});
+
 test("agent/configured is false until signed in with a bot selected", async () => {
   const storage = memoryStorage();
   const grok = fakeGrokBot();

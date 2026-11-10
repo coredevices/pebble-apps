@@ -107,7 +107,20 @@ async function ensureAccessToken() {
   if (token && (!expiresAt || Date.now() < expiresAt - 60000)) return token;
   var brokerRefresh = await secureItem(BROKER_REFRESH_KEY);
   if (!brokerRefresh) return token;
-  await saveTokenBundle(await Pebble.oauth.refresh('todoist', brokerRefresh));
+  var bundle, revoked = false;
+  try { bundle = await Pebble.oauth.refresh('todoist', brokerRefresh); }
+  catch (error) {
+    if (!error || error.code !== 'REFRESH_REVOKED') throw error;
+    revoked = true;
+  }
+  // Another session refreshed or reconnected meanwhile; its tokens are newer than this result.
+  if (await secureItem(BROKER_REFRESH_KEY) !== brokerRefresh) return accessToken();
+  // A dead refresh token never recovers: sign out so the user is asked to reconnect.
+  if (revoked) {
+    await clearTokens();
+    return '';
+  }
+  await saveTokenBundle(bundle);
   return accessToken();
 }
 

@@ -115,3 +115,40 @@ test('a remembered host from an older version is ignored', async () => {
   await handlers.action(ACTION, r);
   assert.strictEqual(r.out.error.message, 'Could not reach Todoist.');
 });
+
+test('a refresh the broker reports as REFRESH_REVOKED signs out instead of failing every request', async () => {
+  const expired = { secure: { todoist_access_token: 'old', todoist_broker_refresh: 'wrapper' }, local: { todoist_expires_at: '1' } };
+  const { context, handlers } = load(expired, async () => { throw new Error('no request expected'); });
+  context.Pebble.oauth = { refresh: async () => { throw Object.assign(new Error('Sign in again'), { code: 'REFRESH_REVOKED' }); } };
+  const r = responder();
+  await handlers.action(ACTION, r);
+  assert.equal(r.out.error.code, 'AUTH_REQUIRED');
+  assert.equal(await context.Pebble.secureStorage.getItem('todoist_access_token'), null);
+  assert.equal(await context.Pebble.secureStorage.getItem('todoist_broker_refresh'), null);
+});
+
+test('a transient refresh failure keeps the tokens', async () => {
+  const expired = { secure: { todoist_access_token: 'old', todoist_broker_refresh: 'wrapper' }, local: { todoist_expires_at: '1' } };
+  const { context, handlers } = load(expired, async () => { throw new Error('no request expected'); });
+  context.Pebble.oauth = { refresh: async () => { throw Object.assign(new Error('refresh_failed'), { code: 'REFRESH_FAILED' }); } };
+  await assert.rejects(() => handlers.action(ACTION, responder()), /refresh_failed/);
+  assert.equal(await context.Pebble.secureStorage.getItem('todoist_broker_refresh'), 'wrapper');
+});
+
+test('a refresh result never overwrites tokens another session saved meanwhile', async () => {
+  const expired = { secure: { todoist_access_token: 'old', todoist_broker_refresh: 'wrapper' }, local: { todoist_expires_at: '1' } };
+  const { context, handlers } = load(expired, async () => ({ status: 401, text: async () => '' }));
+  const storage = context.Pebble.secureStorage;
+  for (const outcome of ['ok', 'revoked']) {
+    await storage.setItem('todoist_broker_refresh', 'wrapper');
+    context.Pebble.oauth = { refresh: async () => {
+      await storage.setItem('todoist_access_token', 'newer');
+      await storage.setItem('todoist_broker_refresh', 'newer-wrapper');
+      if (outcome === 'revoked') throw Object.assign(new Error('Sign in again'), { code: 'REFRESH_REVOKED' });
+      return { access_token: 'stale', broker_refresh: 'stale-wrapper', expires_in: 3600 };
+    } };
+    await handlers.action(ACTION, responder());
+    assert.equal(await storage.getItem('todoist_access_token'), 'newer', outcome);
+    assert.equal(await storage.getItem('todoist_broker_refresh'), 'newer-wrapper', outcome);
+  }
+});

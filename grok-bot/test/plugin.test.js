@@ -81,6 +81,7 @@ test("connects, picks the first bot, sends and returns a receipt; replies are re
 
   const result = await service.action({ action: "send_to_agent", args: { message: "hello" } });
   assert.equal(result.text, "Message sent to Ada. Read Grok Bot's replies later for its answer.");
+  assert.deepEqual(JSON.parse(result.semanticResult), { type: "MESSAGE_SENT", recipientName: "Ada", text: "hello ⌚", contactId: "a1" });
   const sent = grok.calls.find((c) => c.url.endsWith("/api/sendPrompt"));
   assert.equal(sent.body.agentId, "a1");
   assert.ok(sent.body.clientNonce);

@@ -88,7 +88,13 @@ function pick(items, query, label, noun) {
   throw PluginError('INVALID_ARGS', (matches.length ? 'More than one ' : 'No ') + noun + ' matches "' + query + '". Choose one of: ' + names + '.');
 }
 
+/** The semanticResult of a delivered message, for the Index feed. */
+function messageSent(recipient, contactId, text) {
+  return JSON.stringify({ type: 'MESSAGE_SENT', recipientName: recipient, text: text, contactId: contactId });
+}
+
 module.exports = {
   PluginError: PluginError, base64: base64, base64url: base64url, fromBase64: fromBase64, utf8: utf8,
   fromUtf8: fromUtf8, uuid: uuid, jwtClaims: jwtClaims, form: form, pick: pick, toMillis: toMillis,
+  messageSent: messageSent,
 };

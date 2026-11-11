@@ -135,7 +135,7 @@ function createDotsService(storage, fetch, auth) {
     if (!sent || !sent.id || sent.request_id !== id) {
       throw PluginError('PLUGIN_UNAVAILABLE', 'ChatGPT did not confirm the message; check your Dot before sending again.');
     }
-    return { text: 'Message sent to ' + state.dotName + '.' };
+    return { text: 'Message sent to ' + state.dotName + '.', semanticResult: util.messageSent(state.dotName, state.room, text) };
   }
 
   return {

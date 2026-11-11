@@ -119,6 +119,8 @@ test('send posts to the verified room with a matching request id', async () => {
   const result = await f.send();
   assert.equal(result.ok, true);
   assert.equal(result.text, 'Message sent to Sol.');
+  assert.deepEqual(JSON.parse(result.semanticResult),
+    { type: 'MESSAGE_SENT', recipientName: 'Sol', text: 'hello Dot ⌚', contactId: ROOM });
   const post = f.calls.at(-1);
   const body = JSON.parse(post.init.body);
   assert.equal(body.content.text, 'hello Dot ⌚');

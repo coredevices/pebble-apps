@@ -85,6 +85,12 @@ test('Code send uses wrapped stream-json events',async()=>{
   const f=fixture();await f.connect();const r=await sendCode(f);assert.equal(r.ok,true);const b=JSON.parse(posts(f)[0].init.body);
   assert.equal(b.session_id,CODE);assert.equal(b.events[0].payload.type,'user');assert.equal(b.events[0].payload.message.content[0].text,'run tests ⌚');assert.equal(b.events[0].payload.uuid,r.message_id);
 });
+test('a sent message reports MessageSent with the conversation as its contact',async()=>{
+  const f=fixture();await f.connect();const semantic=r=>JSON.parse(r.semanticResult);
+  assert.deepEqual(semantic(await sendChat(f)),{type:'MESSAGE_SENT',recipientName:'Planning',text:'hello 世界 ⌚',contactId:'chat:'+CHAT});
+  assert.deepEqual(semantic(await sendCode(f)),{type:'MESSAGE_SENT',recipientName:'CoreApp',text:'run tests ⌚',contactId:'code:'+CODE});
+  assert.equal((await f.action('send_to_agent',{chat_id:'nope:x',message:'hello'})).semanticResult,undefined);
+});
 test('offline and archived Code sessions cannot receive messages',async()=>{
   for(const extra of [{connection_status:'disconnected'},{status:'archived'}]){
     const f=fixture({['GET '+CDETAIL]:()=>json({id:CODE,environment_kind:'bridge',connection_status:'connected',...extra})});await f.connect();assert.ok(!(await sendCode(f)).ok);assert.equal(posts(f).length,0);
@@ -316,7 +322,8 @@ test('chat_id "new" always starts a new Claude chat, whatever the kind and mode'
   await f.config({type:'select',session_id:'code:'+CODE});await useDefault(f);
   for(const chat_id of ['new','New Chat','  NEW ']){
     f.calls.length=0;const r=await f.action('send_to_agent',{chat_id,message:'hello'});
-    assert.match(r.text,/new chat/);assert.ok(r.session_id.startsWith('chat:'));assert.ok(f.calls.some(c=>c.key===CREATE));
+    assert.match(r.text,/new chat/);assert.ok(r.session_id.startsWith('chat:'));
+    assert.deepEqual(JSON.parse(r.semanticResult),{type:'MESSAGE_SENT',recipientName:'Claude',text:'hello ⌚',contactId:r.session_id});assert.ok(f.calls.some(c=>c.key===CREATE));
     assert.ok(!f.calls.some(c=>c.key.startsWith('GET')));
   }
   await f.config({type:'kind',kind:'claude'});

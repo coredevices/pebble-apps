@@ -278,6 +278,12 @@ test("a failed cache write never changes a send receipt or a source read", async
     args: { message: "hi", chat_id: "Spanish quiz" },
   });
   assert.equal(result.text, "Message accepted by Muse.");
+  assert.deepEqual(JSON.parse(result.semanticResult), {
+    type: "MESSAGE_SENT",
+    recipientName: "Muse",
+    text: "hi ⌚",
+    contactId: "spanish",
+  });
   assert.deepEqual(f.calls.at(-2), ["spanish", "hi ⌚", "vm-one"]);
   assert.equal(f.data.size, writes);
   f.cache.clear();

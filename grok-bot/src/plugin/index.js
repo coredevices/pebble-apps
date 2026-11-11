@@ -520,7 +520,10 @@ function createService(storage, fetch, cache) {
     var record = await acceptance(call, clientNonce).catch(function () { return null; });
     if (record && record.status === "rejected")
       throw new PluginError("PLUGIN_UNAVAILABLE", bot.name + " did not accept the message, so it was not sent.");
-    return { text: "Message sent to " + bot.name + ". Read Grok Bot's replies later for its answer." };
+    return {
+      text: "Message sent to " + bot.name + ". Read Grok Bot's replies later for its answer.",
+      semanticResult: JSON.stringify({ type: "MESSAGE_SENT", recipientName: bot.name, text: message + " ⌚", contactId: bot.id }),
+    };
   }
 
   async function read(args) {

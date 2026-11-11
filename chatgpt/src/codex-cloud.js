@@ -92,7 +92,10 @@ function createCodexCloud(fetch, auth) {
       input_items: prompt(args.message),
     });
     if (!body) throw PluginError('PLUGIN_UNAVAILABLE', 'Codex Cloud did not confirm the follow-up; check the task before sending again.');
-    return { text: 'Sent a follow-up to Codex Cloud task "' + task.title.slice(0, 60) + '".' };
+    return {
+      text: 'Sent a follow-up to Codex Cloud task "' + task.title.slice(0, 60) + '".',
+      semanticResult: util.messageSent(task.title, task.id, args.message),
+    };
   }
 
   return { environments: environments, tasks: tasks, create: create, followUp: followUp };

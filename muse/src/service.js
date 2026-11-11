@@ -288,8 +288,9 @@ export function createService(
         late = deadline - now() < SEND_MIN_LEFT_MS;
         if (late) throw new Error("send budget exhausted");
       };
+      let id;
       await using(state.auth, async (client) => {
-        const id = await target(client, state, chatId);
+        id = await target(client, state, chatId);
         try {
           if (id === MAIN) await client.sendMain(message + " ⌚", { beforeSend });
           else await client.sendToChat(id, message + " ⌚", { beforeSend });
@@ -298,7 +299,15 @@ export function createService(
           throw error;
         }
       }, deadline - SEND_MIN_LEFT_MS);
-      return { text: "Message accepted by Muse." };
+      return {
+        text: "Message accepted by Muse.",
+        semanticResult: JSON.stringify({
+          type: "MESSAGE_SENT",
+          recipientName: "Muse",
+          text: message + " ⌚",
+          contactId: id,
+        }),
+      };
     });
   }
   return { config, action, source };

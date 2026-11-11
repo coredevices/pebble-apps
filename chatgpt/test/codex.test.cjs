@@ -235,6 +235,8 @@ test('a Codex chat picked from agent/chats is reached through the relay', async 
   const result = await f.run('send_to_agent', { message: 'run the tests', chat_id: live.instanceId });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.text, 'Sent to Codex session "Index feed polish" on taz-runner.');
+  assert.deepEqual(JSON.parse(result.semanticResult),
+    { type: 'MESSAGE_SENT', recipientName: 'Index feed polish', text: 'run the tests ⌚', contactId: 'th-live' });
   assert.equal(queued.threadId, 'th-live');
   assert.deepEqual(JSON.parse(JSON.stringify(queued.input)), [{ type: 'text', text: 'run the tests ⌚', textElements: [] }]);
 
@@ -276,6 +278,8 @@ test('a nickname reaches its chat, and moves if given to another chat', async ()
   assert.equal(listed.find((c) => c.id === 'task_e_1').nickname, 'ble');
   const moved = await f.run('send_to_agent', { message: 'also update docs', chat_id: 'BLE' });
   assert.equal(moved.text, 'Sent a follow-up to Codex Cloud task "Fix login".');
+  assert.deepEqual(JSON.parse(moved.semanticResult),
+    { type: 'MESSAGE_SENT', recipientName: 'Fix login', text: 'also update docs ⌚', contactId: 'task_e_1' });
   const body = JSON.parse(f.calls.at(-1).init.body);
   assert.deepEqual(body.follow_up, { task_id: 'task_e_1', turn_id: 'turn-9', run_environment_in_qa_mode: false });
 });

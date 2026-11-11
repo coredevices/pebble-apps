@@ -393,12 +393,16 @@ function createService(storage, fetch, now) {
     if (!accepted) throw uncertain();
     return id;
   }
+  function messageSent(recipient, sessionId, text) {
+    return JSON.stringify({ type: 'MESSAGE_SENT', recipientName: recipient, text: text, contactId: sessionId });
+  }
   async function send(state, ref, text) {
     if (ref.isNew) {
       var chat = await createChat(state);
       var messageId = await completeChat(state, chat.uuid, chat, ROOT_MESSAGE, text);
       return { text: 'Message submitted to Claude in a new chat.', session_id: 'chat:' + chat.uuid,
-        message_id: messageId, url: ORIGIN + '/chat/' + chat.uuid };
+        message_id: messageId, url: ORIGIN + '/chat/' + chat.uuid,
+        semanticResult: messageSent('Claude', 'chat:' + chat.uuid, text) };
     }
     var data = await detail(state, ref), id = requestId();
     if (ref.kind === 'duet') {
@@ -409,7 +413,8 @@ function createService(storage, fetch, now) {
       try { receipt = await response.json(); } catch (_) { throw uncertain(); }
       if (!receipt || typeof receipt.message_id !== 'string' || !/^cmsg_[A-Za-z0-9_-]{1,160}$/.test(receipt.message_id)) throw uncertain();
       return { text: 'Message submitted to Claude Duet.', session_id: ref.ref,
-        message_id: receipt.message_id, url: ORIGIN + '/duet' };
+        message_id: receipt.message_id, url: ORIGIN + '/duet',
+        semanticResult: messageSent('Claude Duet', ref.ref, text) };
     }
     if (ref.kind === 'code') {
       if (data.status === 'archived') throw invalid('This Code session is archived. Reopen it in Claude first.');
@@ -428,8 +433,10 @@ function createService(storage, fetch, now) {
       if (leaf.sender !== 'assistant' || data.is_streaming) throw invalid('Wait for Claude to finish the current reply before sending.');
       id = await completeChat(state, ref.id, data, branch.leaf, text);
     }
-    return { text: 'Message submitted to Claude: ' + ((ref.kind === 'chat' ? data.name : data.title) || 'Untitled') + '.',
-      session_id: ref.ref, message_id: id, url: ORIGIN + '/' + ref.kind + '/' + ref.id };
+    var title = (ref.kind === 'chat' ? data.name : data.title) || 'Untitled';
+    return { text: 'Message submitted to Claude: ' + title + '.',
+      session_id: ref.ref, message_id: id, url: ORIGIN + '/' + ref.kind + '/' + ref.id,
+      semanticResult: messageSent(title, ref.ref, text) };
   }
   async function resolve(state, chatId) {
     if (chatId !== undefined && chatId !== null && typeof chatId !== 'string') throw invalid('Name a Claude chat.');

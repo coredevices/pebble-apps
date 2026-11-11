@@ -198,7 +198,7 @@ function createChatGptChats(storage, fetch, now, auth) {
     if (stream.done && stream.reply) {
       text += ' ChatGPT replied: ' + (stream.reply.length > MAX_REPLY ? stream.reply.slice(0, MAX_REPLY - 1) + '…' : stream.reply);
     }
-    return { text: text };
+    return { text: text, semanticResult: util.messageSent(String(args.title || 'ChatGPT'), id || stream.conversation, args.message) };
   }
 
   return { list: list, send: send };

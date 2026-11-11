@@ -123,6 +123,9 @@
         }).join(", ");
         throw PluginError("INVALID_ARGS", (matches.length ? "More than one " : "No ") + noun + ' matches "' + query + '". Choose one of: ' + names + ".");
       }
+      function messageSent(recipient, contactId, text) {
+        return JSON.stringify({ type: "MESSAGE_SENT", recipientName: recipient, text, contactId });
+      }
       module.exports = {
         PluginError,
         base64,
@@ -134,7 +137,8 @@
         jwtClaims,
         form,
         pick,
-        toMillis
+        toMillis,
+        messageSent
       };
     }
   });
@@ -265,7 +269,7 @@
           if (!sent || !sent.id || sent.request_id !== id) {
             throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not confirm the message; check your Dot before sending again.");
           }
-          return { text: "Message sent to " + state.dotName + "." };
+          return { text: "Message sent to " + state.dotName + ".", semanticResult: util.messageSent(state.dotName, state.room, text) };
         }
         return {
           status: async function() {
@@ -5681,9 +5685,8 @@
             });
             var label = '"' + threadLabel(thread).slice(0, 60) + '" on ' + computer.name;
             var state = thread.status && thread.status.type;
-            if (state === "idle") return { text: "Sent to Codex session " + label + "." };
-            if (state === "active") return { text: "Queued for Codex session " + label + "; it runs after the current turn." };
-            return { text: "Queued for Codex session " + label + "; it runs when the session is next opened." };
+            var receipt = state === "idle" ? "Sent to Codex session " + label + "." : state === "active" ? "Queued for Codex session " + label + "; it runs after the current turn." : "Queued for Codex session " + label + "; it runs when the session is next opened.";
+            return { text: receipt, semanticResult: util.messageSent(threadLabel(thread), thread.id, text) };
           } finally {
             link.close();
           }
@@ -5819,7 +5822,10 @@
             input_items: prompt(args.message)
           });
           if (!body) throw PluginError("PLUGIN_UNAVAILABLE", "Codex Cloud did not confirm the follow-up; check the task before sending again.");
-          return { text: 'Sent a follow-up to Codex Cloud task "' + task.title.slice(0, 60) + '".' };
+          return {
+            text: 'Sent a follow-up to Codex Cloud task "' + task.title.slice(0, 60) + '".',
+            semanticResult: util.messageSent(task.title, task.id, args.message)
+          };
         }
         return { environments, tasks, create, followUp };
       }
@@ -6516,7 +6522,7 @@
           if (stream.done && stream.reply) {
             text += " ChatGPT replied: " + (stream.reply.length > MAX_REPLY ? stream.reply.slice(0, MAX_REPLY - 1) + "…" : stream.reply);
           }
-          return { text };
+          return { text, semanticResult: util.messageSent(String(args.title || "ChatGPT"), id || stream.conversation, args.message) };
         }
         return { list, send };
       }

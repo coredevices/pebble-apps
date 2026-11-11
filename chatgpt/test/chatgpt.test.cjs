@@ -105,6 +105,8 @@ test('a new ChatGPT chat is sent the way the web app sends it, and the receipt q
   const before = f.calls.length;
   const result = await f.send({ message: 'hello ChatGPT', chat_id: 'new-chat' });
   assert.equal(result.text, 'Started a new ChatGPT chat (chat_id c-1). ChatGPT replied: Hello there.');
+  assert.deepEqual(JSON.parse(result.semanticResult),
+    { type: 'MESSAGE_SENT', recipientName: 'ChatGPT', text: 'hello ChatGPT ⌚', contactId: 'c-1' });
   assert.deepEqual(f.calls.slice(before).map((c) => c.key), [REQUIREMENTS, PREPARE, CONVERSATION]);
 
   const sent = f.call(CONVERSATION);
@@ -177,6 +179,8 @@ test('an existing chat from agent/chats continues from its current message, also
   for (const chat_id of ['c-9', 'trip']) {
     const result = await f.send({ message: 'add Lisbon', chat_id });
     assert.equal(result.text, 'Sent to ChatGPT chat "Trip plans". ChatGPT replied: Hello there.');
+    assert.deepEqual(JSON.parse(result.semanticResult),
+      { type: 'MESSAGE_SENT', recipientName: 'Trip plans', text: 'add Lisbon ⌚', contactId: 'c-9' });
     const body = f.call(CONVERSATION).body;
     assert.equal(body.conversation_id, 'c-9');
     assert.equal(body.parent_message_id, 'node-7');

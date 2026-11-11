@@ -328,9 +328,10 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
       });
       var label = '"' + threadLabel(thread).slice(0, 60) + '" on ' + computer.name;
       var state = thread.status && thread.status.type;
-      if (state === 'idle') return { text: 'Sent to Codex session ' + label + '.' };
-      if (state === 'active') return { text: 'Queued for Codex session ' + label + '; it runs after the current turn.' };
-      return { text: 'Queued for Codex session ' + label + '; it runs when the session is next opened.' };
+      var receipt = state === 'idle' ? 'Sent to Codex session ' + label + '.' :
+        state === 'active' ? 'Queued for Codex session ' + label + '; it runs after the current turn.' :
+        'Queued for Codex session ' + label + '; it runs when the session is next opened.';
+      return { text: receipt, semanticResult: util.messageSent(threadLabel(thread), thread.id, text) };
     } finally {
       link.close();
     }

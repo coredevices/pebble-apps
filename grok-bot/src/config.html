@@ -203,50 +203,59 @@ document.addEventListener('click', function (event) {
         const digest = sha256(new TextEncoder().encode(verifier));
         const uuid = randomUuid();
         const url = "https://cursor.com/loginDeepControl?challenge=" + base64Url(digest) +
-          "&uuid=" + uuid + "&mode=login&redirectTarget=sand";
+          "&uuid=" + uuid + "&mode=login&redirectTarget=sand&supportsSelectedTeamLogin=true";
         return { url, uuid, verifier };
       }
-      $("signin").onclick = $("signinAgain").onclick = () =>
+      // Bumped to start a sign-in; tapping Sign in while one waits on the browser bumps it to cancel that one.
+      let signInAttempt = 0, waitingForBrowser = false;
+      $("signin").onclick = $("signinAgain").onclick = () => {
+        if (waitingForBrowser) { signInAttempt++; return; }
         run(async () => {
-          if (!Pebble.webSignIn) throw new Error("Grok Bot sign-in requires a newer version of the Pebble app.");
-          say("Opening Grok Bot sign-in…");
+          const attempt = ++signInAttempt;
+          if (typeof Pebble.openUrl !== "function") throw new Error("Grok Bot sign-in requires a newer version of the Pebble app.");
           const login = await cursorLogin();
           const started = Date.now();
-          // Only lengths and flags go to the log, never the cookie or the login uuid.
+          // Only step names and counts go to the log, never the login uuid.
           const trace = (step, extra) => send(Object.assign({ type: "traceSignIn", step, ms: Date.now() - started }, extra)).catch(() => {});
-          const cookies = await Pebble.webSignIn({ url: login.url, cookies: ["WorkosCursorSessionToken"], domain: "cursor.com" });
-          if (!cookies) { trace("cancelled"); say("Sign-in cancelled."); return; }
-          const session = cookies.WorkosCursorSessionToken || "";
-          let decoded = session;
-          try { decoded = decodeURIComponent(session); } catch (e) {}
-          await trace("returned", { cookie: { present: !!session, length: session.length, jwt: /::[\w-]+\.[\w-]+\.[\w-]+$/.test(decoded) } });
-          say("Connecting to your Grok Bot computer…");
-          const deadline = Date.now() + 15000;
-          let result, polls = 0, triedSession = false;
-          while ((result = await send({ type: "finishSignIn", uuid: login.uuid, verifier: login.verifier })).pending) {
-            polls++;
-            if (Date.now() > deadline) {
-              await trace("timeout", { polls });
-              throw new Error("Grok Bot sign-in did not finish. Please try again.");
-            }
-            // The sign-in window closes as soon as the cookie exists, which can be before Cursor ties
-            // this login to it, so auth/poll never answers. The cookie's own session works instead.
-            if (polls === 5 && session && !triedSession) {
-              triedSession = true;
-              try {
-                result = await send({ type: "sessionSignIn", session });
-                await trace("session", { polls });
-                break;
-              } catch (e) {
-                await trace("sessionFailed", { polls });
+          // Sign-in runs in the phone's browser, as the Grok Bot desktop app's does, not in
+          // Pebble.webSignIn: that window closes as soon as Cursor's session cookie exists, before
+          // "Yes, log in" and the "confirm it's you" step tie this login to it, so auth/poll never
+          // answered (MOB-16795). The browser also has the user's passkeys and Cursor sign-in.
+          if (!(await Pebble.openUrl(login.url))) { trace("cancelled"); say("Sign-in cancelled."); return; }
+          await trace("opened");
+          say("Finish signing in to Cursor in your browser, then come back here. Tap Sign in again to cancel.");
+          // Everything else stays locked, but Sign in can cancel this wait.
+          waitingForBrowser = true;
+          $("signin").disabled = $("signinAgain").disabled = false;
+          // A browser login can take a while (Google, 2FA, device check). Date.now keeps counting
+          // while the app is in the background, where this page's timers pause.
+          const deadline = Date.now() + 5 * 60 * 1000;
+          let result, polls = 0;
+          try {
+            for (;;) {
+              if (attempt !== signInAttempt) { trace("cancelled", { polls }); say("Sign-in cancelled."); return; }
+              polls++;
+              // A dropped message (app just resumed) keeps this login: a new one would need the browser
+              // approval again. The plugin turns a failed poll into pending; its other errors end it.
+              const reply = await Pebble.sendMessage("plugin", { type: "finishSignIn", uuid: login.uuid, verifier: login.verifier }).catch(() => ({ pending: true }));
+              if (reply.error) throw new Error(reply.error);
+              // Success wins over a cancel tapped meanwhile: the user approved in the browser and the
+              // plugin has already saved the sign-in, so the page shows what is true.
+              if (!reply.pending) { result = reply; break; }
+              if (Date.now() > deadline) {
+                await trace("timeout", { polls });
+                throw new Error("Grok Bot sign-in did not finish. Please try again.");
               }
+              await new Promise((resolve) => setTimeout(resolve, 2000));
             }
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+          } finally {
+            waitingForBrowser = false;
           }
           await trace("done", { polls });
           render(result);
           say(bots.length ? describe() : "Connected, but you have no bots yet. Create one in Grok Bot.");
         });
+      };
       $("defaultFilter").oninput = () => { fill($("defaultBots"), $("defaultFilter")); controls(); };
       $("nickFilter").oninput = () => { fill($("nickBots"), $("nickFilter")); pickNick(); };
       $("defaultBots").onchange = controls;

@@ -17,14 +17,13 @@ function memoryStorage() {
 const reply = (id, content) => ({ id, kind: "send-message", message: { type: "text", content } });
 
 /**
- * A fake Cursor backend + box. Each sendPrompt appends the prompt as a `user` entry and records
- * it in the acceptance ledger; `onSend` lets a test decide what the bot then writes.
+ * A fake Cursor backend + box. Each SendGrokBotUserMessage appends the text as a `user` entry;
+ * `onSend` lets a test decide what the bot then writes.
  */
 function fakeGrokBot(options = {}) {
   const calls = [];
   const transcript = [reply("e1", "old reply")];
-  const ledger = new Map();
-  let ids = 1;
+    let ids = 1;
   async function fetch(url, init) {
     const body = JSON.parse(init.body);
     calls.push({ url, headers: init.headers, body });
@@ -33,6 +32,16 @@ function fakeGrokBot(options = {}) {
       if (options.onEnsure) options.onEnsure();
       if (!/^Bearer (cursor-token|eyJ[\w-]*\.[\w-]+\.[\w-]*)$/.test(init.headers.authorization)) return json(401, {});
       return json(200, options.ensure || { gatewayUrl: BOX + "/", gatewayToken: "box-token", anyrunNetworkToken: "net" });
+    }
+    if (url === "https://api2.cursor.sh/aiserver.v1.GrokBotService/SendGrokBotUserMessage") {
+      assert.equal(init.headers.authorization, "Bearer cursor-token");
+      if (options.fail && options.fail("sendPrompt")) return json(options.failStatus || 502, {});
+      const id = "p" + ids++;
+      transcript.push({ id, kind: "user", text: body.text });
+      if (options.rejected) return json(200, { dispatched: false, refusal: { failureCode: "x", message: "no" } });
+      if (options.onSend) options.onSend(body.text, transcript);
+      else transcript.push(reply("r" + id, "re: " + body.text));
+      return json(200, { dispatched: true });
     }
     assert.ok(url.startsWith(BOX + "/api/"), url);
     assert.equal(init.headers.authorization, "Bearer box-token");
@@ -44,18 +53,6 @@ function fakeGrokBot(options = {}) {
         return json(200, { agents: [{ id: "g1", name: "Team", memberIds: ["a1"] }, { id: "a1", name: "Ada" }] });
       case "getAgentTranscriptTail":
         return json(200, { entries: transcript });
-      case "promptAcceptanceStatus": {
-        const record = ledger.get(body.clientNonce);
-        return json(200, record ? { outcome: "found", record } : { outcome: "missing" });
-      }
-      case "sendPrompt": {
-        const id = "p" + ids++;
-        transcript.push({ id, kind: "user", text: body.prompt });
-        ledger.set(body.clientNonce, { status: options.rejected ? "rejected" : "accepted", echoEntryId: id });
-        if (options.onSend) options.onSend(body.prompt, transcript);
-        else transcript.push(reply("r" + id, "re: " + body.prompt));
-        return json(200, { accepted: true });
-      }
     }
     throw new Error("unexpected " + url);
   }
@@ -82,9 +79,10 @@ test("connects, picks the first bot, sends and returns a receipt; replies are re
   const result = await service.action({ action: "send_to_agent", args: { message: "hello" } });
   assert.equal(result.text, "Message sent to Ada. Read Grok Bot's replies later for its answer.");
   assert.deepEqual(JSON.parse(result.semanticResult), { type: "MESSAGE_SENT", recipientName: "Ada", text: "hello ⌚", contactId: "a1" });
-  const sent = grok.calls.find((c) => c.url.endsWith("/api/sendPrompt"));
+  const sent = grok.calls.find((c) => c.url.endsWith("/SendGrokBotUserMessage"));
   assert.equal(sent.body.agentId, "a1");
-  assert.ok(sent.body.clientNonce);
+  assert.ok(sent.body.messageId);
+  assert.equal(sent.body.source, 2);
 
   const read = await service.action({ action: "read_grok_bot", args: { limit: 5 } });
   assert.equal(read.text, "Ada: old reply\n\nre: hello ⌚");
@@ -107,7 +105,7 @@ test("refuses to send when the box lookup used up the time budget", async () => 
     const service = await connected(slow);
     const err = await service.action({ action: "send_to_agent", args: { message: "x" } }).catch((e) => e);
     assert.match(safeError(err).message, /not sent/);
-    assert.ok(!slow.calls.some((c) => c.url.endsWith("/api/sendPrompt")));
+    assert.ok(!slow.calls.some((c) => c.url.endsWith("/SendGrokBotUserMessage")));
   } finally {
     Date.now = realNow;
   }
@@ -164,16 +162,11 @@ test("finishSignIn polls once: pending until Cursor hands over the token, then c
   );
 });
 
-test("sessionSignIn connects with the JWT in Cursor's session cookie", async () => {
-  const grok = fakeGrokBot();
-  const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.c2ln";
-  const service = createService(memoryStorage(), grok.fetch);
-  const settings = await service.config({ type: "sessionSignIn", session: "user_1%3A%3A" + jwt });
-  assert.equal(settings.configured, true);
-  assert.equal(grok.calls[0].headers.authorization, "Bearer " + jwt);
-  assert.equal((await createService(memoryStorage(), grok.fetch).config({ type: "sessionSignIn", session: "user_1::" + jwt })).configured, true);
-  await assert.rejects(service.config({ type: "sessionSignIn", session: "not-a-session" }), /did not finish/);
-  await assert.rejects(service.config({ type: "sessionSignIn", session: jwt }), /did not finish/);
+test("finishSignIn stays pending when a poll fails to reach Cursor", async () => {
+  const fetch = async () => { throw new TypeError("network down"); };
+  const service = createService(memoryStorage(), fetch);
+  const result = await service.config({ type: "finishSignIn", uuid: "123e4567-e89b-42d3-a456-426614174000", verifier: "v".repeat(43) });
+  assert.deepEqual(result, { pending: true });
 });
 
 test("agent/configured is false until signed in with a bot selected", async () => {
@@ -204,7 +197,7 @@ test("agent/chats lists the account's bots by id and name", async () => {
 test("chat_id picks a bot by id or name; unknown names never send", async () => {
   const grok = fakeGrokBot();
   const service = await connected(grok);
-  const sends = () => grok.calls.filter((c) => c.url.endsWith("/api/sendPrompt")).map((c) => c.body.agentId);
+  const sends = () => grok.calls.filter((c) => c.url.endsWith("/SendGrokBotUserMessage")).map((c) => c.body.agentId);
   assert.match((await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "g1" } })).text, /Team/);
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: " team " } });
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: null } });
@@ -380,7 +373,7 @@ test("through the Pebble wrapper, sends and source reads never write credentials
 test("nicknames route sends, name agent/chats and agent/configured, and move between bots", async () => {
   const grok = fakeGrokBot();
   const service = await connected(grok);
-  const sends = () => grok.calls.filter((c) => c.url.endsWith("/api/sendPrompt")).map((c) => c.body.agentId);
+  const sends = () => grok.calls.filter((c) => c.url.endsWith("/SendGrokBotUserMessage")).map((c) => c.body.agentId);
   const saved = await service.config({ type: "saveNickname", id: "g1", nickname: " Work " });
   assert.equal(saved.bots.find((b) => b.id === "g1").nickname, "Work");
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "WORK" } });
@@ -402,7 +395,7 @@ test("nicknames route sends, name agent/chats and agent/configured, and move bet
 test("exact id beats nickname, nickname beats name, and ambiguous partials never send", async () => {
   const grok = fakeGrokBot();
   const service = await connected(grok);
-  const sends = () => grok.calls.filter((c) => c.url.endsWith("/api/sendPrompt")).map((c) => c.body.agentId);
+  const sends = () => grok.calls.filter((c) => c.url.endsWith("/SendGrokBotUserMessage")).map((c) => c.body.agentId);
   await service.config({ type: "saveNickname", id: "a1", nickname: "Teamwork" });
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "teamwork" } });
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "team" } });
@@ -448,11 +441,11 @@ test("a nickname that another bot was later renamed to is refused as ambiguous, 
     assert.equal(safeError(err).code, "INVALID_ARGS", action);
     assert.match(safeError(err).message, /both a nickname and another bot/);
   }
-  assert.ok(!grok.calls.some((c) => c.url.endsWith("/api/sendPrompt")));
+  assert.ok(!grok.calls.some((c) => c.url.endsWith("/SendGrokBotUserMessage")));
   // A nickname for a bot that's gone is ignored: the name resolves to the bot that has it.
   agents = [{ id: "g1", name: "Work", memberIds: ["a1"] }];
   await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "work" } });
-  assert.equal(grok.calls.filter((c) => c.url.endsWith("/api/sendPrompt"))[0].body.agentId, "g1");
+  assert.equal(grok.calls.filter((c) => c.url.endsWith("/SendGrokBotUserMessage"))[0].body.agentId, "g1");
 });
 
 test("signing in again as the same account keeps the default and nicknames", async () => {
@@ -537,8 +530,27 @@ test("reach: a request refused as not allowed names its declared domain for sure
   const sure = (host) => 'Grok Bot doesn\'t have permission to connect to ' + host + '. Turn on "Connect to ' + host + '" in Grok Bot\'s Permissions.';
   const refused = notAllowed("https://api2.cursor.sh/aiserver.v1.GrokBotService/EnsureSandBox");
   assert.equal(withBlockedHost(refused, safeError(refused), memoryStorage(), async () => ({ status: 200 })).message, sure("cursor.sh"));
-  const service = await connected(fakeGrokBot({ onSend() { throw notAllowed(BOX + "/api/sendPrompt"); } }));
+  const service = await connected(fakeGrokBot({ onSend() { throw notAllowed("https://api2.cursor.sh/aiserver.v1.GrokBotService/SendGrokBotUserMessage"); } }));
   const err = await service.action({ action: "send_to_agent", args: { message: "x", chat_id: "g1" } }).catch((e) => e);
   assert.equal(withBlockedHost(err, safeError(err), memoryStorage(), () => new Promise(() => {})).message,
-    sure("cursorvm.com") + " Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
+    sure("cursor.sh") + " Grok Bot delivery is uncertain. Check Grok Bot before sending again.");
+});
+
+test("a failed request logs Cursor's reason with hosts, URLs and tokens redacted", async () => {
+  const logged = [];
+  const realError = console.error;
+  console.error = (line) => logged.push(String(line));
+  try {
+    const fetch = async () => ({
+      ok: false,
+      status: 409,
+      text: async () => JSON.stringify({ code: "failed_precondition", message: "box ab-1.cursorvm.com token eyJhbGciOiJFUzI1NiJ9abcdefghijkl at https://x.example/y. Update the app." }),
+    });
+    await createService(memoryStorage(), fetch).config({ type: "connect", accessToken: "cursor-token" }).catch(() => {});
+  } finally {
+    console.error = realError;
+  }
+  const line = logged.find((l) => l.includes("HTTP 409"));
+  assert.ok(line && line.includes("failed_precondition") && line.includes("Update the app"), line);
+  assert.ok(!/cursorvm|eyJ|https?:/.test(line), line);
 });

@@ -10,9 +10,6 @@
     "displayName": "Grok Bot",
     "uuid": "80ee6780-856f-411f-954b-4553ba7f2af8",
     "sdkVersion": "3",
-    "capabilities": [
-      "web_sign_in"
-    ],
     "usesPermissions": [
       {
         "name": "Internet",

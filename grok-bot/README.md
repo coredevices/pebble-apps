@@ -40,19 +40,28 @@ This uses no desktop app and no bridge. It is the same private API the Grok Bot 
 
 1. **Sign-in** is the Grok Bot app's own login:
    - The settings page opens `cursor.com/loginDeepControl?challenge=…&uuid=…&mode=login&redirectTarget=sand`
-     through `Pebble.webSignIn`, which returns once Cursor's `WorkosCursorSessionToken` cookie exists.
-   - The plugin then polls `api2.cursor.sh/auth/poll` until it returns a Cursor access token,
-     and keeps it in `Pebble.secureStorage`.
+     in the phone's browser (`Pebble.openUrl`), where the user signs in to Cursor and approves.
+   - Meanwhile the plugin polls `api2.cursor.sh/auth/poll`, for up to 5 minutes, until it returns
+     a Cursor access token, and keeps it in `Pebble.secureStorage`.
+   - Not `Pebble.webSignIn`: its window closes as soon as Cursor's session cookie exists, before
+     the "Yes, log in" and "confirm it's you" steps tie the login to it, so the poll never
+     answers (MOB-16795). Cursor's own approval call needs its anti-bot token, so the plugin
+     can't make it either.
    - Grok Bot accounts are Cursor accounts. The token lasts about 60 days and cannot be
      refreshed, so when it expires the user signs in again.
 2. Each action calls `POST api2.cursor.sh/aiserver.v1.GrokBotService/EnsureSandBox` with that
-   token. The reply gives the user's box (`https://…cursorvm.com`), a gateway token and
+   token and the Grok Bot desktop app's client headers (`x-cursor-client-version` 1.0.1, its user
+   agent, the selected team). Cursor answers 401 to the old 0.20.0 version (MOB-17023). The reply gives the user's box (`https://…cursorvm.com`), a gateway token and
    network headers.
 3. The action then calls `POST {box}/api/<method>`:
    - `listAgents` for bots and groups.
-   - `sendPrompt {agentId, prompt, clientNonce}` to send.
    - `getAgentTranscriptTail {id, limit}` to read. Bot replies are
      `{kind: "send-message", message: {content}}` entries.
+4. Sending goes through Cursor, as the desktop app's does:
+   `POST api2.cursor.sh/aiserver.v1.GrokBotService/SendGrokBotUserMessage
+   {agentId, messageId, text, sentAtMs, source: MOBILE, initiator: USER}`. A `refusal` in the reply
+   means not sent. The box's own `/api/sendPrompt` now answers 409 for bots that run on Cursor's
+   servers ("this version of the app can't message it").
 
 Delivery rules:
 

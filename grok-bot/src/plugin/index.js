@@ -1,6 +1,7 @@
-// Grok Bot plugin. Talks to the user's Grok Bot computer over the same private HTTPS API the
-// Grok Bot apps use: a Cursor access token (from the native sign-in) asks Cursor's backend where
-// the user's box is, then each call is `POST {gatewayUrl}/api/<method>` on that box.
+// Grok Bot plugin. Talks to the user's Grok Bot over the same private HTTPS API the Grok Bot apps
+// use: a Cursor access token (from the browser sign-in) asks Cursor's backend where the user's box
+// is, lists and reads bots with `POST {gatewayUrl}/api/<method>` on that box, and sends through
+// Cursor's GrokBotService/SendGrokBotUserMessage.
 // Unofficial and undocumented: method names and shapes come from the Grok Bot client.
 
 var KEY = "grokbot.connection.v1";
@@ -9,6 +10,9 @@ var BOTS_KEY = "grokbot.bots.v1";
 var BOTS_TTL_MS = 5 * 60 * 1000;
 var POLL_URL = "https://api2.cursor.sh/auth/poll";
 var ENSURE_URL = "https://api2.cursor.sh/aiserver.v1.GrokBotService/EnsureSandBox";
+var SEND_URL = "https://api2.cursor.sh/aiserver.v1.GrokBotService/SendGrokBotUserMessage";
+// The Grok Bot desktop app version whose request headers apiHeaders() copies.
+var CLIENT_VERSION = "1.0.1";
 var BOX_URL = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.cursorvm\.com$/i;
 var MAX_MESSAGE = 16000;
 var MAX_NICKNAME = 40;
@@ -16,7 +20,7 @@ var MAX_NICKNAME = 40;
 var SEND_BUDGET_MS = 18000;
 var READ_BUDGET_MS = 18000;
 // The settings page's sign-in milestones, the only step names traceSignIn logs.
-var SIGN_IN_STEPS = ["cancelled", "returned", "session", "sessionFailed", "timeout", "done"];
+var SIGN_IN_STEPS = ["cancelled", "opened", "timeout", "done"];
 // Below this much time left, a send is refused rather than risk an unknown delivery.
 var SEND_MIN_LEFT_MS = 8000;
 var HOSTS = ["cursor.sh", "cursorvm.com"];
@@ -210,7 +214,18 @@ function createService(storage, fetch, cache) {
       throw e;
     }
     if (!response.ok) {
-      console.error("Grok Bot POST " + path + " failed: HTTP " + response.status);
+      // Connect's error code and message say why (e.g. an outdated client). Redacted before logging:
+      // no URLs, host names or token-like strings, and nothing from a body that isn't Connect JSON.
+      var reason = "";
+      try {
+        var err = JSON.parse(text);
+        reason = [err.code, err.message].filter(function (x) { return typeof x === "string"; }).join(": ")
+          .replace(/https?:\/\/\S+/gi, "<url>")
+          .replace(/\b[\w-]+(\.[\w-]+)+\b/g, "<host>")
+          .replace(/[A-Za-z0-9_+/=-]{24,}/g, "<redacted>")
+          .slice(0, 200);
+      } catch (e) {}
+      console.error("Grok Bot POST " + path + " failed: HTTP " + response.status + (reason ? " (" + reason + ")" : ""));
       throw new PluginError("HTTP", "HTTP " + response.status, response.status);
     }
     try {
@@ -222,15 +237,25 @@ function createService(storage, fetch, cache) {
 
   // ponytail: looks the box up on every request (one extra call, survives box moves and token
   // rotation); cache it in storage if that latency matters.
-  async function box(accessToken, deadline) {
-    var body = await post(ENSURE_URL, {
+  // The headers the Grok Bot desktop app sends to Cursor's API (its getSandBackendClientHeaders).
+  // Cursor 401s the old 0.20.0 client version this plugin used to claim.
+  function apiHeaders(auth) {
+    var headers = {
       "content-type": "application/json",
       "connect-protocol-version": "1",
-      authorization: "Bearer " + accessToken,
+      authorization: "Bearer " + auth.accessToken,
+      "user-agent": "Mozilla/5.0 (compatible; android) AppleWebKit/537.36 (KHTML, like Gecko) Sand/" + CLIENT_VERSION + " Safari/537.36",
       "x-cursor-client-type": "sand",
-      "x-cursor-client-version": "0.20.0",
+      "x-cursor-client-version": CLIENT_VERSION,
       "x-sand-box-namespace": "prod",
-    }, {}, deadline);
+      "x-ghost-mode": "true",
+    };
+    if (auth.teamId) headers["x-cursor-team-id"] = String(auth.teamId);
+    return headers;
+  }
+
+  async function box(auth, deadline) {
+    var body = await post(ENSURE_URL, apiHeaders(auth), {}, deadline);
     var url = String(body.gatewayUrl || body.gateway_url || "").replace(/\/$/, "");
     var token = body.gatewayToken || body.gateway_token;
     if (!BOX_URL.test(url) || typeof token !== "string" || !token || /[\r\n]/.test(token))
@@ -269,15 +294,6 @@ function createService(storage, fetch, cache) {
   async function tail(call, botId) {
     var data = await call("getAgentTranscriptTail", { id: botId, limit: 60 });
     return Array.isArray(data && data.entries) ? data.entries : [];
-  }
-
-  /** The host's own record of our send: its status and the transcript entry it became. */
-
-  /** The host's own record of our send, or null when it can't say. */
-  async function acceptance(call, clientNonce) {
-    var data = await call("promptAcceptanceStatus", { accountSlot: "host", clientNonce: clientNonce });
-    var record = data && (data.record || data);
-    return record && typeof record === "object" ? record : null;
   }
 
   async function selectedBot(call, state) {
@@ -359,10 +375,11 @@ function createService(storage, fetch, cache) {
     };
   }
 
-  async function connectWith(token) {
+  async function connectWith(token, teamId) {
     if (typeof token !== "string" || !token || token.length > 8192 || /[\r\n]/.test(token))
       throw new PluginError("AUTH_REQUIRED", "Grok Bot sign-in returned an invalid session. Please try again.");
-    var call = await box(token, Date.now() + READ_BUDGET_MS);
+    teamId = Number.isSafeInteger(teamId) && teamId > 0 ? teamId : null;
+    var call = await box({ accessToken: token, teamId: teamId }, Date.now() + READ_BUDGET_MS);
     var list = await bots(call);
     var account = tokenUser(token) ? "user:" + tokenUser(token) : "box:" + call.host;
     var previous = load();
@@ -376,7 +393,7 @@ function createService(storage, fetch, cache) {
     var nicknames = {};
     if (previous && previous.nicknames)
       list.forEach(function (b) { if (previous.nicknames[b.id]) nicknames[b.id] = previous.nicknames[b.id]; });
-    var state = { accessToken: token, account: account, signIn: nonce(), signedInAt: Date.now(), nicknames: nicknames,
+    var state = { accessToken: token, teamId: teamId, account: account, signIn: nonce(), signedInAt: Date.now(), nicknames: nicknames,
       botId: bot ? bot.id : null, botName: bot ? bot.name : null };
     save(state);
     clearBots();
@@ -406,33 +423,15 @@ function createService(storage, fetch, cache) {
     }
     var body = await response.json();
     var token = body && typeof body.accessToken === "string" ? body.accessToken : null;
-    console.log("Grok Bot sign-in poll: HTTP 200, " + (token ? "token" : "no token, " + Object.keys(body || {}).length + " fields"));
-    return token;
-  }
-
-  /**
-   * The JWT inside Cursor's WorkosCursorSessionToken cookie ("<user>::<jwt>", usually URL-encoded),
-   * or null. Used when auth/poll never hands over a token: the sign-in window closes as soon as the
-   * cookie exists, which can be before Cursor's page has tied the login uuid to the session.
-   */
-  function sessionJwt(cookie) {
-    var value = String(cookie || "");
-    try {
-      value = decodeURIComponent(value);
-    } catch (e) {}
-    var at = value.lastIndexOf("::");
-    if (at < 0) return null;
-    var jwt = value.slice(at + 2);
-    return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(jwt) ? jwt : null;
+    // Field names only, never values.
+    console.log("Grok Bot sign-in poll: HTTP 200, " + (token ? "token" : "no token") + ", fields " + Object.keys(body || {}).sort().join(","));
+    return token ? { token: token, teamId: body.selectedTeamId } : null;
   }
 
   // What the settings page saw during sign-in; never carries a token or the uuid.
   function traceSignIn(message) {
     var step = SIGN_IN_STEPS.indexOf(message.step) >= 0 ? message.step : "unknown";
-    var cookie = message.cookie || {};
     console.log("Grok Bot sign-in: " + step + " after " + (Number(message.ms) | 0) + " ms" +
-      (message.cookie ? ", cookie " + (cookie.present ? (Number(cookie.length) | 0) + " chars" +
-        (cookie.jwt ? ", has session JWT" : ", no session JWT") : "missing") : "") +
       (message.polls !== undefined ? ", " + (Number(message.polls) | 0) + " polls" : ""));
     return {};
   }
@@ -445,33 +444,25 @@ function createService(storage, fetch, cache) {
       case "connect":
         return connectWith(message.accessToken);
       case "finishSignIn": {
-        var token = await pollSignIn(message.uuid, message.verifier);
-        return token ? connectWith(token) : { pending: true };
+        var polled;
+        try {
+          polled = await pollSignIn(message.uuid, message.verifier);
+        } catch (e) {
+          // Offline or a dropped poll: the settings page asks again until its deadline.
+          if (e instanceof PluginError) throw e;
+          return { pending: true };
+        }
+        return polled ? connectWith(polled.token, polled.teamId) : { pending: true };
       }
       case "traceSignIn":
         return traceSignIn(message);
-      case "sessionSignIn": {
-        var jwt = sessionJwt(message.session);
-        if (!jwt) {
-          console.error("Grok Bot session sign-in: cookie has no session JWT");
-          throw new PluginError("AUTH_REQUIRED", "Grok Bot sign-in did not finish. Please try again.");
-        }
-        try {
-          var connected = await connectWith(jwt);
-          console.log("Grok Bot session sign-in: connected");
-          return connected;
-        } catch (e) {
-          console.error("Grok Bot session sign-in failed: " + safeError(e).code + (e && e.status ? " HTTP " + e.status : ""));
-          throw e;
-        }
-      }
       case "listBots": {
         var current = required();
-        return settings(current, await bots(await box(current.accessToken, deadline), current));
+        return settings(current, await bots(await box(current, deadline), current));
       }
       case "selectBot": {
         var s = required();
-        var all = await bots(await box(s.accessToken, deadline), s);
+        var all = await bots(await box(s, deadline), s);
         var chosen = all.find(function (b) { return b.id === message.id; });
         if (!chosen)
           throw new PluginError("INVALID_ARGS", "That bot is no longer available. Refresh the list and choose a bot.");
@@ -482,7 +473,7 @@ function createService(storage, fetch, cache) {
       }
       case "saveNickname": {
         var n = required();
-        var listed = await bots(await box(n.accessToken, deadline), n);
+        var listed = await bots(await box(n, deadline), n);
         setNickname(n, listed, message.id, message.nickname);
         save(n);
         return settings(n, listed);
@@ -502,13 +493,19 @@ function createService(storage, fetch, cache) {
     if (typeof message !== "string" || !message.trim() || message.length > MAX_MESSAGE)
       throw new PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
     var state = required();
-    var call = await box(state.accessToken, deadline);
+    var call = await box(state, deadline);
     var bot = await targetBot(call, state, args.chat_id);
     if (deadline - Date.now() < SEND_MIN_LEFT_MS)
       throw new PluginError("PLUGIN_UNAVAILABLE", "Grok Bot is responding slowly, so the message was not sent. Try again shortly.");
     var clientNonce = nonce();
+    var sent;
     try {
-      await call("sendPrompt", { agentId: bot.id, prompt: message + " ⌚", clientNonce: clientNonce });
+      // Sent through Cursor's API, as the desktop app does: a box's own /api/sendPrompt now 409s
+      // for bots that run on Cursor's servers ("this version of the app can't message it").
+      sent = await post(SEND_URL, apiHeaders(state), {
+        agentId: bot.id, messageId: clientNonce, text: message + " ⌚", sentAtMs: String(Date.now()),
+        isFork: false, sessionId: "", source: 2 /* GrokBotClientSurface.MOBILE */, initiator: 1 /* USER */,
+      }, deadline);
     } catch (e) {
       // A refusal is safe to report as not sent; anything else may have landed.
       if (e instanceof PluginError && e.status && e.status < 500) throw e;
@@ -517,8 +514,7 @@ function createService(storage, fetch, cache) {
       uncertain.cause = e;
       throw uncertain;
     }
-    var record = await acceptance(call, clientNonce).catch(function () { return null; });
-    if (record && record.status === "rejected")
+    if (sent && sent.refusal)
       throw new PluginError("PLUGIN_UNAVAILABLE", bot.name + " did not accept the message, so it was not sent.");
     return {
       text: "Message sent to " + bot.name + ". Read Grok Bot's replies later for its answer.",
@@ -530,7 +526,7 @@ function createService(storage, fetch, cache) {
     var deadline = Date.now() + READ_BUDGET_MS;
     var limit = Math.max(1, Math.min(20, Math.trunc(Number(args && args.limit)) || 3));
     var state = required();
-    var call = await box(state.accessToken, deadline);
+    var call = await box(state, deadline);
     var bot = await targetBot(call, state, args && args.chat_id);
     var replies = (await tail(call, bot.id)).map(replyText).filter(Boolean).slice(-limit);
     return { text: replies.length ? bot.name + ": " + replies.join("\n\n") : bot.name + " has no replies yet." };
@@ -565,7 +561,7 @@ function createService(storage, fetch, cache) {
     if (cached && Date.now() - cached.listedAt < BOTS_TTL_MS) list = cached.bots;
     else {
       try {
-        list = await bots(await box(state.accessToken, Date.now() + READ_BUDGET_MS), state);
+        list = await bots(await box(state, Date.now() + READ_BUDGET_MS), state);
       } catch (e) {
         if (!cached) throw e;
         list = cached.bots;

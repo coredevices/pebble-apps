@@ -57,6 +57,7 @@ export class MuseClient {
         await this.#rest('vm/wake', { vm_id: this.#auth.vm_id, retry_count: attempt, connect_attempt_id: connectAttemptId }, signal);
         const admission = await this.#rest('token', { vmAddress: `${this.#auth.vm_id}.metaaivm.com`, force_refresh: true }, signal);
         if (!admission || typeof admission.token !== 'string' || !admission.token) throw new MuseError('missing admission token');
+        if (!attempt) console.log(`Muse admission: notary_token ${typeof admission.notary_token === 'string' && admission.notary_token ? 'yes' : 'no'}, fields ${Object.keys(admission).filter(k => /^[A-Za-z_]{1,40}$/.test(k)).join(',')}`);
         const url = this.#endpoint + "?" + queryString({ vm_id: this.#auth.vm_id, auth_token: admission.token, app_id: 'hatch-web', request_id: randomUUID(),
           ...(typeof admission.notary_token === 'string' && admission.notary_token ? { notary_token: admission.notary_token } : {}) });
         socket = this.#socket = new Socket(url, this.#origin);
@@ -81,6 +82,7 @@ export class MuseClient {
         const { payload, serverPublicKey } = hs.readResponse(await socket.read(signal));
         if (this.#auth.pin && !timingSafeEqual(this.#auth.pin, serverPublicKey)) throw new MuseError('Noise server key does not match pin');
         let rv; try { rv = decode('RVChallenge', payload); } catch { /* Standard opaque attestation payload. */ }
+        console.log(`Muse handshake: payload ${payload?.length ?? 0} bytes, ${rv ? `RV state ${rv.state}, nonce ${rv.vmNonce?.length ?? 0}, proof ${rv.vmProof?.length ?? 0}` : 'no RV challenge'}`);
         if (rv && [1, 2].includes(rv.state) && rv.vmNonce?.length === 32) throw new MuseError('confidential VM RV authentication and attestation are unsupported');
         const { message, send, receive } = hs.finish();
         this.#transport = new Transport(send, receive);

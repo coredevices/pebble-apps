@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createService, safeError } from "../src/service.js";
+import { createService, safeError, shape } from "../src/service.js";
 function fixture() {
   const data = new Map(),
     cache = new Map(),
@@ -159,7 +159,7 @@ test("a cookie-only sign-in asks Muse for the account's VM", async () => {
   const seen = [];
   globalThis.fetch = async (url, init) => {
     seen.push([url, init.headers.Cookie]);
-    return { status: 200, json: async () => ({ vm_id: "vm-two" }) };
+    return { status: 200, text: async () => JSON.stringify({ vm_id: "vm-two" }) };
   };
   try {
     await f.service.config({ type: "connect", session: { cookie: "hatch_sess=test" } });
@@ -322,4 +322,23 @@ test("a send is refused, not attempted, once the time budget is too short", asyn
   f.onLookup(() => f.tick(4000));
   await f.service.action({ action: "send_to_agent", args: { message: "ok" } });
   assert.equal(sends(), 1);
+});
+
+test("session shapes log types and status words, never ids, tokens or names", () => {
+  const line = shape({
+    vm_id: "vm-secret-123",
+    vm_number: 12345,
+    is_cvm: true,
+    vm_type: "confidential",
+    authorization_code: "secret-token",
+    error: "Account Jane Doe unavailable",
+    status: "Jane Doe",
+    user: { email: "a@b.c", id: 42, tier: 2 },
+    vms: { "vm-abc123": { state: "running" } },
+  });
+  assert.equal(
+    line,
+    '{vm_id:str(13), vm_number:num, is_cvm:true, vm_type:"confidential", authorization_code:str(12), ' +
+      'error:str(28), status:str(8), user:{email:str(5), id:num, tier:2}, vms:{?}}',
+  );
 });

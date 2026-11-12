@@ -13,15 +13,51 @@ export class PluginError extends Error {
     this.code = code;
   }
 }
+// Describes a Muse response for logs without its secrets: key names and value types only, plus
+// the values of booleans and of short one-word status fields. Ids, tokens, names, emails stay out.
+const STATUS_KEY = /^(is_)?(\w+_)?(type|kind|state|status|mode|cvm|confidential|region|tier|stage)$/i;
+const SAFE_KEY = /^[A-Za-z_]{1,40}$/;
+export function shape(value, depth = 0, key = "") {
+  if (value === null) return "null";
+  if (Array.isArray(value))
+    return depth > 2 || !value.length ? `[${value.length}]` : `[${value.length}: ${shape(value[0], depth + 1, key)}]`;
+  const status = STATUS_KEY.test(key);
+  switch (typeof value) {
+    case "boolean":
+      return String(value);
+    case "number":
+      return status && Math.abs(value) < 1000 ? String(value) : "num";
+    case "string":
+      return status && /^[A-Za-z_.-]{1,32}$/.test(value) ? JSON.stringify(value) : `str(${value.length})`;
+    case "object": {
+      if (depth > 2) return "{…}";
+      const keys = Object.keys(value);
+      const parts = keys.slice(0, 40).map((k) => (SAFE_KEY.test(k) ? `${k}:${shape(value[k], depth + 1, k)}` : "?"));
+      return `{${parts.join(", ")}${keys.length > 40 ? ", …" : ""}}`;
+    }
+    default:
+      return typeof value;
+  }
+}
 // The signed-in page reports the account's VM; ask it the same way with the captured cookie.
 async function accountVm(cookie) {
   if (typeof cookie !== "string" || !cookie || /[\r\n]/.test(cookie)) return null;
   const response = await fetch("https://muse.ai/api/session", { headers: { Cookie: cookie } });
-  if (response.status !== 200) {
-    console.error(`Muse GET /api/session failed: HTTP ${response.status}`);
-    return null;
+  console.log(`Muse GET /api/session: HTTP ${response.status}`);
+  // The body is read for the log only; failing to read it never changes the outcome.
+  let session;
+  try {
+    const text = String(await response.text());
+    try {
+      session = JSON.parse(text);
+      console.log(`Muse /api/session body: ${shape(session)}`);
+    } catch {
+      console.log(`Muse /api/session body: not JSON (${text.length} chars)`);
+    }
+  } catch {
+    console.error("Muse /api/session body: unreadable");
   }
-  const session = await response.json();
+  if (response.status !== 200) return null;
   return typeof session?.vm_id === "string" ? session.vm_id : null;
 }
 // chatStore holds the agent/chats cache (chat titles, no credentials) apart from the credential
@@ -111,20 +147,34 @@ export function createService(
         }
         case "connect": {
           const session = message.session;
+          const cookie = /^([^=]*)=([^]*)$/.exec(typeof session?.cookie === "string" ? session.cookie : "");
+          console.log(
+            "Muse sign-in: cookie " +
+              (cookie ? `${/^\w{1,32}$/.test(cookie[1]) ? cookie[1] : "?"}=<${cookie[2].length} chars>${cookie[2] === "undefined" ? " (undefined)" : ""}` : typeof session?.cookie) +
+              `, vm_id ${typeof session?.vm_id}`,
+          );
           if (session && typeof session.vm_id !== "string")
             session.vm_id = await accountVm(session.cookie);
-          if (
-            !session ||
-            typeof session.cookie !== "string" ||
-            session.cookie.length > 32768 ||
-            /[\r\n]/.test(session.cookie) ||
-            typeof session.vm_id !== "string" ||
-            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/.test(session.vm_id)
-          )
+          const invalid = !session
+            ? "no session"
+            : typeof session.cookie !== "string"
+              ? "no cookie"
+              : session.cookie.length > 32768
+                ? "cookie too long"
+                : /[\r\n]/.test(session.cookie)
+                  ? "cookie has a line break"
+                  : typeof session.vm_id !== "string"
+                    ? `no vm_id (${session.vm_id === null ? "null" : typeof session.vm_id})`
+                    : !/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/.test(session.vm_id)
+                      ? `vm_id is ${session.vm_id.length} chars, not [A-Za-z0-9_-]`
+                      : null;
+          if (invalid) {
+            console.error(`Muse sign-in rejected: ${invalid}`);
             throw new PluginError(
               "AUTH_REQUIRED",
               "Muse sign-in returned an invalid session. Please try again.",
             );
+          }
           const auth = { cookie: session.cookie, vm_id: session.vm_id };
           const fetchedAt = now();
           const chats = choices(await using(auth, (c) => c.listChats()));

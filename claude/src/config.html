@@ -6,13 +6,19 @@
 <style>
 :root { color-scheme:light dark; font:16px system-ui,sans-serif; --bg:#fff; --card:#f6f4f1; --ink:#242321; --muted:#696660; --line:#ddd9d2; --accent:#a64b2a; }
 * { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px; background:var(--bg); color:var(--ink); }
-h1 { font-size:24px; margin:0 0 6px; } h2 { font-size:18px; margin:0; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
-.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-#selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
-label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input { font:inherit; } select,input:not([type=checkbox]):not([type=radio]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
-button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; }
-.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row select { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; } .more { display:block; margin:4px auto; font-size:14px; } .row input { flex:1; min-width:0; }
-.check { display:flex; gap:10px; align-items:center; font-weight:400; } input[type=checkbox],input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:0; } .modes .check { margin:10px 0 0; } details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
+h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } .hint { color:var(--muted); font-size:13px; line-height:1.45; }
+.card { padding:14px; border:1px solid var(--line); border-radius:16px; margin:16px 0; }
+.eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; margin-bottom:10px; }
+.route { padding:10px 0; border-top:1px solid var(--line); } .route:first-of-type { border-top:0; padding-top:0; }
+.say { display:flex; justify-content:space-between; font-weight:650; } optgroup { font-weight:700; color:var(--accent); }
+.to { color:var(--muted); font-size:14px; margin-top:4px; } .say small { display:block; font-weight:400; color:var(--muted); font-size:12.5px; margin-top:2px; }
+button,select,input { font:inherit; } select,input:not([type=radio]) { width:100%; min-height:44px; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; }
+.primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:12px; } .quiet { border:0; color:var(--accent); background:transparent; padding:6px 0; min-height:0; }
+.chip { display:inline-block; background:var(--card); border-radius:999px; padding:3px 10px; font-size:13px; margin:6px 4px 0 0; }
+.orgs label { display:flex; gap:10px; align-items:center; padding:12px 0; border-top:1px solid var(--line); } .orgs label:first-child { border-top:0; }
+input[type=radio] { width:20px; height:20px; accent-color:var(--accent); margin:0; }
+details { margin:16px 0; } summary { cursor:pointer; color:var(--muted); min-height:36px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
 #blocked { padding:12px 14px; border-radius:12px; margin:0 0 16px; background:#fdecc8; color:#5c3d00; font-size:14px; line-height:1.45; } #blocked strong { display:block; }
 @media(prefers-color-scheme:dark) { :root { --bg:#20201e; --card:#2b2a27; --ink:#f4f1ec; --muted:#bdb7af; --line:#49463f; --accent:#c76b46; } }
 </style>
@@ -20,58 +26,50 @@ button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid va
 <body>
 <p id="blocked" role="alert" hidden></p>
 <h1>Claude</h1>
-<p class="hint">Choose where your messages go.</p>
 <section id="signedOut">
+<p class="hint">Send messages to Claude, Claude Code and Duet.</p>
 <button id="signin" class="primary">Connect Claude</button>
-<p class="hint">Choose “Continue with email” on Claude’s sign-in page. Google sign-in uses a popup that older app versions cannot complete. Your sign-in is saved securely.</p>
 </section>
-<section id="signedIn" hidden>
-<div class="card modes">
-<div class="eyebrow">Send messages to</div>
-<label class="check"><input type="radio" name="kind" value="claude">Claude</label>
-<label class="check"><input type="radio" name="kind" value="code">Claude Code</label>
-<label id="duetChoice" class="check" hidden><input type="radio" name="kind" value="duet">Claude Duet</label>
+
+<section id="pickOrg" hidden>
+<p class="hint">Which organization should messages go to?</p>
+<div class="card orgs" id="orgChoices"></div>
+<button id="orgContinue" class="primary">Continue</button>
+<button id="orgDisconnect" class="quiet">Disconnect Claude</button>
+</section>
+
+<section id="routes" hidden>
+<p class="hint">Where your messages go.</p>
+<div class="card">
+<div class="eyebrow">Hold to speak</div>
+<div class="route">
+<div class="hint">When Index hold-to-speak is set to Claude</div>
+<select id="destination" aria-label="Hold to speak goes to"></select>
 </div>
-<div class="card modes">
-<div class="eyebrow">When you don’t name a chat</div>
-<div id="modeChoices">
-<label class="check"><input type="radio" name="mode" value="new_chat">Start a new chat each time</label>
-<label class="check"><input type="radio" name="mode" value="default_chat">Send to a default chat</label>
 </div>
-<p id="duetMode" class="hint" style="margin-bottom:0" hidden>Messages go to your main Claude Duet conversation. Requires Duet access on your Claude account. <a href="https://claude.ai/duet" target="_blank" rel="noopener">Open Duet</a></p>
-<p id="codeMode" class="hint" style="margin-bottom:0" hidden>Claude Code messages go to a session you choose below.</p>
+<div class="card">
+<div class="eyebrow">Anywhere: start with “Claude…”</div>
+<div class="route"><div class="say"><span>“Tell Claude …”</span></div><div class="to">Same place as hold to speak</div></div>
+<div class="route"><div class="say"><span>“… start a new task …”</span></div>
+<select id="environment" aria-label="New tasks start on"></select></div>
+<div class="route"><div class="say"><span>“… new chat …”</span></div><div class="to">New Claude chat</div></div>
+<div class="route"><div class="say"><span>“… to <i>nickname</i> …”</span></div>
+<div id="chips"></div>
+<details id="nicknames"><summary>Edit names</summary>
+<select id="nickSession" aria-label="Chat"></select>
+<input id="nickname" maxlength="40" placeholder="Nickname, e.g. work" aria-label="Nickname">
+<button id="saveNickname" class="primary">Save</button>
+</details></div>
+<div class="route"><div class="say"><span>“… tell my <i>session name</i> to …”</span></div><div class="to">The chat or Code session with those words in its title</div></div>
 </div>
-<div class="card" id="defaultCard">
-<div class="eyebrow" id="defaultLabel">Your default chat</div>
-<p id="selected"></p>
-<div class="row"><input id="defaultFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="defaultRefresh" class="quiet">Refresh</button></div>
-<select id="defaultSessions" aria-label="Default chat"></select>
-<button id="defaultMore" class="quiet more" hidden>Show older chats</button>
-<button id="useDefault" class="primary">Use as default</button>
-</div>
-<p class="hint">Naming a chat or nickname always sends there instead.</p>
 </section>
 <p id="status" role="status" aria-live="polite">Connecting…</p>
-<details id="nicknames" hidden><summary>Nicknames</summary>
-<p class="hint">Give a chat a short name you can say: “Send to work…”. Works whichever option you chose above.</p>
-<div class="row"><select id="nickKind" aria-label="Chat type"><option value="chat">Claude chats</option><option value="code">Claude Code</option></select><button id="nickRefresh" class="quiet">Refresh</button></div>
-<input id="nickFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname">
-<label for="nickSessions">Chat</label><select id="nickSessions"></select>
-<button id="nickMore" class="quiet more" hidden>Show older chats</button>
-<div id="editor" hidden>
-<label for="nickname">Nickname</label>
-<input id="nickname" maxlength="40" placeholder="e.g. work">
-<button id="saveNickname" class="primary">Save nickname</button>
-<p class="hint">Clear the field to remove a nickname.</p>
-</div>
-</details>
-<details id="account" hidden><summary>Account &amp; connection</summary>
-<label for="organization">Organization</label><select id="organization"></select>
-<p class="hint">Changing organization clears your default chat.</p>
-<p class="hint">Local Claude Code chats need Remote Control turned on and connected.</p>
+<details id="account" hidden><summary>Account</summary>
+<select id="organization" aria-label="Organization"></select>
+<button id="refresh" class="quiet">Reload chats and computers</button><br>
 <button id="disconnect" class="quiet">Disconnect Claude</button>
 </details>
-<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-apps/tree/main/claude" target="_blank" rel="noopener">Source code</a> is available.</em></p>
+<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect directly to Claude.ai. <a href="https://github.com/coredevices/pebble-apps/tree/main/claude" target="_blank" rel="noopener">Source code</a>.</em></p>
 <script>
 // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
 document.addEventListener('click', function (event) {
@@ -82,102 +80,81 @@ document.addEventListener('click', function (event) {
 });
 
 const $ = id => document.getElementById(id);
-let busy = false, state = {configured:false};
+let busy = false, state = {configured:false}, rows = [], envs = null, duet = false;
 const say = text => { $('status').textContent = text; };
 async function send(message) {
   const result = await Pebble.sendMessage('plugin', message);
   if (result.error) throw new Error(result.error);
   return result;
 }
-function sessionName(row) { return (row.nickname ? row.nickname + ' — ' : '') + row.title; }
-const defaultKind = () => state.kind === 'code' ? 'code' : 'chat';
-// A searchable, paginated chat list bound to the #<prefix>Filter/Sessions/More elements.
-function picker(prefix, kind, onPick) {
-  const p = {rows:[], cursor:null, sel:$(prefix + 'Sessions'), filter:$(prefix + 'Filter'), more:$(prefix + 'More')};
-  p.render = () => {
-    const previous = p.sel.value, query = p.filter.value.toLowerCase();
-    p.sel.replaceChildren();
-    p.rows.sort((a,b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0)).filter(row => sessionName(row).toLowerCase().includes(query)).forEach(row => {
-      const option = document.createElement('option');
-      option.value = row.session_id;
-      option.textContent = sessionName(row) + (row.isDefault ? ' (default)' : '');
-      p.sel.appendChild(option);
-    });
-    const has = id => [...p.sel.options].some(option => option.value === id);
-    if (has(previous)) p.sel.value = previous;
-    else if (state.selected && has(state.selected.session_id)) p.sel.value = state.selected.session_id;
-    if (!p.sel.options.length) { const empty = document.createElement('option'); empty.value = ''; empty.textContent = p.rows.length ? 'No matching chats' : 'No chats loaded'; p.sel.appendChild(empty); }
-    p.more.hidden = !p.cursor;
-    onPick();
-  };
-  p.load = async (more = false) => {
-    if (!state.organization) { say('Choose an organization first.'); return; }
-    if (!more) { p.rows = []; p.cursor = null; p.render(); }
-    say('Loading chats…');
-    const page = await send({type:'list',kind:kind(),cursor:more ? p.cursor : null});
-    const known = new Set(p.rows.map(row => row.session_id));
-    p.rows.push(...page.sessions.filter(row => !known.has(row.session_id)));
-    p.cursor = page.next_cursor;
-    p.render(); say(p.rows.length ? '' : 'No chats found in this organization.');
-  };
-  p.filter.oninput = p.render;
-  p.sel.onchange = onPick;
-  p.more.onclick = () => run(() => p.load(true));
-  return p;
+// Loaded rows, plus nicknamed sessions beyond the loaded pages so their names stay visible and editable.
+function allRows() {
+  const names = state.nicknames || {}, known = new Set(rows.map(r => r.session_id));
+  return rows.map(r => ({...r, nickname: names[r.session_id] || ''})).concat(Object.keys(names).filter(id => !known.has(id) && id !== 'duet:main')
+    .map(id => ({session_id:id, kind:id.split(':')[0], title:'older ' + (id.startsWith('code:') ? 'session' : 'chat'), nickname:names[id]})));
 }
-function controls() {
-  $('useDefault').disabled = busy || !defaults.sel.value || defaults.sel.value === state.selected?.session_id;
+const label = row => (row.nickname ? row.nickname + ' — ' : '') + row.title;
+const current = () => state.kind === 'duet' ? 'duet:main' : state.mode === 'new_chat' ? 'new' : state.selected?.session_id || '';
+function fill(sel, groups, value) {
+  sel.replaceChildren();
+  groups.forEach(([name, options]) => {
+    if (!options.length) return;
+    const parent = name ? document.createElement('optgroup') : sel;
+    if (name) { parent.label = name; sel.appendChild(parent); }
+    options.forEach(([v, text]) => parent.appendChild(new Option(text, v)));
+  });
+  sel.value = value;
 }
-const defaults = picker('default', defaultKind, controls);
-const nicks = picker('nick', () => $('nickKind').value, () => {
-  const row = nicks.rows.find(row => row.session_id === nicks.sel.value);
-  $('editor').hidden = !row;
-  $('nickname').value = row?.nickname || '';
-});
 function render(next) {
-  state = next;
-  $('signedIn').hidden = !state.configured;
+  if (next) state = next;
+  const orgless = state.configured && !state.organization;
   $('signedOut').hidden = state.configured;
-  $('account').hidden = $('nicknames').hidden = !state.configured;
-  if (state.configured && !state.organization) $('account').open = true;
-  $('organization').replaceChildren();
-  if (state.configured) {
-    const placeholder = document.createElement('option');
-    placeholder.value = ''; placeholder.textContent = 'Choose an organization';
-    $('organization').appendChild(placeholder);
-    state.organizations.forEach(org => {
-      const option = document.createElement('option'); option.value = org.id; option.textContent = org.name;
-      $('organization').appendChild(option);
-    });
-    $('organization').value = state.organization || '';
-  }
-  const code = state.kind === 'code', duet = state.kind === 'duet';
-  document.querySelectorAll('input[name=kind]').forEach(input => { input.checked = input.value === state.kind; });
-  document.querySelectorAll('input[name=mode]').forEach(input => { input.checked = input.value === state.mode; });
-  $('modeChoices').hidden = code || duet; $('duetMode').hidden = !duet; $('codeMode').hidden = !code;
-  $('defaultCard').hidden = duet || state.mode !== 'default_chat';
-  $('defaultLabel').textContent = code ? 'Your default Claude Code session' : 'Your default chat';
-  $('selected').textContent = state.selected ? sessionName(state.selected) : (code ? 'Choose a session below' : 'Choose a chat below');
-  [defaults, nicks].forEach(p => p.rows.forEach(row => { row.isDefault = state.selected?.session_id === row.session_id; }));
+  $('pickOrg').hidden = !orgless;
+  $('routes').hidden = !state.configured || orgless;
+  $('account').hidden = !state.configured || orgless;
+  if (!state.configured) return;
+  $('orgChoices').replaceChildren(...state.organizations.map(org => {
+    const l = document.createElement('label'), r = document.createElement('input');
+    r.type = 'radio'; r.name = 'org'; r.value = org.id; l.append(r, org.name); return l;
+  }));
+  fill($('organization'), [[null, state.organizations.map(o => [o.id, o.name])]], state.organization || '');
+  const all = allRows(), loaded = all.slice(0, rows.length), value = current(), known = rows.some(r => r.session_id === value);
+  // Android's native picker ignores optgroup CSS, so the labels carry the separation themselves.
+  fill($('destination'), [[null, (duet || state.kind === 'duet' ? [['duet:main', 'Claude Duet']] : []).concat([['new', 'New Claude chat']])],
+    ['── CLAUDE CHATS ──', loaded.filter(r => r.kind === 'chat').map(r => [r.session_id, label(r)])],
+    ['── CLAUDE CODE SESSIONS ──', loaded.filter(r => r.kind === 'code').map(r => [r.session_id, label(r)])],
+    [null, value && value !== 'new' && value !== 'duet:main' && !known ? [[value, state.selected.title]] : []]], value);
+  const env = state.environment, envList = envs || [];
+  fill($('environment'), [[null, envList.map(e => [e.id, 'New Code session on ' + e.name + (e.online ? '' : ' (offline)')])
+    .concat(env && !envList.some(e => e.id === env.id) ? [[env.id, 'New Code session on ' + env.name + (envs ? ' (unavailable)' : '')]] : [])
+    .concat([['', 'Off']])]], env ? env.id : '');
+  $('chips').replaceChildren(...all.filter(r => r.nickname).map(r => {
+    const c = document.createElement('span'); c.className = 'chip'; c.textContent = r.nickname + ' → ' + r.title; return c;
+  }));
+  const nickValue = $('nickSession').value;
+  fill($('nickSession'), [['── CLAUDE CHATS ──', all.filter(r => r.kind === 'chat').map(r => [r.session_id, label(r)])],
+    ['── CLAUDE CODE SESSIONS ──', all.filter(r => r.kind === 'code').map(r => [r.session_id, label(r)])]], nickValue);
+  $('nickname').value = all.find(r => r.session_id === $('nickSession').value)?.nickname || '';
 }
 async function run(fn) {
   if (busy) return;
   busy = true;
   document.querySelectorAll('button,select,input').forEach(el => { el.disabled = true; });
-  try { await fn(); } catch (e) { render(state); say(e.message || 'Could not connect to Claude.'); }
-  finally { busy = false; document.querySelectorAll('button,select,input').forEach(el => { el.disabled = false; }); controls(); }
+  try { await fn(); } catch (e) { say(e.message || 'Could not connect to Claude.'); }
+  finally { busy = false; document.querySelectorAll('button,select,input').forEach(el => { el.disabled = false; }); render(); }
 }
-async function detectDuet() {
-  $('duetChoice').hidden = true;
-  if (!state.configured || !state.organization) return;
-  try { $('duetChoice').hidden = (await send({type:'duet_available'})).available !== true; }
-  catch (_) { /* Keep unavailable or unverified destinations hidden. */ }
-}
-// Loads whatever lists are on screen for the current settings.
-async function refresh() {
+// Loads chats, Code sessions, computers and Duet for the chosen organization.
+async function load() {
   if (!state.organization) return;
-  if (state.mode === 'default_chat' && state.kind !== 'duet') await defaults.load();
-  if ($('nicknames').open) await nicks.load();
+  say('Loading…');
+  // Each list loads on its own, so one failure doesn't hide the others.
+  const [chats, code, e, d] = await Promise.all([send({type:'list',kind:'chat'}), send({type:'list',kind:'code'}),
+    send({type:'environments'}), send({type:'duet_available'})].map(p => p.catch(() => null)));
+  rows = (chats ? chats.sessions : []).concat(code ? code.sessions : []);
+  envs = e ? e.environments : null; duet = !!(d && d.available);
+  if (d && d.status) state = d.status;
+  const failed = [chats ? '' : 'chats', code ? '' : 'Code sessions', e ? '' : 'computers'].filter(Boolean);
+  say(failed.length ? 'Could not load ' + failed.join(', ') + '. Try Reload under Account.' : '');
 }
 $('signin').onclick = () => run(async () => {
   if (!Pebble.webSignIn) throw new Error('Claude sign-in requires a newer Pebble app.');
@@ -185,54 +162,38 @@ $('signin').onclick = () => run(async () => {
   const cookies = await Pebble.webSignIn({url:'https://claude.ai/login',cookies:['sessionKey'],domain:'claude.ai'});
   if (!cookies) { say('Sign-in cancelled.'); return; }
   render(await send({type:'connect',session_key:cookies.sessionKey}));
-  await detectDuet();
-  if (state.organization) { await refresh(); say(describe()); } else say('Choose an organization.');
+  say(''); await load();
 });
-$('organization').onchange = () => run(async () => {
-  defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render();
-  render(await send({type:'organization',id:$('organization').value})); await detectDuet(); await refresh(); say(describe());
-});
-function describe() {
-  if (state.mode === 'new_chat') return 'Each message will start a new Claude chat.';
-  if (state.selected) return 'Messages will go to ' + sessionName(state.selected) + '.';
-  return state.kind === 'code' ? 'Choose a default Claude Code session.' : 'Choose a default chat.';
+async function chooseOrg(id) {
+  rows = []; envs = null;
+  render(await send({type:'organization',id})); await load();
 }
-document.querySelectorAll('input[name=kind]').forEach(input => {
-  input.onchange = () => run(async () => {
-    render(await send({type:'kind',kind:input.value}));
-    defaults.rows = []; defaults.cursor = null; defaults.render();
-    if (state.mode === 'default_chat' && state.kind !== 'duet') await defaults.load();
-    say(describe());
-  });
+$('orgContinue').onclick = () => run(async () => {
+  const picked = document.querySelector('input[name=org]:checked');
+  if (!picked) throw new Error('Choose an organization.');
+  await chooseOrg(picked.value);
 });
-document.querySelectorAll('input[name=mode]').forEach(input => {
-  input.onchange = () => run(async () => {
-    render(await send({type:'mode',mode:input.value}));
-    if (state.mode === 'default_chat' && !defaults.rows.length) await defaults.load();
-    say(describe());
-  });
+$('organization').onchange = () => run(() => chooseOrg($('organization').value));
+$('destination').onchange = () => run(async () => {
+  const v = $('destination').value;
+  if (v === 'new') { render(await send({type:'kind',kind:'claude'})); render(await send({type:'mode',mode:'new_chat'})); }
+  else if (v === 'duet:main') render(await send({type:'kind',kind:'duet'}));
+  else render(await send({type:'select',session_id:v}));
+  say('Saved.');
 });
-$('defaultRefresh').onclick = () => run(() => defaults.load());
-$('useDefault').onclick = () => run(async () => {
-  if (!defaults.sel.value.startsWith(defaultKind() + ':')) throw new Error('Choose a chat first.');
-  render(await send({type:'select',session_id:defaults.sel.value,kind:state.kind}));
-  defaults.render(); nicks.render(); say(describe());
+$('environment').onchange = () => run(async () => {
+  render(await send({type:'environment',id:$('environment').value || null})); say('Saved.');
 });
-$('nicknames').ontoggle = () => { if ($('nicknames').open && !nicks.rows.length) run(() => nicks.load()); };
-$('nickKind').onchange = $('nickRefresh').onclick = () => run(() => nicks.load());
+$('nickSession').onchange = () => render();
 $('saveNickname').onclick = () => run(async () => {
-  const id = nicks.sel.value, name = $('nickname').value.trim();
+  const id = $('nickSession').value, name = $('nickname').value.trim();
   if (!id) throw new Error('Choose a chat first.');
   render(await send({type:'save_session',session_id:id,nickname:name}));
-  [defaults, nicks].forEach(p => p.rows.forEach(row => {
-    if (name && row.nickname.toLowerCase() === name.toLowerCase()) row.nickname = '';
-    if (row.session_id === id) row.nickname = name;
-  }));
-  defaults.render(); nicks.render();
-  say(name ? 'Saved. Say “' + name + '” to send to this chat.' : 'Nickname removed.');
+  say(name ? 'Saved. Say “… to ' + name + ' …”.' : 'Nickname removed.');
 });
-$('disconnect').onclick = () => run(async () => {
-  render(await send({type:'disconnect'})); await detectDuet(); defaults.rows = []; nicks.rows = []; defaults.render(); nicks.render(); say('Disconnected. Saved sign-in removed.');
+$('refresh').onclick = () => run(load);
+$('orgDisconnect').onclick = $('disconnect').onclick = () => run(async () => {
+  rows = []; envs = null; render(await send({type:'disconnect'})); say('Disconnected.');
 });
 function showBlocked({ host, sure }) {
   const banner = $('blocked'), title = document.createElement('strong');
@@ -243,7 +204,7 @@ function showBlocked({ host, sure }) {
 Pebble.addEventListener('ready', event => {
   if (event.target !== 'plugin') return;
   Pebble.sendMessage('plugin', {type:'reach'}).then(r => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
-  run(async () => { render(await send({type:'status'})); await detectDuet(); if (state.configured && state.organization) { await refresh(); say(describe()); } else say(state.configured ? 'Choose your organization under Account & connection.' : ''); });
+  run(async () => { render(await send({type:'status'})); say(''); await load(); });
 });
 </script>
 </body>

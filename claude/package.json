@@ -1,7 +1,7 @@
 {
   "name": "claude",
   "author": "Core Devices",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js"
@@ -26,7 +26,7 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, starts a new Claude chat, or sends to the default Claude chat or Claude Code session chosen in settings. Supports chat nicknames. Sign in in settings. Opt in to Claude Duet in settings to send to its main conversation.",
+      "description": "Send messages to your Claude conversations and Claude Code sessions. With no chat named, starts a new Claude chat, or sends to the default Claude chat or Claude Code session chosen in settings. Supports chat nicknames. Say \"start a new task\" to start a new Claude Code session on the computer or environment chosen in settings. Sign in in settings. When Claude Duet is selected in settings (the default when the account has it), sends to its main conversation.",
       "script": "src/plugin/index.js",
       "sources": [
         {
@@ -71,7 +71,7 @@
       "actions": [
         {
           "name": "send_to_agent",
-          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. chat_id is an instanceId from agent/chats, a nickname, or part of a title, to send there; \"new\" always starts a new regular Claude chat; omit it to follow settings (a new Claude chat or the default chat). Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict. When Claude Duet is selected in settings, omitted chat_id sends to its main conversation; \"duet\" or \"duet:main\" also targets it. Duet must be explicitly selected before use.",
+          "description": "Send a message to one of the user's Claude chats: a regular Claude conversation or a Claude Code session. chat_id is an instanceId from agent/chats, a nickname, or part of a title, to send there; \"new task\" starts a new Claude Code session on the environment chosen in settings, with the message as its first prompt; \"new\" starts a new regular Claude chat; omit it to follow settings (a new Claude chat or the default chat). Returns a receipt, not Claude's answer. Do not automatically retry an uncertain delivery or conflict. When Claude Duet is selected in settings, omitted chat_id sends to its main conversation; \"duet\" or \"duet:main\" also targets it. Duet must be selected in settings before use.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -86,7 +86,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Name a chat to send there: its instanceId from agent/chats, its nickname, or part of its title. Use \"new\" to start a new regular Claude chat. Omit to follow settings (a new Claude chat or the default chat). With Duet selected in settings, \"duet\" or \"duet:main\" sends to its main conversation."
+                "description": "Name a chat to send there: its instanceId from agent/chats, its nickname, or part of its title. Use \"new task\" when the user asks to start a new task, session or Claude Code chat; \"new\" to start a new chat. Omit to follow settings (a new Claude chat or the default chat). With Duet selected in settings, \"duet\" or \"duet:main\" sends to its main conversation."
               }
             },
             "required": [

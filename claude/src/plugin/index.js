@@ -12,6 +12,16 @@ var CHANNEL_ID = /^chan_[A-Za-z0-9_-]{1,120}$/;
 var DUET_PROJECT = '/v1/code/aibo/project?omit_timeline=true';
 // chat_id values that always start a new Claude chat; not usable as nicknames.
 var NEW_CHAT = ['new', 'new chat'];
+// chat_id values that always start a new Claude Code session on the environment chosen in settings.
+var NEW_TASK = ['new task', 'new code', 'new session', 'new code session'];
+var ENV_ID = /^env_[A-Za-z0-9_-]{1,120}$/;
+// "start a new chat/task <prompt>" spoken as the message itself, when the host didn't pick a chat_id.
+var START_NEW = /^\s*(?:please\s+)?start\s+(?:a\s+)?new\s+(?:claude\s+code\s+|code\s+)?(chat|task|session)\b[\s:,.-]*/i;
+function parseStartNew(message) {
+  var match = START_NEW.exec(message);
+  var prompt = match ? message.slice(match[0].length).trim() : '';
+  return prompt ? { noun: match[1].toLowerCase(), prompt: prompt } : null;
+}
 var HOSTS = ['claude.ai'];
 // Apps without Pebble.permissions fail a request to a domain the user hasn't allowed the same way
 // as a dead network, so there a failed request is all we know.
@@ -171,6 +181,7 @@ function createService(storage, fetch, now) {
   function status(state) {
     var selected = defaultChat(state);
     return state ? { configured: true, organizations: state.organizations, organization: state.org, kind: chosenKind(state), mode: mode(state),
+      environment: state.environment || null, nicknames: nicknames(state),
       selected: selected ? Object.assign({}, selected, { nickname: nickname(state, selected.session_id) }) : null } : { configured: false };
   }
   // A failed POST is reported as uncertain delivery unless the caller says the request sent nothing.
@@ -179,7 +190,7 @@ function createService(storage, fetch, now) {
     var headers = { Cookie: 'sessionKey=' + state.cookie, Accept: 'application/json',
       'Content-Type': 'application/json; charset=utf-8', Origin: ORIGIN, Referer: ORIGIN + '/' };
     if (state.org) headers.Cookie += '; lastActiveOrg=' + state.org;
-    if (path.indexOf('/v1/code/') === 0) {
+    if (path.indexOf('/v1/code/') === 0 || path.indexOf('/v1/environment_providers/') === 0) {
       headers['anthropic-version'] = '2023-06-01';
       headers['anthropic-beta'] = 'ccr-byoc-2025-07-29';
       headers['anthropic-client-feature'] = 'ccr';
@@ -276,6 +287,20 @@ function createService(storage, fetch, now) {
     if (next !== null && typeof next !== 'string') throw unavailable();
     return { sessions: sessions, next_cursor: next };
   }
+  // Active Code environments (Remote Control machines and cloud), as listed by claude.ai/code's picker.
+  async function environments(state) {
+    orgPath(state);
+    var data = await json(state, '/v1/environment_providers/private/organizations/' + state.org + '/environments?limit=1000');
+    var rows = data && (Array.isArray(data) ? data : data.environments || data.data);
+    if (!Array.isArray(rows)) throw unavailable();
+    return rows.filter(function (e) { return e && ENV_ID.test(e.environment_id) && e.state === 'active'; }).map(function (e) {
+      var bridge = e.kind === 'bridge' && e.bridge_info || null;
+      var dir = bridge && typeof bridge.directory === 'string' ? bridge.directory.split('/').filter(Boolean).pop() : '';
+      return { id: e.environment_id, kind: e.kind || '',
+        name: bridge && bridge.machine_name ? (dir ? dir + ' · ' : '') + bridge.machine_name : (e.name || e.environment_id),
+        online: bridge ? bridge.online !== false : true };
+    });
+  }
   async function detail(state, ref) {
     if (ref.kind === 'duet') {
       requireDuet(state);
@@ -294,8 +319,17 @@ function createService(storage, fetch, now) {
       case 'duet_available': {
         var state = await load();
         if (!state || !UUID.test(state.org)) return { available: false };
-        try { await duetProject(state); return { available: true }; }
+        try { await duetProject(state); }
         catch (_) { return { available: false }; }
+        // Duet becomes the default only for a destination never chosen (no kind, mode or default saved).
+        // Re-read first: settings may have changed, disconnected or switched organization meanwhile.
+        var current = await load();
+        if (current && current.org === state.org && current.kind === undefined && current.mode === undefined && !current.selected) {
+          current.kind = 'duet';
+          await save(current);
+          return { available: true, status: status(current) };
+        }
+        return { available: true };
       }
       case 'connect': {
         if (!validCookie(message.session_key)) throw invalid('Claude sign-in did not return a valid session.');
@@ -326,11 +360,24 @@ function createService(storage, fetch, now) {
         state.org = message.id;
         state.organizations = orgs;
         state.selected = null;
-        if (state.kind === 'duet') state.kind = 'claude';
+        state.environment = null;
+        if (state.kind === 'duet') { state.kind = 'claude'; state.mode = 'new_chat'; }
         await save(state);
         return status(state);
       }
       case 'list': return list(await required(), message);
+      case 'environments': return { environments: await environments(await required()) };
+      case 'environment': {
+        var state = await required();
+        if (message.id === null) state.environment = null;
+        else {
+          var env = (await environments(state)).filter(function (e) { return e.id === message.id; })[0];
+          if (!env) throw invalid('Choose one of your Claude Code environments.');
+          state.environment = { id: env.id, name: env.name };
+        }
+        await save(state);
+        return status(state);
+      }
       case 'save_session':
       case 'select': {
         var state = await required(), ref = sessionRef(message.session_id);
@@ -342,7 +389,7 @@ function createService(storage, fetch, now) {
         if (message.type === 'save_session') {
           if (typeof message.nickname !== 'string' || message.nickname.trim().length > 40) throw invalid('Use a nickname of at most 40 characters.');
           var name = message.nickname.trim(), names = nicknames(state);
-          if (NEW_CHAT.indexOf(name.toLowerCase()) >= 0) throw invalid('“' + name + '” is reserved for starting a new chat. Choose another nickname.');
+          if (NEW_CHAT.concat(NEW_TASK).indexOf(name.toLowerCase()) >= 0) throw invalid('“' + name + '” is reserved for starting a new chat. Choose another nickname.');
           Object.keys(names).forEach(function (id) {
             if (name && names[id].toLowerCase() === name.toLowerCase()) delete names[id];
           });
@@ -353,6 +400,7 @@ function createService(storage, fetch, now) {
         if (message.type === 'select' || message.makeDefault === true) {
           state.selected = { session_id: ref.ref, title: (ref.kind === 'chat' ? data.name : data.title) || 'Untitled' };
           state.kind = ref.kind === 'chat' ? 'claude' : ref.kind;
+          if (message.type === 'select') state.mode = 'default_chat';
         }
         await save(state);
         return status(state);
@@ -396,7 +444,41 @@ function createService(storage, fetch, now) {
   function messageSent(recipient, sessionId, text) {
     return JSON.stringify({ type: 'MESSAGE_SENT', recipientName: recipient, text: text, contactId: sessionId });
   }
+  // Posts one user turn to a Code session; throws uncertain() without an event acknowledgment.
+  async function postCodeEvent(state, sessionId, id, text) {
+    var response = await call(state, 'POST', '/v1/code/sessions/' + sessionId + '/events', {
+      session_id: sessionId, events: [{ payload: { type: 'user', uuid: id,
+        message: { role: 'user', content: [{ type: 'text', text: text }] } } }],
+    });
+    var receipt;
+    try { receipt = await response.json(); } catch (_) { throw uncertain(); }
+    if (!receipt || !Array.isArray(receipt.results) || receipt.results.length !== 1 || !receipt.results[0].event_id) throw uncertain();
+  }
   async function send(state, ref, text) {
+    if (ref.isNewTask) {
+      // Same create body claude.ai/code sends; the prompt then goes as the first event, as the web app does.
+      var created, session;
+      try {
+        created = await call(state, 'POST', '/v1/code/sessions', { environment_id: state.environment.id,
+          config: { sources: [], outcomes: [] }, events: [] }, false);
+      } catch (error) {
+        error.message = 'Could not start a new Claude Code session. ' + error.message + ' Nothing was sent.';
+        throw error;
+      }
+      try { session = (await created.json()).session; } catch (_) { session = null; }
+      if (!session || !CODE_ID.test(session.id)) throw PluginError('PLUGIN_UNAVAILABLE', 'Could not start a new Claude Code session. Nothing was sent.');
+      var eventId = requestId();
+      // The session exists now, so any failure here must not invite a retry that starts a second one.
+      try { await postCodeEvent(state, session.id, eventId, text); } catch (error) {
+        var failed = PluginError('PLUGIN_UNAVAILABLE', 'Started a new Claude Code session on ' + state.environment.name +
+          ', but your message may not have arrived. Open it in Claude (' + ORIGIN + '/code/' + session.id + ') before sending again; do not automatically retry.');
+        failed.unreachable = error.unreachable; failed.blocked = error.blocked;
+        throw failed;
+      }
+      return { text: 'Started a new Claude Code session on ' + state.environment.name + '.', session_id: 'code:' + session.id,
+        message_id: eventId, url: ORIGIN + '/code/' + session.id,
+        semanticResult: messageSent('Claude Code', 'code:' + session.id, text) };
+    }
     if (ref.isNew) {
       var chat = await createChat(state);
       var messageId = await completeChat(state, chat.uuid, chat, ROOT_MESSAGE, text);
@@ -421,13 +503,7 @@ function createService(storage, fetch, now) {
       if (data.environment_kind === 'bridge' && data.connection_status !== 'connected') {
         throw PluginError('PLUGIN_UNAVAILABLE', 'This Claude Code session is offline. Reconnect it in Claude Code first.');
       }
-      var response = await call(state, 'POST', '/v1/code/sessions/' + ref.id + '/events', {
-        session_id: ref.id, events: [{ payload: { type: 'user', uuid: id,
-          message: { role: 'user', content: [{ type: 'text', text: text }] } } }],
-      });
-      var receipt;
-      try { receipt = await response.json(); } catch (_) { throw uncertain(); }
-      if (!receipt || !Array.isArray(receipt.results) || receipt.results.length !== 1 || !receipt.results[0].event_id) throw uncertain();
+      await postCodeEvent(state, ref.id, id, text);
     } else {
       var branch = chatBranch(data), leaf = branch.messages[branch.messages.length - 1];
       if (leaf.sender !== 'assistant' || data.is_streaming) throw invalid('Wait for Claude to finish the current reply before sending.');
@@ -441,6 +517,11 @@ function createService(storage, fetch, now) {
   async function resolve(state, chatId) {
     if (chatId !== undefined && chatId !== null && typeof chatId !== 'string') throw invalid('Name a Claude chat.');
     var query = (chatId || '').trim().toLowerCase();
+    // Nicknames saved before "new task" was reserved keep winning.
+    if (NEW_TASK.indexOf(query) >= 0 && !Object.keys(nicknames(state)).some(function (id) { return nicknames(state)[id].toLowerCase() === query; })) {
+      if (!state.environment) throw invalid('Choose where new Claude Code sessions start in settings.');
+      return { kind: 'code', id: null, ref: 'code:new', isNewTask: true };
+    }
     if (NEW_CHAT.indexOf(query) >= 0 || (!query && mode(state) === 'new_chat')) return { kind: 'chat', id: null, ref: 'chat:new', isNew: true };
     if (!query) {
       var selected = defaultChat(state);
@@ -487,10 +568,12 @@ function createService(storage, fetch, now) {
     }
     var state = await required();
     orgPath(state);
-    var ref = await resolve(state, args.chat_id);
+    var message = args.message, chatId = args.chat_id, spoken = !chatId && parseStartNew(message);
+    if (spoken) { message = spoken.prompt; chatId = spoken.noun !== 'chat' && state.environment ? 'new task' : 'new'; }
+    var ref = await resolve(state, chatId);
     if (sending) throw invalid('A Claude message is already being sent. Check it before sending another.');
     sending = true;
-    try { return await send(state, ref, args.message + ' ⌚'); } finally { sending = false; }
+    try { return await send(state, ref, message + ' ⌚'); } finally { sending = false; }
   }
   async function source(request) {
     if (!request || request.category !== 'agent') throw invalid('Unsupported Claude source.');
@@ -538,7 +621,7 @@ function withBlockedHost(error, safe) {
     checkReach(localStorage, fetch).catch(function () {});
   } catch (_) {}
   if (!blocked) return safe;
-  return { code: safe.code, message: blockedMessage(blocked) + (/uncertain/.test(safe.message) ? ' ' + safe.message : '') };
+  return { code: safe.code, message: blockedMessage(blocked) + (/do not automatically retry/.test(safe.message) ? ' ' + safe.message : '') };
 }
 var service = createService(Pebble.secureStorage, fetch, Date.now);
 Pebble.registerActionHandler(function (request, response) {

@@ -453,12 +453,24 @@ test('existing exact nicknames take precedence over Duet name aliases',async()=>
   await f.config({type:'kind',kind:'duet'});
   assert.equal((await f.action('send_to_agent',{message:'test',chat_id:'Duet'})).session_id,'chat:'+CHAT);
 });
-test('Duet detection finds existing conversation without changing destination or creating anything',async()=>{
+test('Duet detection makes Duet the default only when no destination was chosen, creating nothing',async()=>{
   const f=duetFixture();
   assert.equal((await f.config({type:'duet_available'})).available,false);assert.equal(f.calls.length,0);
-  await f.connect();const before=JSON.stringify([...f.storage]);
-  assert.equal((await f.config({type:'duet_available'})).available,true);
-  assert.equal(JSON.stringify([...f.storage]),before);assert.equal(posts(f).length,0);
+  await f.connect();
+  const first=await f.config({type:'duet_available'});
+  assert.equal(first.available,true);assert.equal(first.status.kind,'duet');
+  assert.equal((await f.config({type:'status'})).kind,'duet');assert.equal(posts(f).length,0);
+  // A destination the user picked is never overwritten.
+  await f.config({type:'kind',kind:'claude'});await f.config({type:'mode',mode:'new_chat'});
+  const before=JSON.stringify([...f.storage]);
+  const again=await f.config({type:'duet_available'});
+  assert.equal(again.available,true);assert.equal(again.status,undefined);
+  assert.equal(JSON.stringify([...f.storage]),before);
+  // A choice saved while discovery is still in flight also wins.
+  const g=duetFixture();await g.connect();
+  g.routes['GET '+DUET]=async()=>{await g.config({type:'kind',kind:'claude'});return json({channel:duet()});};
+  const raced=await g.config({type:'duet_available'});
+  assert.equal(raced.status,undefined);assert.equal((await g.config({type:'status'})).kind,'claude');
 });
 test('Duet detection hides missing, disabled, and unverified conversations without breaking sign-in',async()=>{
   for(const response of [()=>json({}),()=>json({channel:{...duet(),disabled_by_plan:true}}),()=>json({},403),()=>json({},500),()=>{throw new Error('offline');}]) {
@@ -491,4 +503,43 @@ test('unavailable Duet does not block regular chat discovery or title sends',asy
     assert.equal(posts(f).length,2);
     assert.ok(!posts(f).some(c=>c.key.includes('/channels/')));
   }
+});
+test('"start a new task" creates a Code session on the saved environment, then sends the prompt',async()=>{
+  const ENVS='GET /v1/environment_providers/private/organizations/'+ORG+'/environments?limit=1000',ENV='env_01devMac';
+  const f=fixture({[ENVS]:()=>json({environments:[
+    {environment_id:ENV,kind:'bridge',state:'active',name:'Mac-Studio:dev:cb30',bridge_info:{machine_name:'Mac-Studio',directory:'/Users/x/dev',online:true}},
+    {environment_id:'env_old',kind:'anthropic_cloud',state:'archived',name:'Old'}]}),
+    'POST /v1/code/sessions':()=>json({deduplicated:false,session:{id:'cse_new1',environment_kind:'bridge'}}),
+    'POST /v1/code/sessions/cse_new1/events':()=>json({results:[{event_id:'evt-9'}]})});
+  await f.connect();
+  // Without an environment, a spoken "new task" falls back to a regular new chat; explicit chat_id fails without sending.
+  assert.equal((await f.action('send_to_agent',{chat_id:'new task',message:'x'})).code,'INVALID_ARGS');assert.equal(posts(f).length,0);
+  assert.deepEqual(JSON.parse(JSON.stringify((await f.config({type:'environments'})).environments)),[{id:ENV,kind:'bridge',name:'dev · Mac-Studio',online:true}]);
+  assert.ok((await f.config({type:'environment',id:'env_old'})).error);
+  assert.deepEqual(JSON.parse(JSON.stringify((await f.config({type:'environment',id:ENV})).environment)),{id:ENV,name:'dev · Mac-Studio'});
+  for(const [message,prompt] of [['Start a new task find out why pebble cluster is down','find out why pebble cluster is down'],
+    ['please start new code session: run tests','run tests']]){
+    f.calls.length=0;const r=await f.action('send_to_agent',{message});assert.equal(r.ok,true,r.message);
+    const [create,event]=posts(f);assert.deepEqual(JSON.parse(create.init.body),{environment_id:ENV,config:{sources:[],outcomes:[]},events:[]});
+    assert.equal(create.init.headers['x-organization-uuid'],ORG);
+    assert.equal(JSON.parse(event.init.body).events[0].payload.message.content[0].text,prompt+' ⌚');assert.equal(r.session_id,'code:cse_new1');
+  }
+  // "new chat" always stays a regular Claude chat, even with Claude Code chosen.
+  newChatRoutes(f);await f.config({type:'kind',kind:'code'});f.calls.length=0;
+  assert.match((await f.action('send_to_agent',{message:'start a new chat hi'})).session_id,/^chat:/);
+  assert.equal((await f.action('send_to_agent',{message:'restart a new chat hi',chat_id:'code:'+CODE})).ok,true);
+  assert.equal((await f.config({type:'save_session',session_id:'code:'+CODE,nickname:'New Task'})).error.includes('reserved'),true);
+  await f.config({type:'organization',id:ORG});assert.equal((await f.config({type:'status'})).environment,null);
+});
+test('new task: failed create says nothing was sent; failed first message never invites a retry; old "new task" nickname still wins',async()=>{
+  const ENVS='GET /v1/environment_providers/private/organizations/'+ORG+'/environments?limit=1000',ENV='env_01devMac';
+  const f=fixture({[ENVS]:()=>json({environments:[{environment_id:ENV,kind:'bridge',state:'active',bridge_info:{machine_name:'Mac-Studio',directory:'/x/dev'}}]}),
+    'POST /v1/code/sessions':()=>json({},500),'POST /v1/code/sessions/cse_new1/events':()=>json({},429)});
+  await f.connect();await f.config({type:'environment',id:ENV});
+  let r=await f.action('send_to_agent',{chat_id:'new task',message:'hi'});assert.match(r.message,/Nothing was sent/);assert.equal(posts(f).length,1);
+  f.routes['POST /v1/code/sessions']=()=>json({session:{id:'cse_new1'}});f.calls.length=0;
+  r=await f.action('send_to_agent',{chat_id:'new task',message:'hi'});assert.equal(r.code,'PLUGIN_UNAVAILABLE');
+  assert.match(r.message,/may not have arrived.*do not automatically retry/);assert.equal(posts(f).length,2);
+  const saved=JSON.parse(f.storage.get('claude.connection.v1'));saved.nicknamesByOrg={[ORG]:{['code:'+CODE]:'New Task'}};f.storage.set('claude.connection.v1',JSON.stringify(saved));
+  f.calls.length=0;assert.equal((await f.action('send_to_agent',{chat_id:'new task',message:'hi'})).session_id,'code:'+CODE);
 });

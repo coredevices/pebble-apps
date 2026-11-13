@@ -35,13 +35,6 @@ them first:
 If `pebble build` gives you an empty pbw for a plugin-only project, package it with
 `python3 scripts/pack-plugin-pbw.py <dir>` (or `<dir>/pbw`), which is what CI does.
 
-## Publishing
-
-Pushing to `main` publishes every app whose `package.json` version isn't in the App Store yet
-(`.github/workflows/publish.yml`). Bump the version to release; the release notes are the version's section
-of the directory's `CHANGELOG.md`, or else the subject of the commit that set the version. A new app's first
-listing is created by hand. See [publishing an app](https://developer.repebble.com/guides/appstore-publishing/publishing-an-app/).
-
 ## Icons
 
 Each plugin has `src/icon.svg`: one 1.6px line on a 24×24 grid, round caps, no fill.

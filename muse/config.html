@@ -5,45 +5,49 @@
 <title>Muse settings</title>
 <style>
 :root { color-scheme:light dark; font:16px system-ui,sans-serif; --bg:#fff; --card:#f3f6f5; --ink:#1f2422; --muted:#5f6763; --line:#d5dcd9; --accent:#0d7a5f; }
-* { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px 16px; background:var(--bg); color:var(--ink); }
-h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } .hint { color:var(--muted); font-size:13px; line-height:1.5; }
-.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-#accountName { font-weight:600; margin:10px 0 4px; } #selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
-button,select,input { font:inherit; } select,input { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
-button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; } #account .card { margin:12px 0; }
-.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; }
+* { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px; background:var(--bg); color:var(--ink); }
+h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } .hint { color:var(--muted); font-size:13px; line-height:1.45; }
+.card { padding:14px; border:1px solid var(--line); border-radius:16px; margin:16px 0; }
+.eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; margin-bottom:10px; }
+.route { padding:10px 0; border-top:1px solid var(--line); } .route:first-of-type { border-top:0; padding-top:0; }
+.say { font-weight:650; } .to { color:var(--muted); font-size:14px; margin-top:4px; }
+button,select { font:inherit; } select { width:100%; min-height:44px; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; }
+.primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:12px; } .quiet { border:0; color:var(--accent); background:transparent; padding:6px 0; min-height:0; }
+details { margin:16px 0; } summary { cursor:pointer; color:var(--muted); min-height:36px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
 #blocked { padding:12px 14px; border-radius:12px; margin:0 0 16px; background:#fdecc8; color:#5c3d00; font-size:14px; line-height:1.45; } #blocked strong { display:block; }
-details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } [hidden] { display:none!important; }
 @media(prefers-color-scheme:dark) { :root { --bg:#1c201f; --card:#262c2a; --ink:#eef3f1; --muted:#aab5b0; --line:#3d4643; --accent:#19a37f; } }
 </style>
 </head>
 <body>
 <p id="blocked" role="alert" hidden></p>
 <h1>Muse</h1>
-<p class="hint">Send messages from Pebble to your Muse assistant.</p>
-<div class="card" id="defaultCard" hidden>
-<div class="eyebrow">Your default Muse chat</div>
-<p id="selected"></p>
-<div class="row"><input id="filter" type="search" aria-label="Find a chat" placeholder="Search chats"><button id="refresh" class="quiet">Refresh</button></div>
-<select id="chats" aria-label="Default chat"></select>
-<button id="useDefault" class="primary">Use as default</button>
-</div>
-<p class="hint" id="namingHint" hidden>Naming a chat always sends there instead.</p>
-<p id="status" role="status" aria-live="polite">Starting Muse…</p>
-<details id="account"><summary>Account &amp; connection</summary>
-<div class="card">
-<div class="eyebrow">Muse</div>
-<section id="signedOut" hidden>
+<section id="signedOut">
+<p class="hint">Send messages to your Muse chats.</p>
 <button id="signin" class="primary">Sign in to Muse</button>
-<p class="hint">Used only to list your Muse chats and send them messages.</p>
 </section>
-<section id="signedIn" hidden>
-<p id="accountName">Signed in</p>
-<button id="disconnect" class="quiet">Disconnect Muse</button>
-</section>
+
+<section id="routes" hidden>
+<p class="hint">Where your messages go.</p>
+<div class="card">
+<div class="eyebrow">Hold to speak</div>
+<div class="route">
+<div class="hint">When Index hold-to-speak is set to Muse</div>
+<select id="destination" aria-label="Hold to speak goes to"></select>
 </div>
+</div>
+<div class="card">
+<div class="eyebrow">Anywhere: start with “Muse…”</div>
+<div class="route"><div class="say">“Tell Muse …”</div><div class="to">Same place as hold to speak</div></div>
+<div class="route"><div class="say">“… tell my <i>chat name</i> to …”</div><div class="to">The chat with those words in its name</div></div>
+</div>
+</section>
+<p id="status" role="status" aria-live="polite">Connecting…</p>
+<details id="account" hidden><summary>Account</summary>
+<button id="refresh" class="quiet">Reload chats</button><br>
+<button id="disconnect" class="quiet">Disconnect Muse</button>
 </details>
-<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-apps/tree/main/muse" target="_blank" rel="noopener">Source code</a> is available.</em></p>
+<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect directly to Muse. <a href="https://github.com/coredevices/pebble-apps/tree/main/muse" target="_blank" rel="noopener">Source code</a>.</em></p>
 <script>
 // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
 document.addEventListener('click', function (event) {
@@ -53,114 +57,70 @@ document.addEventListener('click', function (event) {
   Pebble.openUrl(link.href).catch(function () {});
 });
 
-const $ = (id) => document.getElementById(id);
-const MAIN = { id: "main", title: "Main chat" };
-let configured = null, selected = "main", chats = [], busy = false;
-const say = (text) => { $("status").textContent = text; };
+const $ = id => document.getElementById(id);
+let busy = false, configured = false, selected = 'main', chats = [];
+const say = text => { $('status').textContent = text; };
 async function send(message) {
-  const result = await Pebble.sendMessage("plugin", message);
+  const result = await Pebble.sendMessage('plugin', message);
   if (result.error) throw new Error(result.error);
   return result;
 }
-const choices = () => [MAIN, ...chats];
-const titleOf = (id) => (choices().find((c) => c.id === id) || { title: "Selected chat unavailable — choose another" }).title;
-// Fills the picker with the chats matching the search box, keeping the current pick.
-function fill() {
-  const sel = $("chats"), previous = sel.value, query = $("filter").value.toLowerCase();
-  sel.replaceChildren();
-  choices().filter((c) => c.title.toLowerCase().includes(query)).forEach((c) => {
-    const option = document.createElement("option");
-    option.value = c.id;
-    option.textContent = c.title + (c.id === selected ? " (default)" : "");
-    sel.append(option);
-  });
-  const has = (id) => [...sel.options].some((o) => o.value === id);
-  if (has(previous)) sel.value = previous;
-  else if (has(selected)) sel.value = selected;
-  if (!sel.options.length) {
-    const empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = "No matching chats";
-    sel.append(empty);
-  }
-  controls();
-}
-function controls() {
-  $("useDefault").disabled = busy || !$("chats").value || $("chats").value === selected;
-}
 function render(result) {
-  selected = result.selected || "main";
-  if (result.chats) chats = result.chats;
-  if (!result.configured) chats = [];
-  // Open for first-time setup; folded away once signed in, unless the user opens it.
-  if (configured !== result.configured) { $("account").open = !result.configured; configured = result.configured; }
-  $("defaultCard").hidden = $("namingHint").hidden = !configured;
-  $("signedOut").hidden = configured;
-  $("signedIn").hidden = !configured;
-  $("selected").textContent = titleOf(selected);
-  fill();
+  if (result) {
+    configured = !!result.configured;
+    selected = result.selected || 'main';
+    if (result.chats) chats = result.chats;
+    if (!configured) chats = [];
+  }
+  $('signedOut').hidden = configured;
+  $('routes').hidden = $('account').hidden = !configured;
+  const sel = $('destination');
+  sel.replaceChildren(new Option('Main chat', 'main'), ...chats.map(c => new Option(c.title, c.id)));
+  // Keep a saved chat visible even when it is missing from the loaded list.
+  if (!chats.some(c => c.id === selected) && selected !== 'main') sel.appendChild(new Option('Selected chat (unavailable)', selected));
+  sel.value = selected;
 }
-const describe = () => configured ? "Messages with no chat named go to " + titleOf(selected) + "." : "Sign in under Account & connection to connect your Muse account.";
 async function run(fn) {
   if (busy) return;
   busy = true;
-  document.querySelectorAll("button,select,input").forEach((el) => { el.disabled = true; });
-  try {
-    await fn();
-  } catch (e) {
-    say(e.message || "Could not connect to Muse.");
-  } finally {
-    busy = false;
-    document.querySelectorAll("button,select,input").forEach((el) => { el.disabled = false; });
-    controls();
-  }
+  document.querySelectorAll('button,select').forEach(el => { el.disabled = true; });
+  try { await fn(); } catch (e) { say(e.message || 'Could not connect to Muse.'); }
+  finally { busy = false; document.querySelectorAll('button,select').forEach(el => { el.disabled = false; }); render(); }
 }
-async function loadChats() {
-  say("Loading Muse chats…");
-  render(await send({ type: "listChats" }));
-  say(describe());
+async function load() {
+  say('Loading…');
+  render(await send({type:'listChats'}));
+  say('');
 }
-$("filter").oninput = fill;
-$("chats").onchange = controls;
-$("refresh").onclick = () => run(loadChats);
-$("useDefault").onclick = () => run(async () => {
-  const result = await send({ type: "selectChat", id: $("chats").value });
-  render({ configured: true, selected: result.selected });
-  say(describe());
+$('signin').onclick = () => run(async () => {
+  if (!Pebble.webSignIn) throw new Error('Muse sign-in requires a newer Pebble app.');
+  say('Opening Muse sign-in…');
+  const cookies = await Pebble.webSignIn({url:'https://muse.ai/',cookies:['hatch_sess'],domain:'muse.ai'});
+  if (!cookies) { say('Sign-in cancelled.'); return; }
+  say('Connecting…');
+  render(await send({type:'connect',session:{cookie:'hatch_sess=' + cookies.hatch_sess}}));
+  say('');
 });
-$("signin").onclick = () => run(async () => {
-  if (!Pebble.webSignIn) throw new Error("Muse sign-in requires a newer version of the Pebble app.");
-  say("Opening Muse sign-in…");
-  const cookies = await Pebble.webSignIn({ url: "https://muse.ai/", cookies: ["hatch_sess"], domain: "muse.ai" });
-  if (!cookies) { say("Sign-in cancelled."); return; }
-  say("Connecting to Muse…");
-  render(await send({ type: "connect", session: { cookie: "hatch_sess=" + cookies.hatch_sess } }));
-  say("Connected. " + describe());
+$('destination').onchange = () => run(async () => {
+  render(await send({type:'selectChat',id:$('destination').value})); say('Saved.');
 });
-$("disconnect").onclick = () => run(async () => {
-  render(await send({ type: "disconnect" }));
-  say("Disconnected. Saved connection removed from this plugin.");
+$('refresh').onclick = () => run(load);
+$('disconnect').onclick = () => run(async () => {
+  render(await send({type:'disconnect'})); say('Disconnected.');
 });
 function showBlocked({ host, sure }) {
-  const banner = $("blocked"), title = document.createElement("strong");
-  title.textContent = "Muse doesn't have permission to connect to " + host + ".";
-  banner.replaceChildren(title, 'Go back to Muse\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? "" : " If it's already on, check your internet connection."));
+  const banner = $('blocked'), title = document.createElement('strong');
+  title.textContent = "Muse doesn't have permission to connect to " + host + '.';
+  banner.replaceChildren(title, 'Go back to Muse\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? '' : " If it's already on, check your internet connection."));
   banner.hidden = false;
 }
-Pebble.addEventListener("ready", (event) => {
-  if (event.target !== "plugin") return;
-  Pebble.sendMessage("plugin", { type: "reach" }).then((r) => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
+Pebble.addEventListener('ready', event => {
+  if (event.target !== 'plugin') return;
+  Pebble.sendMessage('plugin', {type:'reach'}).then(r => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
   run(async () => {
-    let state;
-    try {
-      state = await send({ type: "status" });
-    } catch (e) {
-      render({ configured: false });
-      throw e;
-    }
-    render(state);
-    if (state.configured) await loadChats();
-    else say(describe());
+    const state = await send({type:'status'});
+    render(state); say('');
+    if (state.configured) await load();
   });
 });
 </script>

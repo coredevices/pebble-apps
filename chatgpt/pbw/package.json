@@ -1,7 +1,7 @@
 {
   "name": "chatgpt",
   "author": "Core Devices",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "build": "npm --prefix .. run build",
@@ -37,7 +37,7 @@
       }
     ],
     "plugin": {
-      "description": "Send messages to your ChatGPT Dot, to ChatGPT chats (a new one or a recent conversation), to Codex sessions running on your computers, and to Codex Cloud tasks. With no chat named, sends to your Dot or your default chat, as chosen in settings. Supports chat nicknames. Sign in in settings.",
+      "description": "Send messages to your ChatGPT Dot, to ChatGPT chats (a new one or a recent conversation), to Codex sessions running on your computers, and to Codex Cloud tasks. With no chat named, sends to your Dot (the default when the account has one), a new ChatGPT chat or the chat chosen in settings. Supports chat nicknames. Say \"start a new task\" to start a new Codex session in a project folder on one of your computers, or a new Codex Cloud task, as chosen in settings. Sign in in settings.",
       "script": "plugin.js",
       "sources": [
         {
@@ -79,7 +79,7 @@
       "actions": [
         {
           "name": "send_to_agent",
-          "description": "Send a message to the user's ChatGPT Dot, to a ChatGPT chat (a new one, or a recent chatgpt.com conversation), or to one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats (\"new-chat\" starts a new ChatGPT chat), or a chat nickname or part of its title; omit it to send to the user's Dot or their default chat, whichever settings choose. Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply; a ChatGPT chat's receipt may quote the start of the reply. Do not automatically retry an uncertain delivery.",
+          "description": "Send a message to the user's ChatGPT Dot, to a ChatGPT chat (a new one, or a recent chatgpt.com conversation), or to one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats (\"new-chat\" starts a new ChatGPT chat), or a chat nickname or part of its title; \"new task\" starts a new Codex session on the computer and project folder chosen in settings (or a new Codex Cloud task, if settings choose that), with the message as its first prompt; omit it to send where settings choose (the Dot, a new ChatGPT chat or a default chat). Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply; a ChatGPT chat's receipt may quote the start of the reply. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {
@@ -94,7 +94,7 @@
                   "string",
                   "null"
                 ],
-                "description": "The chat's instanceId from agent/chats (\"new-chat\" for a new ChatGPT chat), or a chat's nickname or part of its title. Omit to send to the Dot or the default chat, as chosen in settings."
+                "description": "The chat's instanceId from agent/chats (\"new-chat\" for a new ChatGPT chat), or a chat's nickname or part of its title. Use \"new task\" when the user asks to start a new task or Codex session. Omit to send where settings choose."
               }
             },
             "required": [
@@ -111,7 +111,7 @@
         },
         {
           "name": "start_codex_cloud_task",
-          "description": "Start a new Codex Cloud task (chatgpt.com/codex), which works in a cloud copy of one of the user's GitHub repositories. Use when the user asks for coding work in the cloud or on a repo rather than in a session on their computer. Returns a receipt; the task takes minutes to run.",
+          "description": "Start a new Codex Cloud task (chatgpt.com/codex), which works in a cloud copy of one of the user's GitHub repositories. Use when the user asks for coding work in Codex Cloud or on a named repo rather than in a session on their computer; for a plain \"start a new task\", use send_to_agent with chat_id \"new task\", which follows settings. Returns a receipt; the task takes minutes to run.",
           "parameters": {
             "type": "object",
             "properties": {

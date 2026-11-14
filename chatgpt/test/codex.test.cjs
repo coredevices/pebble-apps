@@ -68,6 +68,21 @@ function relay(threads, onQueue) {
       }
       if (message.method === 'initialize') reply({ userAgent: 'codex' });
       if (message.method === 'thread/list') reply({ data: threads, nextCursor: null });
+      if (message.method === 'thread/start') {
+        if (FakeSocket.onStart) FakeSocket.onStart(message.params);
+        if (FakeSocket.startLost) { queueMicrotask(() => this.onclose()); return; }
+        if (FakeSocket.startRefused) {
+          queueMicrotask(() => this.onmessage({ data: JSON.stringify({ type: 'server_message', message: { id: message.id, error: { code: -32600, message: 'bad cwd' } } }) }));
+          return;
+        }
+        reply({ thread: { id: 'th-new', cwd: message.params.cwd, status: { type: 'idle' } }, cwd: message.params.cwd });
+      }
+      if (message.method === 'turn/start') {
+        if (FakeSocket.onTurn) FakeSocket.onTurn(message.params);
+        if (FakeSocket.turnFails) {
+          queueMicrotask(() => this.onmessage({ data: JSON.stringify({ type: 'server_message', message: { id: message.id, error: { code: -32600, message: 'busy' } } }) }));
+        } else reply({ turn: { id: 'turn-1', status: 'inProgress', items: [] } });
+      }
       if (message.method === 'thread/queue/add') {
         if (onQueue) onQueue(message.params);
         reply({ queuedSubmission: { id: 'q-1', input: message.params.input, clientUserMessageId: message.params.clientUserMessageId } });
@@ -136,7 +151,7 @@ function fixture({ routes = {}, storage = new Map(), WebSocket = class {}, clock
 test('Codex signs in with the ChatGPT web session, like the Dot', async () => {
   const f = fixture();
   const status = await f.signIn();
-  assert.deepEqual(JSON.parse(JSON.stringify(status.codex)), { signedIn: true, email: 'eric@example.com', remoteControl: false, paired: false, defaultChat: null });
+  assert.deepEqual(JSON.parse(JSON.stringify(status.codex)), { signedIn: true, email: 'eric@example.com', remoteControl: false, paired: false, defaultChat: null, newTask: null, nicknames: [] });
   assert.equal(f.calls[0].init.headers.Cookie, '__Secure-next-auth.session-token=session-1');
   assert.equal(JSON.parse(f.storage.get('chatgpt.codex.session.v1')).sessionToken, 'session-2');
   await assert.rejects(() => f.configure({ type: 'codex_connect', session_token: 'bad;cookie' }), /invalid session/);
@@ -197,8 +212,8 @@ test('an enrollment challenge for another path is refused', async () => {
 });
 
 const threads = [
-  { id: 'th-old', name: null, preview: 'fix the BLE reconnect bug', status: { type: 'notLoaded' }, ephemeral: false, updatedAt: NOW / 1000 - 7200 },
-  { id: 'th-live', name: 'Index feed polish', preview: 'x', status: { type: 'idle' }, ephemeral: false, updatedAt: NOW / 1000 - 60 },
+  { id: 'th-old', name: null, preview: 'fix the BLE reconnect bug', status: { type: 'notLoaded' }, ephemeral: false, updatedAt: NOW / 1000 - 7200, cwd: '/Users/eric/dev/pebble' },
+  { id: 'th-live', name: 'Index feed polish', preview: 'x', status: { type: 'idle' }, ephemeral: false, updatedAt: NOW / 1000 - 60, cwd: '/Users/eric/dev/index' },
 ];
 const cloudTasks = { [`GET ${WHAM}/tasks/list`]: () => json(200, { items: [
   { id: 'task_e_1', title: 'Fix login', updated_at: NOW / 1000 - 600, task_status_display: { latest_turn_status_display: { turn_id: 'turn-9' } } },
@@ -227,8 +242,6 @@ test('a Codex chat picked from agent/chats is reached through the relay', async 
   const f = fixture({ WebSocket: Socket });
   await f.signIn();
   await f.enroll();
-  assert.equal((await f.run('send_to_agent', { message: 'go' })).code, 'INVALID_ARGS');
-  assert.equal(queued, undefined);
   await chatsOf(f);
   const live = (await f.agentChats()).instances.find((i) => i.properties.title.shortText.text === 'Index feed polish');
 
@@ -619,12 +632,12 @@ test('a Codex-only user with a default chat is configured, and a send with no ch
   assert.deepEqual(await configured(f), [false, '', 'Sign in in settings']);
   await f.signIn();
   await f.enroll();
-  assert.deepEqual(await configured(f), [false, '', 'Choose a Codex chat in settings']);
+  assert.deepEqual(await configured(f), [true, 'New ChatGPT chat', 'Connected']);
   const chats = await chatsOf(f);
   await f.configure({ type: 'codex_chat_save', chat: chats.find((c) => c.id === 'th-live'), nickname: '', makeDefault: true });
   assert.equal((await chatsOf(f)).find((c) => c.isDefault).id, 'th-live');
   assert.deepEqual(await configured(f), [true, 'Index feed polish', 'Connected']);
-  assert.equal((await f.configure({ type: 'status' })).destination.choosable, false);
+  assert.equal((await f.configure({ type: 'status' })).destination.value, 'session:th-live');
   const result = await f.run('send_to_agent', { message: 'run the tests' });
   assert.equal(result.text, 'Sent to Codex session "Index feed polish" on taz-runner.');
   assert.equal(queued.threadId, 'th-live');
@@ -638,7 +651,7 @@ test('with the Dot and a Codex default both set up, the chosen destination gets 
   await f.enroll();
   const chats = await chatsOf(f);
   await f.configure({ type: 'codex_chat_save', chat: chats.find((c) => c.id === 'th-old'), nickname: 'ble', makeDefault: true });
-  assert.deepEqual(JSON.parse(JSON.stringify((await f.configure({ type: 'status' })).destination)), { kind: 'dot', chosen: 'dot', choosable: true });
+  assert.deepEqual(JSON.parse(JSON.stringify((await f.configure({ type: 'status' })).destination)), { kind: 'dot', value: 'dot' });
   assert.deepEqual(await configured(f), [true, 'Sol', 'Connected']);
   assert.equal((await f.run('send_to_agent', { message: 'hi' })).text, 'Message sent to Sol.');
   assert.equal(queued, undefined);
@@ -648,6 +661,8 @@ test('with the Dot and a Codex default both set up, the chosen destination gets 
   assert.match((await f.run('send_to_agent', { message: 'hi' })).text, /fix the BLE reconnect bug/);
   assert.equal(queued.threadId, 'th-old');
   await assert.rejects(() => f.configure({ type: 'destination', destination: 'email' }), /Choose the Dot/);
+  assert.equal((await f.configure({ type: 'destination', destination: 'new_chat' })).destination.value, 'new-chat');
+  assert.deepEqual(await configured(f), [true, 'New ChatGPT chat', 'Connected']);
 });
 
 test('the chosen destination falls back to the other when it is not set up', async () => {
@@ -671,16 +686,14 @@ test('the chosen destination falls back to the other when it is not set up', asy
   assert.equal((await g.run('send_to_agent', { message: 'hi' })).text, 'Message sent to Sol.');
 });
 
-test('with neither the Dot nor a Codex default, a send with no chat_id fails and sends nothing', async () => {
+test('signed out, a send with no chat_id fails and sends nothing; signed in without a Dot or default, it starts a new ChatGPT chat', async () => {
   const f = fixture({ WebSocket: relay(threads), routes: cloudTasks });
   const none = await f.run('send_to_agent', { message: 'hi' });
   assert.equal(none.code, 'INVALID_ARGS');
-  assert.match(none.message, /Sign in with ChatGPT, then set up a Dot or pick a default chat/);
+  assert.match(none.message, /Sign in with ChatGPT/);
   assert.equal(f.calls.length, 0);
   await f.signIn();
-  const before = f.calls.length;
-  assert.equal((await f.run('send_to_agent', { message: 'hi' })).code, 'INVALID_ARGS');
-  assert.equal(f.calls.length, before);
+  assert.deepEqual(JSON.parse(JSON.stringify((await f.configure({ type: 'status' })).destination)), { kind: 'new', value: 'new-chat' });
 });
 
 test('a default chat saved by v0.2.0 is honoured and survives saving a nickname', async () => {
@@ -701,22 +714,23 @@ test('a default chat saved by v0.2.0 is honoured and survives saving a nickname'
 
 test('settings set the default chat without touching its nickname, and report what is chosen', async () => {
   const f = fixture({ WebSocket: relay(threads), routes: cloudTasks });
-  assert.equal((await f.configure({ type: 'status' })).destination.chosen, 'dot');
+  assert.equal((await f.configure({ type: 'status' })).destination.value, '');
   await f.signIn();
   await f.enroll();
   let status = await f.configure({ type: 'status' });
-  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: null, chosen: 'codex', choosable: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: 'new', value: 'new-chat' });
   const chats = await chatsOf(f);
   const old = chats.find((c) => c.id === 'th-old');
   await f.configure({ type: 'codex_chat_save', chat: old, nickname: 'ble' });
   status = await f.configure({ type: 'codex_default', chat: old });
   assert.equal(status.codex.defaultChat.id, 'th-old');
   assert.equal(status.codex.defaultChat.nickname, 'ble');
-  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: 'codex', chosen: 'codex', choosable: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: 'codex', value: 'session:th-old' });
+  // Picking a chat is a choice: a Dot set up later doesn't take over.
   signInDot(f);
   status = await f.configure({ type: 'status' });
-  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: 'dot', chosen: 'dot', choosable: true });
-  assert.deepEqual(await configured(f), [true, 'Sol', 'Connected']);
+  assert.deepEqual(JSON.parse(JSON.stringify(status.destination)), { kind: 'codex', value: 'session:th-old' });
+  assert.deepEqual(await configured(f), [true, 'ble', 'Connected']);
 });
 
 const ACCOUNT_A = () => json(200, { accessToken: accessToken(), sessionToken: 'session-2' });
@@ -741,8 +755,7 @@ test('another Codex account does not see the default chat or nicknames; the same
   await signInAs(f, ACCOUNT_B);
   const status = await f.configure({ type: 'status' });
   assert.equal(status.codex.defaultChat, null);
-  assert.deepEqual(await configured(f), [false, '', 'Choose a Codex chat in settings']);
-  assert.equal((await f.run('send_to_agent', { message: 'hi' })).code, 'INVALID_ARGS');
+  assert.deepEqual(await configured(f), [true, 'New ChatGPT chat', 'Connected']);
   const prefs = await f.configure({ type: 'codex_chats' });
   assert.ok(prefs.chats.every((c) => !c.nickname && !c.isDefault));
   assert.equal((await f.run('send_to_agent', { message: 'hi', chat_id: 'zed' })).code, 'INVALID_ARGS');
@@ -766,8 +779,130 @@ test('legacy v0.2.0 prefs are adopted by the first account that reads them, and 
   assert.deepEqual(Object.keys(JSON.parse(f.storage.get(PREFS_KEY)).accounts), ['acct-1:user-1']);
 
   await signInAs(f, ACCOUNT_B);
-  assert.deepEqual(await configured(f), [false, '', 'Choose a Codex chat in settings']);
-  assert.equal((await f.configure({ type: 'status' })).destination.chosen, 'codex');
+  assert.deepEqual(await configured(f), [true, 'New ChatGPT chat', 'Connected']);
+  assert.equal((await f.configure({ type: 'status' })).destination.value, 'new-chat');
   await signInAs(f, ACCOUNT_A);
   assert.deepEqual(await configured(f), [true, 'Fix login', 'Connected']);
+});
+
+test('"start a new task" starts a Codex session in the folder chosen in settings, then sends the prompt as its first turn', async () => {
+  const Socket = relay(threads);
+  let started, turn;
+  Socket.onStart = (p) => { started = p; };
+  Socket.onTurn = (p) => { turn = p; };
+  const f = fixture({ WebSocket: Socket, routes: cloudTasks });
+  await f.signIn();
+  await f.enroll();
+  // With nowhere chosen, an explicit "new task" fails without sending.
+  assert.equal((await f.run('send_to_agent', { message: 'x', chat_id: 'new task' })).code, 'INVALID_ARGS');
+  const live = (await chatsOf(f)).find((c) => c.id === 'th-live');
+  assert.deepEqual([live.computerId, live.cwd], ['env-1', '/Users/eric/dev/index']);
+  const status = await f.configure({ type: 'codex_new_task', target: { kind: 'session', computer: 'env-1', name: 'taz-runner', cwd: live.cwd } });
+  assert.deepEqual(JSON.parse(JSON.stringify(status.codex.newTask)), { kind: 'session', computer: 'env-1', name: 'taz-runner', cwd: '/Users/eric/dev/index' });
+
+  for (const [args, prompt] of [
+    [{ message: 'Start a new task find out why the build is red' }, 'find out why the build is red'],
+    [{ message: 'please start new codex session: run tests' }, 'run tests'],
+    [{ message: 'add a README', chat_id: 'New Task' }, 'add a README'],
+  ]) {
+    started = turn = undefined;
+    const r = await f.run('send_to_agent', args);
+    assert.equal(r.ok, true, r.message);
+    assert.equal(r.text, 'Started a new Codex session on taz-runner · index.');
+    assert.deepEqual(JSON.parse(JSON.stringify(started)), { cwd: '/Users/eric/dev/index' });
+    assert.equal(turn.threadId, 'th-new');
+    assert.deepEqual(JSON.parse(JSON.stringify(turn.input)), [{ type: 'text', text: prompt + ' ⌚', textElements: [] }]);
+    assert.ok(Socket.last.closed);
+  }
+  const methods = Socket.last.sent.map((frame) => frame.message && frame.message.method).filter(Boolean);
+  assert.deepEqual(methods, ['initialize', 'initialized', 'thread/start', 'turn/start']);
+  assert.deepEqual(Socket.last.sent.filter((frame) => frame.env_id).map((frame) => frame.env_id)[0], 'env-1');
+
+  // "start a new chat" stays a ChatGPT chat; an existing nickname named "new task" still wins.
+  const saved = JSON.parse(f.storage.get(PREFS_KEY));
+  saved.accounts['acct-1:user-1'].nicknames = { 'session:th-old': { nickname: 'new task', kind: 'session', id: 'th-old', computer: 'taz-runner', label: 'fix the BLE reconnect bug' } };
+  f.storage.set(PREFS_KEY, JSON.stringify(saved));
+  started = undefined;
+  await f.run('send_to_agent', { message: 'hi', chat_id: 'new task' });
+  assert.equal(started, undefined);
+});
+
+test('new task: an offline computer or failed start sends nothing; a failed first turn never invites a retry', async () => {
+  const Socket = relay(threads);
+  let turned = 0;
+  Socket.onTurn = () => { turned++; };
+  const f = fixture({ WebSocket: Socket, routes: cloudTasks });
+  await f.signIn();
+  await f.enroll();
+  await f.configure({ type: 'codex_new_task', target: { kind: 'session', computer: 'env-gone', name: 'old-mac', cwd: '/x' } });
+  let r = await f.run('send_to_agent', { message: 'hi', chat_id: 'new task' });
+  assert.match(r.message, /old-mac is not online.*Nothing was sent/);
+  await f.configure({ type: 'codex_new_task', target: { kind: 'session', computer: 'env-1', name: 'taz-runner', cwd: '/x/y' } });
+  Socket.turnFails = true;
+  r = await f.run('send_to_agent', { message: 'hi', chat_id: 'new task' });
+  assert.equal(r.code, 'PLUGIN_UNAVAILABLE');
+  assert.match(r.message, /taz-runner · y, but your message may not have arrived.*do not automatically retry/);
+  assert.equal(turned, 1);
+  await assert.rejects(() => f.configure({ type: 'codex_new_task', target: { kind: 'session', computer: 'env-1' } }), /Choose where new tasks start/);
+});
+
+test('new task in Codex Cloud: "start a new task" creates a task in the chosen environment; Off falls back to a new chat', async () => {
+  const f = fixture({ routes: { ...cloudTasks, [`GET ${WHAM}/environments`]: () => json(200, [
+    { id: 'env-a', label: 'coredevices/app', repo_map: { r: { default_branch: 'dev' } }, secrets: 'x' },
+    { id: 'env-b', label: 'coredevices/fw', is_pinned: true },
+  ]) } });
+  await f.signIn();
+  assert.deepEqual(JSON.parse(JSON.stringify((await f.configure({ type: 'codex_cloud_envs' })).environments)),
+    [{ id: 'env-b', label: 'coredevices/fw' }, { id: 'env-a', label: 'coredevices/app' }]);
+  await f.configure({ type: 'codex_new_task', target: { kind: 'cloud', id: 'env-a', name: 'coredevices/app' } });
+  const r = await f.run('send_to_agent', { message: 'start a new task bump the version' });
+  assert.equal(r.text, 'Started a Codex Cloud task in coredevices/app.');
+  const body = JSON.parse(f.calls.find((c) => c.key === `POST ${WHAM}/tasks`).init.body);
+  assert.deepEqual(JSON.parse(JSON.stringify(body.new_task)), { environment_id: 'env-a', branch: 'dev', run_environment_in_qa_mode: false });
+  assert.equal(body.input_items[0].content[0].text, 'bump the version ⌚');
+  // Off: spoken "start a new task" goes to a new ChatGPT chat with the phrase stripped.
+  await f.configure({ type: 'codex_new_task', target: null });
+  assert.equal((await f.configure({ type: 'status' })).codex.newTask, null);
+  const posts = f.calls.length;
+  await f.run('send_to_agent', { message: 'start a new task bump it' });
+  const after = f.calls.slice(posts).map((c) => c.key);
+  assert.ok(!after.includes(`POST ${WHAM}/tasks`) && after.some((k) => k.startsWith('POST https://chatgpt.com/backend-api/')), after.join());
+});
+
+test('new task regressions: hyphenated words are ordinary messages, spoken requests honour a "new task" nickname, a lost start reply is uncertain', async () => {
+  const Socket = relay(threads, (params) => { queued = params; });
+  let started = 0, queued;
+  Socket.onStart = () => { started++; };
+  const f = fixture({ WebSocket: Socket, routes: cloudTasks });
+  await f.signIn();
+  await f.enroll();
+  await f.configure({ type: 'codex_new_task', target: { kind: 'session', computer: 'env-1', name: 'taz-runner', cwd: '/w/app' } });
+
+  // 1. "task-tracking" is not "task": the whole message goes to the default destination (a new ChatGPT chat).
+  const before = f.calls.length;
+  await f.run('send_to_agent', { message: 'Start a new task-tracking spreadsheet for my groceries' });
+  assert.equal(started, 0);
+  assert.ok(f.calls.slice(before).some((c) => c.key.startsWith('POST https://chatgpt.com/backend-api/')));
+
+  // 3. The computer may have created the thread before the socket closed: never "Nothing was sent".
+  Socket.startLost = true;
+  let r = await f.run('send_to_agent', { message: 'hi', chat_id: 'new task' });
+  assert.equal(r.code, 'PLUGIN_UNAVAILABLE');
+  assert.match(r.message, /may have been started.*do not automatically retry/);
+  assert.doesNotMatch(r.message, /Nothing was sent/);
+  Socket.startLost = false;
+  Socket.startRefused = true;
+  r = await f.run('send_to_agent', { message: 'hi', chat_id: 'new task' });
+  assert.match(r.message, /Could not start.*Nothing was sent/);
+  Socket.startRefused = false;
+
+  // 2. A spoken "start a new task …" goes to a chat nicknamed "new task", like an explicit chat_id.
+  const chats = await chatsOf(f);
+  await f.configure({ type: 'codex_chat_save', chat: chats.find((c) => c.id === 'th-live'), nickname: 'new task' });
+  started = 0;
+  r = await f.run('send_to_agent', { message: 'start a new task fix the build' });
+  assert.equal(r.ok, true, r.message);
+  assert.equal(started, 0);
+  assert.equal(queued.threadId, 'th-live');
+  assert.equal(queued.input[0].text, 'fix the build ⌚');
 });

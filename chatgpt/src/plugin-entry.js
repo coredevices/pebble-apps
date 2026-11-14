@@ -14,6 +14,16 @@ var DOT_ID = 'dot';
 var NEW_CHAT_ID = 'new-chat';
 var NEW_CHAT_NAME = 'New ChatGPT chat';
 var CHATS_FRESH_MS = 5 * 60 * 1000;
+// chat_id values that start a new task where settings choose; an existing nickname with one of these names still wins.
+var NEW_TASK = ['new task', 'new session', 'new codex session', 'new codex task'];
+// "start a new chat/task <prompt>" spoken as the message itself, when the host didn't pick a chat_id.
+// The noun must end there: "start a new task-tracking sheet" is an ordinary message.
+var START_NEW = /^\s*(?:please\s+)?start\s+(?:a\s+)?new\s+(?:chatgpt\s+|codex\s+)?(chat|task|session)(?=[\s:,.]|$)[\s:,.-]*/i;
+function parseStartNew(message) {
+  var match = START_NEW.exec(message);
+  var prompt = match ? message.slice(match[0].length).trim() : '';
+  return prompt ? { noun: match[1].toLowerCase(), prompt: prompt } : null;
+}
 var PART_LABELS = { computers: 'Computers: ', cloud: 'Codex Cloud: ', chatgpt: 'ChatGPT chats: ' };
 
 function chatInstance(id, name, title) {
@@ -40,12 +50,15 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
       remoteControl: !!connected,
       paired: !!(connected && connected.paired),
       defaultChat: chosen ? Object.assign({}, chosen, { nickname: nick ? nick.nickname : '' }) : null,
+      newTask: saved.newTask,
+      nicknames: Object.keys(saved.nicknames).map(function (key) { return saved.nicknames[key]; }),
     };
   }
 
   /**
    * Where a send with no chat named goes, from local state only: the chosen destination when it is
-   * set up, else the other one. [target] is null when neither is.
+   * set up; until one is chosen, the Dot when the account has one. Otherwise the default chat, else
+   * a new ChatGPT chat. [target] is null when signed out.
    */
   async function destination() {
     var dot = await dots.status();
@@ -55,13 +68,14 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     var dotTarget = dot.configured ? { kind: 'dot', name: dot.dotName } : null;
     var nick = codex && saved.nicknames[chats.keyOf(codex)];
     var codexTarget = codex ? { kind: 'codex', chat: codex, name: nick ? nick.nickname : codex.label } : null;
-    var target = saved.destination === 'codex' ? codexTarget || dotTarget : dotTarget || codexTarget;
+    var newTarget = account ? { kind: 'new', name: NEW_CHAT_NAME } : null;
+    var target = saved.destination === 'codex' ? codexTarget || dotTarget || newTarget :
+      saved.destination === 'new_chat' ? newTarget || dotTarget : dotTarget || codexTarget || newTarget;
     return {
       target: target,
-      // What settings show as picked: the saved choice, else the one a send would use.
-      chosen: saved.destination || (dot.configured || !account ? 'dot' : 'codex'),
-      choosable: !!(dotTarget && codexTarget),
-      hint: target ? 'Connected' : account ? 'Choose a Codex chat in settings' : 'Sign in in settings',
+      // The Hold to speak value settings show: 'dot', 'new-chat' or the chat's key.
+      value: !target ? '' : target.kind === 'dot' ? DOT_ID : target.kind === 'new' ? NEW_CHAT_ID : chats.keyOf(target.chat),
+      hint: target ? 'Connected' : 'Sign in in settings',
     };
   }
 
@@ -70,7 +84,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     return {
       dots: await dots.status(),
       codex: await codexStatus(),
-      destination: { kind: where.target ? where.target.kind : null, chosen: where.chosen, choosable: where.choosable },
+      destination: { kind: where.target ? where.target.kind : null, value: where.value },
     };
   }
 
@@ -122,7 +136,13 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
         return { ok: true };
       case 'codex_default':
         await chats.update(message.chat, undefined, true);
+        await chats.setDestination('codex');
         return status();
+      case 'codex_new_task':
+        await chats.setNewTask(message.target);
+        return status();
+      case 'codex_cloud_envs':
+        return { environments: (await cloud.environments()).map(function (e) { return { id: e.id, label: e.label }; }) };
       case 'destination':
         await chats.setDestination(message.destination);
         return status();
@@ -148,7 +168,10 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     start_codex_cloud_task: cloud.create,
   };
 
-  /** No chat_id goes to the chosen destination; "dot" or the Dot's name to the Dot; "new-chat" starts a ChatGPT chat; anything else names a chat in the list. */
+  /**
+   * No chat_id goes to the chosen destination; "dot" or the Dot's name to the Dot; "new-chat" starts a
+   * ChatGPT chat; "new task" starts a task where settings choose; anything else names a chat in the list.
+   */
   async function sendToAgent(args) {
     var text = args.message;
     if (typeof text !== 'string' || !text.trim() || text.length > 16000) {
@@ -157,13 +180,25 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
     if (args.chat_id !== undefined && args.chat_id !== null && typeof args.chat_id !== 'string') {
       throw PluginError('INVALID_ARGS', 'Name a ChatGPT chat.');
     }
-    text += ' ⌚';
+    var saved = await chats.prefs();
     var wanted = (args.chat_id || '').trim().toLowerCase();
+    var spoken = !wanted && parseStartNew(text);
+    if (spoken) {
+      text = spoken.prompt;
+      wanted = spoken.noun !== 'chat' && saved.newTask ? 'new task' : NEW_CHAT_ID;
+    }
+    text += ' ⌚';
+    var nicknamed = Object.keys(saved.nicknames).some(function (key) { return saved.nicknames[key].nickname.toLowerCase() === wanted; });
+    if (NEW_TASK.indexOf(wanted) >= 0 && !nicknamed) {
+      var task = saved.newTask;
+      if (!task) throw PluginError('INVALID_ARGS', 'Choose where new tasks start in plugin settings.');
+      if (task.kind === 'cloud') return cloud.create({ prompt: text, environment: task.id });
+      return remote.start({ message: text, computer: task.computer, name: task.name, cwd: task.cwd });
+    }
     if (!wanted) {
       var target = (await destination()).target;
-      if (!target) {
-        throw PluginError('INVALID_ARGS', 'Nowhere to send yet. Sign in with ChatGPT, then set up a Dot or pick a default chat, in plugin settings.');
-      }
+      if (!target) throw PluginError('INVALID_ARGS', 'Nowhere to send yet. Sign in with ChatGPT in plugin settings.');
+      if (target.kind === 'new') return chatgpt.send({ message: text });
       return target.kind === 'dot' ? dots.send({ message: text }) : chats.deliver(target.chat, text);
     }
     var dot = await dots.status();
@@ -171,7 +206,7 @@ function createPlugin(storage, fetch, now, WebSocketImpl) {
       return dots.send({ message: text });
     }
     if (wanted === NEW_CHAT_ID || wanted === NEW_CHAT_NAME.toLowerCase()) return chatgpt.send({ message: text });
-    return chats.send({ message: text, chat: args.chat_id });
+    return chats.send({ message: text, chat: spoken ? wanted : args.chat_id });
   }
 
   async function action(request) {

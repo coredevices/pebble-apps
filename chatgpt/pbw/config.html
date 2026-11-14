@@ -6,14 +6,16 @@
 <style>
 :root { color-scheme:light dark; font:16px system-ui,sans-serif; --bg:#fff; --card:#f3f6f5; --ink:#1f2422; --muted:#5f6763; --line:#d5dcd9; --accent:#0d7a5f; }
 * { box-sizing:border-box; } body { max-width:520px; margin:auto; padding:20px 16px; background:var(--bg); color:var(--ink); }
-h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } small,.hint { color:var(--muted); font-size:13px; line-height:1.5; }
-.card { padding:16px; border:1px solid var(--line); border-radius:16px; margin:20px 0; } #defaultCard { background:var(--card); } .eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; }
-#codexAccount { font-weight:600; margin:10px 0 4px; overflow-wrap:anywhere; } #selected { font-size:19px; font-weight:650; margin:6px 0; overflow-wrap:anywhere; }
-label { display:block; font-size:14px; font-weight:600; margin:16px 0 6px; } button,select,input,textarea { font:inherit; } select,textarea,input:not([type=radio]) { width:100%; min-height:46px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
-button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; } .primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:16px; } #account .card { margin:12px 0; }
-.row { display:flex; align-items:center; gap:10px; margin:12px 0; } .row input { flex:1; min-width:0; } .quiet { border:0; color:var(--accent); background:transparent; padding:8px 0; }
-.check { display:flex; gap:10px; align-items:flex-start; font-weight:400; margin:12px 0 0; } .check small { display:block; overflow-wrap:anywhere; } input[type=radio] { width:20px; height:20px; accent-color:var(--accent); flex-shrink:0; margin:2px 0 0; }
-details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-height:40px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } ul { padding-left:20px; margin:8px 0; } code { overflow-wrap:anywhere; } [hidden] { display:none!important; }
+h1 { font-size:24px; margin:0 0 6px; } p { margin:6px 0 16px; line-height:1.45; } .hint { color:var(--muted); font-size:13px; line-height:1.45; }
+.card { padding:14px; border:1px solid var(--line); border-radius:16px; margin:16px 0; }
+.eyebrow { font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; margin-bottom:10px; }
+.route { padding:10px 0; border-top:1px solid var(--line); } .route:first-of-type { border-top:0; padding-top:0; }
+.say { font-weight:650; } .to { color:var(--muted); font-size:14px; margin-top:4px; }
+button,select,input,textarea { font:inherit; } select,textarea,input { width:100%; min-height:44px; margin-top:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); }
+button { cursor:pointer; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); } button:disabled { opacity:.5; cursor:default; }
+.primary { width:100%; background:var(--accent); color:white; border-color:var(--accent); font-weight:650; margin-top:12px; } .quiet { border:0; color:var(--accent); background:transparent; padding:6px 0; min-height:0; }
+.chip { display:inline-block; background:var(--card); border-radius:999px; padding:3px 10px; font-size:13px; margin:6px 4px 0 0; }
+details { margin:16px 0; } summary { cursor:pointer; color:var(--muted); min-height:36px; } #status { font-size:14px; color:var(--muted); margin:12px 0; } ul { padding-left:20px; margin:8px 0; } code { overflow-wrap:anywhere; } [hidden] { display:none!important; }
 #blocked { padding:12px 14px; border-radius:12px; margin:0 0 16px; background:#fdecc8; color:#5c3d00; font-size:14px; line-height:1.45; } #blocked strong { display:block; }
 @media(prefers-color-scheme:dark) { :root { --bg:#1c201f; --card:#262c2a; --ink:#eef3f1; --muted:#aab5b0; --line:#3d4643; --accent:#19a37f; } }
 </style>
@@ -21,67 +23,63 @@ details { margin:20px 0; } summary { cursor:pointer; color:var(--muted); min-hei
 <body>
 <p id="blocked" role="alert" hidden></p>
 <h1>ChatGPT</h1>
-<p class="hint">Choose where your messages go.</p>
-<div class="card modes">
-<div class="eyebrow">Send messages to</div>
-<label class="check"><input type="radio" name="dest" value="dot"><span>Your Dot<small id="dotHint"></small></span></label>
-<label class="check"><input type="radio" name="dest" value="codex"><span>A ChatGPT or Codex chat<small id="codexHint"></small></span></label>
-</div>
-<div class="card" id="defaultCard" hidden>
-<div class="eyebrow">Your default chat</div>
-<p id="selected"></p>
-<div class="row"><input id="defaultFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="defaultRefresh" class="quiet">Refresh</button></div>
-<select id="defaultChats" aria-label="Default chat"></select>
-<button id="useDefault" class="primary">Use as default</button>
-<ul id="chatErrors" class="hint"></ul>
-</div>
-<p class="hint">Naming a chat or nickname always sends there instead.</p>
-<p id="status" role="status" aria-live="polite">Starting ChatGPT…</p>
-<details id="nicknames" hidden><summary>Nicknames</summary>
-<p class="hint">Give a chat a short name you can say: “Send to ble…”. Works whichever option you chose above.</p>
-<div class="row"><input id="nickFilter" type="search" aria-label="Find a chat" placeholder="Search by title or nickname"><button id="nickRefresh" class="quiet">Refresh</button></div>
-<label for="nickChats">Chat</label><select id="nickChats"></select>
-<div id="editor" hidden>
-<label for="nickname">Nickname</label>
-<input id="nickname" maxlength="40" placeholder="e.g. ble">
-<button id="saveNickname" class="primary">Save nickname</button>
-<p class="hint">Clear the field to remove a nickname.</p>
-</div>
-</details>
-<details id="account"><summary>Account &amp; connection</summary>
+<p class="hint">Send messages to your Dot, ChatGPT and Codex.</p>
+
+<section id="routes" hidden>
 <div class="card">
-<div class="eyebrow">ChatGPT account</div>
-<section id="codexOut" hidden>
-<button id="signin" class="primary">Sign in with ChatGPT</button>
-<p class="hint">One sign-in reaches your Dot, your ChatGPT chats and Codex Cloud. It gives the plugin access to your ChatGPT account; it is used only to list your chats and send them your messages.</p>
-</section>
-<section id="codexIn" hidden>
-<p id="codexAccount"></p>
-<p id="dotAccount" class="hint"></p>
-<button id="codexDisconnect" class="quiet">Sign out</button>
-</section>
+<div class="eyebrow">Hold to speak</div>
+<div class="hint">When Index hold-to-speak is set to ChatGPT</div>
+<select id="destination" aria-label="Hold to speak goes to"></select>
 </div>
-<div class="card" id="computersCard" hidden>
-<div class="eyebrow">Codex on your computers (optional)</div>
+<div class="card">
+<div class="eyebrow">Anywhere: start with “ChatGPT…”</div>
+<div class="route"><div class="say">“Tell ChatGPT …”</div><div class="to">Same place as hold to speak</div></div>
+<div class="route"><div class="say">“… new chat …”</div><div class="to">New ChatGPT chat</div></div>
+<div class="route"><div class="say">“… start a new task …”</div>
+<select id="newTask" aria-label="New tasks start in"></select></div>
+<div class="route"><div class="say">“… to <i>nickname</i> …”</div>
+<div id="chips"></div>
+<details id="nicknames"><summary>Edit names</summary>
+<select id="nickChat" aria-label="Chat"></select>
+<input id="nickname" maxlength="40" placeholder="Nickname, e.g. ble" aria-label="Nickname">
+<button id="saveNickname" class="primary">Save</button>
+</details></div>
+<div class="route"><div class="say">“… tell my <i>chat name</i> to …”</div><div class="to">The chat or Codex session with those words in its title</div></div>
+</div>
+</section>
+<p id="status" role="status" aria-live="polite">Starting ChatGPT…</p>
+
+<details id="account"><summary>Account</summary>
+<section id="signedOut" hidden>
+<button id="signin" class="primary">Sign in with ChatGPT</button>
+<p class="hint">One sign-in reaches your Dot, ChatGPT chats and Codex Cloud. It gives the plugin access to your ChatGPT account, used only to list your chats and send them your messages.</p>
+</section>
+<section id="signedIn" hidden>
+<p id="who"></p>
+<button id="refresh" class="quiet">Reload chats and computers</button><br>
+<button id="signout" class="quiet">Sign out</button>
+<div class="card">
+<div class="eyebrow">Codex on your computers</div>
+<p class="hint">Turn on remote control in the Codex app, or run <code>codex remote-control start</code>.</p>
 <button id="codexEnroll" class="primary">Connect to your computers</button>
-<p class="hint">Your computer needs Codex remote control on: in the Codex app, or with <code>codex remote-control start</code>.</p>
 <section id="enroll" hidden>
-<p>1. Copy this link and open it in your phone’s browser. Sign in when asked (OpenAI asks again even if you are signed in).</p>
+<p>1. Open this link in your phone’s browser and sign in (OpenAI asks again).</p>
 <textarea id="enrollUrl" rows="4" readonly></textarea>
 <button id="enrollCopy" class="quiet">Copy link</button>
-<p>2. The browser ends on a page that won’t load, at an address starting with <code>http://localhost:1455</code>. Copy that whole address and paste it here.</p>
+<p>2. The browser ends on a page that won’t load, at <code>http://localhost:1455…</code>. Paste that address here.</p>
 <input id="enrollCallback" type="url" placeholder="http://localhost:1455/auth/callback?code=…">
 <button id="enrollFinish" class="primary">Finish connecting</button>
 </section>
 <ul id="computers"></ul>
 <section id="pairing" hidden>
-<p class="hint">Pair each computer with this phone once: in the Codex app open remote control (Settings → Connections), or run <code>codex remote-control pair</code>, then paste the code it shows (or the QR code’s text).</p>
+<p class="hint">Pair each computer once: in the Codex app open Settings → Connections, or run <code>codex remote-control pair</code>, then paste the code (or the QR code’s text).</p>
 <input id="pairCode" type="text" placeholder="ABCD-EFGH" autocapitalize="characters" aria-label="Pairing code">
 <button id="pairButton" class="primary">Pair computer</button>
 </section>
 </div>
+</section>
 </details>
-<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect. <a href="https://github.com/coredevices/pebble-apps/tree/main/chatgpt" target="_blank" rel="noopener">Source code</a> is available.</em></p>
+<p style="margin-top:24px;font-size:13px;opacity:.7"><em>This plugin uses an unofficial API to connect directly to ChatGPT. <a href="https://github.com/coredevices/pebble-apps/tree/main/chatgpt" target="_blank" rel="noopener">Source code</a>.</em></p>
 <script>
 // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
 document.addEventListener('click', function (event) {
@@ -91,240 +89,194 @@ document.addEventListener('click', function (event) {
   Pebble.openUrl(link.href).catch(function () {});
 });
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 // ChatGPT's session cookie is too big for one cookie, so NextAuth splits it into .0 and .1.
-const SESSION_COOKIES = ["__Secure-next-auth.session-token.0", "__Secure-next-auth.session-token.1"];
-let state = null, chats = [], busy = false, codexSignedIn = null;
-const say = (text) => { $("status").textContent = text; };
+const SESSION_COOKIES = ['__Secure-next-auth.session-token.0', '__Secure-next-auth.session-token.1'];
+let busy = false, state = null, chats = [], envs = [], targets = {};
+const say = text => { $('status').textContent = text; };
 async function send(message) {
-  const result = await Pebble.sendMessage("plugin", message);
+  const result = await Pebble.sendMessage('plugin', message);
   if (result.error) throw new Error(result.error);
   return result;
 }
-const keyOf = (chat) => chat.kind + ":" + chat.id;
-const chatName = (chat) => (chat.nickname ? chat.nickname + " — " : "") + chat.label;
-const where = (chat) => (chat.kind === "task" ? "Codex Cloud" : chat.kind === "chat" ? "ChatGPT" : chat.computer);
-function ago(ms) {
-  if (!ms) return "";
-  const minutes = Math.max(0, Math.round((Date.now() - ms) / 60000));
-  if (minutes < 60) return minutes + " min ago";
-  if (minutes < 48 * 60) return Math.round(minutes / 60) + " h ago";
-  return Math.round(minutes / 1440) + " d ago";
+const keyOf = chat => chat.kind + ':' + chat.id;
+const label = chat => (chat.nickname ? chat.nickname + ' — ' : '') + chat.label;
+// The fewest trailing folders that tell [cwd] apart from the computer's other folders (/work/app vs /home/app).
+function shortPath(cwd, others) {
+  const parts = p => p.split(/[\\/]/).filter(Boolean);
+  const mine = parts(cwd), rest = [...new Set(others)].filter(o => o !== cwd).map(parts);
+  for (let n = 1; n < mine.length; n++) {
+    const tail = mine.slice(-n).join('/');
+    if (!rest.some(o => o.slice(-n).join('/') === tail)) return tail;
+  }
+  return cwd;
 }
-function item(text, tag = "li") {
-  const el = document.createElement(tag);
-  el.textContent = text;
-  return el;
+// Loaded chats, plus nicknamed or default chats beyond them so their names stay visible and editable.
+function allChats() {
+  const names = state.codex.nicknames, known = new Set(chats.map(keyOf));
+  const extra = names.concat(state.codex.defaultChat || []).filter(c => !known.has(keyOf(c)) && known.add(keyOf(c)));
+  return chats.concat(extra.map(c => ({ ...c, nickname: (names.find(n => keyOf(n) === keyOf(c)) || {}).nickname || '' })));
 }
-const defaultKey = () => state && state.codex.defaultChat && keyOf(state.codex.defaultChat);
-const chatAt = (sel) => chats.find((chat) => keyOf(chat) === sel.value);
-// Fills a <select> with the loaded chats matching its search box, keeping the current pick.
-function fill(sel, filter) {
-  const previous = sel.value, query = filter.value.toLowerCase();
+function fill(sel, groups, value) {
   sel.replaceChildren();
-  chats.filter((chat) => chatName(chat).toLowerCase().includes(query)).forEach((chat) => {
-    const option = item(chatName(chat) + " · " + where(chat) + " · " + ago(chat.updatedAt) + (keyOf(chat) === defaultKey() ? " (default)" : ""), "option");
-    option.value = keyOf(chat);
-    sel.append(option);
+  groups.forEach(([name, options]) => {
+    if (!options.length) return;
+    // Android's native picker ignores optgroup CSS, so the labels carry the separation themselves.
+    if (name) { const o = new Option(name, ''); o.disabled = true; sel.appendChild(o); }
+    options.forEach(([v, text]) => sel.appendChild(new Option(text, v)));
   });
-  const has = (key) => [...sel.options].some((option) => option.value === key);
-  if (has(previous)) sel.value = previous;
-  else if (has(defaultKey())) sel.value = defaultKey();
-  if (!sel.options.length) {
-    const empty = item(chats.length ? "No matching chats" : "No chats loaded", "option");
-    empty.value = "";
-    sel.append(empty);
+  sel.value = value;
+}
+function render(next) {
+  if (next) state = next;
+  if (!state) return;
+  const { dots, codex, destination } = state, all = allChats();
+  $('routes').hidden = !codex.signedIn;
+  $('signedOut').hidden = codex.signedIn;
+  $('signedIn').hidden = !codex.signedIn;
+  if (!codex.signedIn) { $('account').open = true; return; }
+  $('who').textContent = (codex.email ? 'Signed in as ' + codex.email : 'Signed in') + (dots.configured ? '' : '. No Dot on this account.');
+  const of = kind => all.filter(c => c.kind === kind).map(c => [keyOf(c), label(c)]);
+  fill($('destination'), [[null, (dots.configured ? [['dot', 'Your Dot']] : []).concat([['new-chat', 'New ChatGPT chat']])],
+    ['── CHATGPT CHATS ──', of('chat')], ['── CODEX ON YOUR COMPUTERS ──', of('session')], ['── CODEX CLOUD ──', of('task')]], destination.value);
+  // "Start a new task" choices: each computer's recent session folders, then Cloud environments.
+  targets = {};
+  const options = [];
+  const sessions = chats.filter(c => c.kind === 'session' && c.cwd && c.computerId);
+  sessions.forEach(c => {
+    const v = 's:' + c.computerId + ':' + c.cwd;
+    if (targets[v]) return;
+    targets[v] = { kind: 'session', computer: c.computerId, name: c.computer, cwd: c.cwd };
+    const siblings = sessions.filter(o => o.computerId === c.computerId).map(o => o.cwd);
+    options.push([v, 'New Codex session on ' + c.computer + ' · ' + shortPath(c.cwd, siblings)]);
+  });
+  envs.forEach(e => { targets['c:' + e.id] = { kind: 'cloud', id: e.id, name: e.label }; options.push(['c:' + e.id, 'New Codex Cloud task in ' + e.label]); });
+  const t = codex.newTask, value = !t ? '' : t.kind === 'cloud' ? 'c:' + t.id : 's:' + t.computer + ':' + t.cwd;
+  if (t && !targets[value]) {
+    targets[value] = t;
+    options.push([value, t.kind === 'cloud' ? 'New Codex Cloud task in ' + t.name : 'New Codex session on ' + t.name + ' · ' + shortPath(t.cwd, sessions.filter(o => o.computerId === t.computer).map(o => o.cwd))]);
   }
-}
-function showNickname() {
-  const chat = chatAt($("nickChats"));
-  $("editor").hidden = !chat;
-  $("nickname").value = chat ? chat.nickname : "";
-}
-function renderChats() {
-  fill($("defaultChats"), $("defaultFilter"));
-  fill($("nickChats"), $("nickFilter"));
-  showNickname();
-  controls();
-}
-function controls() {
-  $("useDefault").disabled = busy || !$("defaultChats").value || $("defaultChats").value === defaultKey();
-}
-async function loadChats() {
-  say("Loading chats…");
-  const found = await send({ type: "codex_chats" });
-  chats = found.chats;
-  $("chatErrors").replaceChildren(...found.errors.map((e) => item(e)));
-  renderChats();
-  say(chats.length ? "" : "No chats found.");
-}
-async function render(next) {
-  state = next;
-  const { dots, codex, destination } = state;
-  document.querySelectorAll("input[name=dest]").forEach((input) => { input.checked = input.value === destination.chosen; });
-  $("dotHint").textContent = dots.configured ? dots.dotName : codex.signedIn ? "No Dot found on this account" : "Sign in below";
-  $("codexHint").textContent = !codex.signedIn ? "Sign in below" : codex.defaultChat ? chatName(codex.defaultChat) : "Choose a default chat";
-  $("defaultCard").hidden = !(destination.chosen === "codex" && codex.signedIn);
-  $("selected").textContent = codex.defaultChat ? chatName(codex.defaultChat) : "Choose a chat below";
-  $("nicknames").hidden = !codex.signedIn;
-  if (!codex.signedIn) chats = [];
-  // Open for first-time setup; folded away once Codex is signed in, unless the user opens it.
-  if (codexSignedIn !== codex.signedIn) { $("account").open = !codex.signedIn; codexSignedIn = codex.signedIn; }
-  $("dotAccount").textContent = dots.configured ? "Your Dot: " + dots.dotName : "No Dot found on this account. Sign in again after setting one up in ChatGPT.";
-  $("computersCard").hidden = !codex.signedIn;
-  $("codexOut").hidden = codex.signedIn;
-  $("codexIn").hidden = !codex.signedIn;
-  $("codexAccount").textContent = codex.email ? "Signed in as " + codex.email : "Signed in";
-  $("codexEnroll").textContent = codex.remoteControl ? "Reconnect to your computers" : "Connect to your computers";
-  $("pairing").hidden = !codex.remoteControl;
-  renderChats();
-  if ($("account").open) await loadComputers();
-}
-async function loadComputers() {
-  $("computers").replaceChildren();
-  if (state.codex.remoteControl) {
-    try {
-      const { computers } = await send({ type: "codex_computers" });
-      if (!computers.length) $("computers").append(item("No computers with remote control on yet."));
-      computers.forEach((c) => $("computers").append(item(c.name + (c.online ? " · online" : " · offline"))));
-    } catch (e) {
-      $("computers").append(item(e.message));
-    }
-  }
-}
-function describe() {
-  const { dots, codex, destination } = state;
-  if (!destination.kind) {
-    return codex.signedIn ? "Choose a default chat." : "Sign in under Account & connection to choose where messages go.";
-  }
-  let text = "Messages with no chat named go to " + (destination.kind === "dot" ? "your Dot, " + dots.dotName : chatName(codex.defaultChat)) + ".";
-  if (destination.kind !== destination.chosen) {
-    text += destination.chosen === "codex" ? " Choose a default chat to send there instead." : " Set up a Dot in ChatGPT, then sign in again, to send there instead.";
-  }
-  return text;
-}
-// Loads the chat list when a picker that needs it is on screen.
-async function refresh() {
-  if (state.codex.signedIn && !chats.length && (!$("defaultCard").hidden || $("nicknames").open)) await loadChats();
+  fill($('newTask'), [[null, options.concat([['', 'Off']])]], value);
+  $('chips').replaceChildren(...codex.nicknames.map(n => {
+    const c = document.createElement('span'); c.className = 'chip'; c.textContent = n.nickname + ' → ' + n.label; return c;
+  }));
+  const nickValue = $('nickChat').value;
+  fill($('nickChat'), [['── CHATGPT CHATS ──', of('chat')], ['── CODEX ON YOUR COMPUTERS ──', of('session')], ['── CODEX CLOUD ──', of('task')]], nickValue);
+  $('nickname').value = (all.find(c => keyOf(c) === $('nickChat').value) || {}).nickname || '';
+  $('codexEnroll').textContent = codex.remoteControl ? 'Reconnect to your computers' : 'Connect to your computers';
+  $('pairing').hidden = !codex.remoteControl;
 }
 async function run(fn) {
   if (busy) return;
   busy = true;
-  document.querySelectorAll("button,select,input,textarea").forEach((el) => { el.disabled = true; });
+  document.querySelectorAll('button,select,input,textarea').forEach(el => { el.disabled = true; });
+  try { await fn(); } catch (e) { say(e.message || 'Something went wrong.'); }
+  finally { busy = false; document.querySelectorAll('button,select,input,textarea').forEach(el => { el.disabled = false; }); render(); }
+}
+// Chats and Cloud environments load on their own, so one failing doesn't hide the other.
+async function load() {
+  if (!state.codex.signedIn) return;
+  say('Loading chats…');
+  const [found, cloud] = await Promise.all([send({ type: 'codex_chats' }), send({ type: 'codex_cloud_envs' })].map(p => p.catch(() => null)));
+  chats = found ? found.chats : [];
+  envs = cloud ? cloud.environments : [];
+  const failed = (found ? found.errors : ['Could not load chats.']).concat(cloud ? [] : ['Could not load Codex Cloud environments.']);
+  render();
+  say(failed.join(' '));
+}
+async function loadComputers() {
+  $('computers').replaceChildren();
+  if (!state || !state.codex.remoteControl) return;
   try {
-    await fn();
+    const { computers } = await send({ type: 'codex_computers' });
+    const lines = computers.length ? computers.map(c => c.name + (c.online ? ' · online' : ' · offline')) : ['No computers with remote control on yet.'];
+    $('computers').replaceChildren(...lines.map(text => Object.assign(document.createElement('li'), { textContent: text })));
   } catch (e) {
-    say(e.message || "Something went wrong.");
-  } finally {
-    busy = false;
-    document.querySelectorAll("button,select,input,textarea").forEach((el) => { el.disabled = false; });
-    controls();
+    $('computers').replaceChildren(Object.assign(document.createElement('li'), { textContent: e.message }));
   }
 }
-async function chatgptCookie() {
-  if (!Pebble.webSignIn) throw new Error("Signing in requires a newer version of the Pebble app.");
-  say("Opening ChatGPT sign-in…");
-  const cookies = await Pebble.webSignIn({ url: "https://chatgpt.com/auth/login", cookies: SESSION_COOKIES, domain: "chatgpt.com" });
-  if (!cookies) say("Sign-in cancelled.");
-  return cookies && SESSION_COOKIES.map((name) => cookies[name]).join("");
-}
-function entropy(size) {
-  const bytes = crypto.getRandomValues(new Uint8Array(size));
-  return btoa(String.fromCharCode(...bytes));
-}
-document.querySelectorAll("input[name=dest]").forEach((input) => {
-  input.onchange = () => run(async () => {
-    await render(await send({ type: "destination", destination: input.value }));
-    await refresh();
-    say(describe());
-  });
+$('destination').onchange = () => run(async () => {
+  const v = $('destination').value, chat = allChats().find(c => keyOf(c) === v);
+  if (v === 'dot') render(await send({ type: 'destination', destination: 'dot' }));
+  else if (v === 'new-chat') render(await send({ type: 'destination', destination: 'new_chat' }));
+  else if (chat) render(await send({ type: 'codex_default', chat }));
+  say('Saved.');
 });
-$("defaultFilter").oninput = () => { fill($("defaultChats"), $("defaultFilter")); controls(); };
-$("defaultChats").onchange = controls;
-$("defaultRefresh").onclick = $("nickRefresh").onclick = () => run(loadChats);
-$("useDefault").onclick = () => run(async () => {
-  const chat = chatAt($("defaultChats"));
-  if (!chat) throw new Error("Choose a chat first.");
-  await render(await send({ type: "codex_default", chat }));
-  say(describe());
+$('newTask').onchange = () => run(async () => {
+  render(await send({ type: 'codex_new_task', target: targets[$('newTask').value] || null })); say('Saved.');
 });
-$("account").ontoggle = () => { if ($("account").open && state) run(loadComputers); };
-$("nicknames").ontoggle = () => { if ($("nicknames").open) run(refresh); };
-$("nickFilter").oninput = () => { fill($("nickChats"), $("nickFilter")); showNickname(); };
-$("nickChats").onchange = showNickname;
-$("saveNickname").onclick = () => run(async () => {
-  const chat = chatAt($("nickChats")), name = $("nickname").value.trim();
-  if (!chat) throw new Error("Choose a chat first.");
-  await send({ type: "codex_chat_save", chat, nickname: name });
-  chats.forEach((row) => {
-    if (name && row.nickname.toLowerCase() === name.toLowerCase()) row.nickname = "";
+$('nickChat').onchange = () => render();
+$('saveNickname').onclick = () => run(async () => {
+  const chat = allChats().find(c => keyOf(c) === $('nickChat').value), name = $('nickname').value.trim();
+  if (!chat) throw new Error('Choose a chat first.');
+  await send({ type: 'codex_chat_save', chat, nickname: name });
+  chats.forEach(row => {
+    if (name && row.nickname.toLowerCase() === name.toLowerCase()) row.nickname = '';
     if (keyOf(row) === keyOf(chat)) row.nickname = name;
   });
-  await render(await send({ type: "status" }));
-  say(name ? "Saved. Say “" + name + "” to send to this chat." : "Nickname removed.");
+  render(await send({ type: 'status' }));
+  say(name ? 'Saved. Say “… to ' + name + ' …”.' : 'Nickname removed.');
 });
-$("signin").onclick = () => run(async () => {
-  const sessionToken = await chatgptCookie();
-  if (!sessionToken) return;
-  say("Signing in…");
-  const next = await send({ type: "connect", session_token: sessionToken });
-  await render(next);
-  await refresh();
-  say((next.dotError ? next.dotError + " " : "") + describe());
+$('refresh').onclick = () => run(async () => { await load(); await loadComputers(); });
+$('account').ontoggle = () => { if ($('account').open && state && state.codex.signedIn) run(loadComputers); };
+$('signin').onclick = () => run(async () => {
+  if (!Pebble.webSignIn) throw new Error('Signing in requires a newer version of the Pebble app.');
+  say('Opening ChatGPT sign-in…');
+  const cookies = await Pebble.webSignIn({ url: 'https://chatgpt.com/auth/login', cookies: SESSION_COOKIES, domain: 'chatgpt.com' });
+  if (!cookies) { say('Sign-in cancelled.'); return; }
+  say('Signing in…');
+  const next = await send({ type: 'connect', session_token: SESSION_COOKIES.map(name => cookies[name]).join('') });
+  render(next);
+  $('account').open = false;
+  await load();
+  if (next.dotError) say(next.dotError);
 });
-$("codexEnroll").onclick = () => run(async () => {
-  const begun = await send({ type: "codex_enroll_begin", entropy: entropy(96) });
-  $("enrollUrl").value = begun.url;
-  $("enrollCallback").value = "";
-  $("enroll").hidden = false;
-  say("Follow the two steps below.");
+$('signout').onclick = () => run(async () => {
+  chats = []; envs = [];
+  render(await send({ type: 'disconnect' }));
+  say('Signed out.');
 });
-$("enrollCopy").onclick = async () => {
-  $("enrollUrl").select();
-  try {
-    await navigator.clipboard.writeText($("enrollUrl").value);
-  } catch (e) {
-    document.execCommand("copy");
-  }
-  say("Link copied.");
+$('codexEnroll').onclick = () => run(async () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(96));
+  const begun = await send({ type: 'codex_enroll_begin', entropy: btoa(String.fromCharCode(...bytes)) });
+  $('enrollUrl').value = begun.url;
+  $('enrollCallback').value = '';
+  $('enroll').hidden = false;
+  say('');
+});
+$('enrollCopy').onclick = async () => {
+  $('enrollUrl').select();
+  try { await navigator.clipboard.writeText($('enrollUrl').value); } catch (e) { document.execCommand('copy'); }
+  say('Link copied.');
 };
-$("enrollFinish").onclick = () => run(async () => {
-  await render(await send({ type: "codex_enroll_finish", url: $("enrollCallback").value }));
-  $("enroll").hidden = true;
-  say("Connected to your computers.");
+$('enrollFinish').onclick = () => run(async () => {
+  render(await send({ type: 'codex_enroll_finish', url: $('enrollCallback').value }));
+  $('enroll').hidden = true;
+  await loadComputers();
+  say('Connected. Now pair each computer below.');
 });
-$("pairButton").onclick = () => run(async () => {
-  await send({ type: "codex_pair", code: $("pairCode").value });
-  $("pairCode").value = "";
-  await render(await send({ type: "status" }));
-  chats = [];
-  await refresh();
-  say("Computer paired.");
-});
-$("codexDisconnect").onclick = () => run(async () => {
-  await render(await send({ type: "disconnect" }));
-  say("Signed out. The saved sign-in and paired computers were removed from this plugin.");
+$('pairButton').onclick = () => run(async () => {
+  await send({ type: 'codex_pair', code: $('pairCode').value });
+  $('pairCode').value = '';
+  render(await send({ type: 'status' }));
+  await load();
+  await loadComputers();
+  say('Computer paired.');
 });
 function showBlocked({ host, sure }) {
-  const banner = $("blocked"), title = document.createElement("strong");
-  title.textContent = "ChatGPT doesn't have permission to connect to " + host + ".";
-  banner.replaceChildren(title, 'Go back to ChatGPT\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? "" : " If it's already on, check your internet connection."));
+  const banner = $('blocked'), title = document.createElement('strong');
+  title.textContent = "ChatGPT doesn't have permission to connect to " + host + '.';
+  banner.replaceChildren(title, 'Go back to ChatGPT\'s page and turn on "Connect to ' + host + '" under Permissions.' + (sure ? '' : " If it's already on, check your internet connection."));
   banner.hidden = false;
 }
-Pebble.addEventListener("ready", (event) => {
-  if (event.target !== "plugin") return;
-  Pebble.sendMessage("plugin", { type: "reach" }).then((r) => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
+Pebble.addEventListener('ready', event => {
+  if (event.target !== 'plugin') return;
+  Pebble.sendMessage('plugin', { type: 'reach' }).then(r => { if (r && r.blocked) showBlocked(r.blocked); }).catch(() => {});
   run(async () => {
-    try {
-      await render(await send({ type: "status" }));
-    } catch (e) {
-      // Without a status there is nothing to render, so offer sign-in rather than an empty page.
-      $("account").open = true;
-      $("codexOut").hidden = false;
-      throw e;
-    }
-    await refresh();
-    say(describe());
+    try { render(await send({ type: 'status' })); }
+    catch (e) { $('account').open = true; $('signedOut').hidden = false; throw e; }
+    say('');
+    await load();
   });
 });
 </script>

@@ -5402,6 +5402,9 @@
       function threadLabel(thread) {
         return thread.name && thread.name.trim() || (thread.preview || "").trim() || thread.id;
       }
+      function folderName(cwd) {
+        return String(cwd).split(/[\\/]/).filter(Boolean).pop() || String(cwd);
+      }
       function createCodexRemote(storage, fetch2, now, WebSocketImpl, auth) {
         async function load() {
           var raw = await storage.getItem(KEY);
@@ -5442,23 +5445,23 @@
         }
         async function enroll(stepUpToken, seed) {
           var account = await auth.current();
-          var start = await call(account, "POST", "/client/enroll/start", {});
-          var key = deviceKey.generate(start.account_user_id, start.client_id, seed);
-          var proof = deviceKey.signEnrollment(key, start.device_key_challenge, ORIGIN, BASE_PATH + "/client/enroll/finish", false);
+          var start2 = await call(account, "POST", "/client/enroll/start", {});
+          var key = deviceKey.generate(start2.account_user_id, start2.client_id, seed);
+          var proof = deviceKey.signEnrollment(key, start2.device_key_challenge, ORIGIN, BASE_PATH + "/client/enroll/finish", false);
           var finish = await call(account, "POST", "/client/enroll/finish", {
-            client_id: start.client_id,
+            client_id: start2.client_id,
             step_up_token: stepUpToken,
             device_identity: deviceKey.identity(key),
             device_key_proof: proof
-          }, start.client_id);
+          }, start2.client_id);
           return save(finish, key);
         }
         async function current(account) {
           var session = await load();
           if (!session) throw notConnected();
           if (session.expiresAt - now() > RENEW_BEFORE_MS) return session;
-          var start = await call(account, "POST", "/client/refresh/start", { client_id: session.clientId }, session.clientId);
-          var proof = deviceKey.signEnrollment(session.key, start.device_key_challenge, ORIGIN, BASE_PATH + "/client/refresh/finish", true);
+          var start2 = await call(account, "POST", "/client/refresh/start", { client_id: session.clientId }, session.clientId);
+          var proof = deviceKey.signEnrollment(session.key, start2.device_key_challenge, ORIGIN, BASE_PATH + "/client/refresh/finish", true);
           var finish = await call(account, "POST", "/client/refresh/finish", {
             client_id: session.clientId,
             device_key_proof: proof
@@ -5590,7 +5593,7 @@
               envelope({ type: "client_message", message: { id, method, params } });
             });
           }
-          async function start() {
+          async function start2() {
             await handshake;
             await request("initialize", { clientInfo: CLIENT_INFO, capabilities: { experimentalApi: true } });
             notify("initialized");
@@ -5602,7 +5605,7 @@
             } catch (_) {
             }
           }
-          return { start, request, close };
+          return { start: start2, request, close };
         }
         function pickComputer(list, query) {
           var online = list.filter(function(env) {
@@ -5643,6 +5646,8 @@
                   kind: "session",
                   id: thread.id,
                   computer: online[i].name,
+                  computerId: online[i].id,
+                  cwd: typeof thread.cwd === "string" ? thread.cwd : "",
                   label: threadLabel(thread).slice(0, 80),
                   state: state === "active" ? "working" : state === "idle" ? "open" : "not open",
                   updatedAt: util.toMillis(thread.recencyAt || thread.updatedAt)
@@ -5691,6 +5696,55 @@
             link.close();
           }
         }
+        async function start(args) {
+          var text = args && args.message;
+          if (typeof text !== "string" || !text.trim() || text.length > 16e3) {
+            throw PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
+          }
+          if (typeof args.cwd !== "string" || !args.cwd) throw PluginError("INVALID_ARGS", "Choose a project folder for new Codex sessions in settings.");
+          var account = await auth.current();
+          var session = await current(account);
+          var all = await environments(account, session);
+          var computer = all.filter(function(env) {
+            return env.id === args.computer;
+          })[0];
+          if (!computer || !computer.online) {
+            throw PluginError("PLUGIN_UNAVAILABLE", (computer ? computer.name : args.name || "That computer") + " is not online for Codex remote control. Nothing was sent.");
+          }
+          var where = computer.name + " · " + folderName(args.cwd);
+          var link = open(account, session, computer.id);
+          try {
+            var thread, asked = false;
+            var unsure = "A new Codex session on " + where + " may have been started, but your message was not sent. Check Codex before trying again; do not automatically retry.";
+            try {
+              await link.start();
+              asked = true;
+              var started = await link.request("thread/start", { cwd: args.cwd });
+              thread = started && started.thread;
+            } catch (error) {
+              if (asked && !error.rpc) {
+                var lost = PluginError("PLUGIN_UNAVAILABLE", unsure);
+                lost.uncertain = true;
+                throw lost;
+              }
+              error.message = "Could not start a new Codex session on " + where + ". " + error.message + " Nothing was sent.";
+              throw error;
+            }
+            if (!thread || typeof thread.id !== "string") throw PluginError("PLUGIN_UNAVAILABLE", unsure);
+            try {
+              await link.request("turn/start", {
+                threadId: thread.id,
+                input: [{ type: "text", text, textElements: [] }],
+                clientUserMessageId: util.uuid()
+              });
+            } catch (_) {
+              throw PluginError("PLUGIN_UNAVAILABLE", "Started a new Codex session on " + where + ", but your message may not have arrived. Check it in Codex before sending again; do not automatically retry.");
+            }
+            return { text: "Started a new Codex session on " + where + ".", semanticResult: util.messageSent("Codex on " + computer.name, thread.id, text) };
+          } finally {
+            link.close();
+          }
+        }
         async function markPaired(session) {
           session.paired = true;
           await storage.setItem(KEY, JSON.stringify(session));
@@ -5721,9 +5775,9 @@
         async function disconnect() {
           await storage.removeItem(KEY);
         }
-        return { load, enroll, computers, chats, pair, send, disconnect };
+        return { load, enroll, computers, chats, pair, send, start, disconnect };
       }
-      module.exports = { createCodexRemote };
+      module.exports = { createCodexRemote, folderName };
     }
   });
 
@@ -5871,7 +5925,7 @@
             }
           }
           var mine = key && saved.accounts && saved.accounts[key] || {};
-          return { defaultChat: mine.defaultChat || null, nicknames: mine.nicknames || {}, destination: saved.destination || null };
+          return { defaultChat: mine.defaultChat || null, nicknames: mine.nicknames || {}, newTask: mine.newTask || null, destination: saved.destination || null };
         }
         async function savePrefs(value) {
           var saved = await stored();
@@ -5879,7 +5933,7 @@
           var next = Object.assign({}, saved, { destination: value.destination || null });
           if (key) {
             next.accounts = Object.assign({}, saved.accounts);
-            next.accounts[key] = { defaultChat: value.defaultChat || null, nicknames: value.nicknames };
+            next.accounts[key] = { defaultChat: value.defaultChat || null, nicknames: value.nicknames, newTask: value.newTask || null };
             delete next.defaultChat;
             delete next.nicknames;
           }
@@ -6005,9 +6059,25 @@
           return remote.send({ message: text, session: chat.id, computer: chat.computer });
         }
         async function setDestination(value) {
-          if (value !== "dot" && value !== "codex") throw PluginError("INVALID_ARGS", "Choose the Dot or the Codex default chat.");
+          if (value !== "dot" && value !== "codex" && value !== "new_chat") throw PluginError("INVALID_ARGS", "Choose the Dot, a new chat or a default chat.");
           var saved = await prefs();
           saved.destination = value;
+          await savePrefs(saved);
+        }
+        async function setNewTask(target) {
+          var value = null;
+          function text(v, max) {
+            return typeof v === "string" && v && v.length <= max;
+          }
+          if (target && target.kind === "session" && text(target.computer, 200) && text(target.cwd, 1024)) {
+            value = { kind: "session", computer: target.computer, name: String(target.name || target.computer).slice(0, 80), cwd: target.cwd };
+          } else if (target && target.kind === "cloud" && text(target.id, 200)) {
+            value = { kind: "cloud", id: target.id, name: String(target.name || target.id).slice(0, 80) };
+          } else if (target) {
+            throw PluginError("INVALID_ARGS", "Choose where new tasks start.");
+          }
+          var saved = await prefs();
+          saved.newTask = value;
           await savePrefs(saved);
         }
         async function forget() {
@@ -6025,6 +6095,7 @@
           send,
           deliver,
           setDestination,
+          setNewTask,
           prefs,
           keyOf
         };
@@ -6619,6 +6690,13 @@
       var NEW_CHAT_ID = "new-chat";
       var NEW_CHAT_NAME = "New ChatGPT chat";
       var CHATS_FRESH_MS = 5 * 60 * 1e3;
+      var NEW_TASK = ["new task", "new session", "new codex session", "new codex task"];
+      var START_NEW = /^\s*(?:please\s+)?start\s+(?:a\s+)?new\s+(?:chatgpt\s+|codex\s+)?(chat|task|session)(?=[\s:,.]|$)[\s:,.-]*/i;
+      function parseStartNew(message) {
+        var match = START_NEW.exec(message);
+        var prompt = match ? message.slice(match[0].length).trim() : "";
+        return prompt ? { noun: match[1].toLowerCase(), prompt } : null;
+      }
       var PART_LABELS = { computers: "Computers: ", cloud: "Codex Cloud: ", chatgpt: "ChatGPT chats: " };
       function chatInstance(id, name, title) {
         return { instanceId: id, properties: { name: { shortText: { text: name } }, title: { shortText: { text: title } } } };
@@ -6641,7 +6719,11 @@
             email: account ? account.email : "",
             remoteControl: !!connected,
             paired: !!(connected && connected.paired),
-            defaultChat: chosen ? Object.assign({}, chosen, { nickname: nick ? nick.nickname : "" }) : null
+            defaultChat: chosen ? Object.assign({}, chosen, { nickname: nick ? nick.nickname : "" }) : null,
+            newTask: saved.newTask,
+            nicknames: Object.keys(saved.nicknames).map(function(key) {
+              return saved.nicknames[key];
+            })
           };
         }
         async function destination() {
@@ -6652,13 +6734,13 @@
           var dotTarget = dot.configured ? { kind: "dot", name: dot.dotName } : null;
           var nick = codex && saved.nicknames[chats.keyOf(codex)];
           var codexTarget = codex ? { kind: "codex", chat: codex, name: nick ? nick.nickname : codex.label } : null;
-          var target = saved.destination === "codex" ? codexTarget || dotTarget : dotTarget || codexTarget;
+          var newTarget = account ? { kind: "new", name: NEW_CHAT_NAME } : null;
+          var target = saved.destination === "codex" ? codexTarget || dotTarget || newTarget : saved.destination === "new_chat" ? newTarget || dotTarget : dotTarget || codexTarget || newTarget;
           return {
             target,
-            // What settings show as picked: the saved choice, else the one a send would use.
-            chosen: saved.destination || (dot.configured || !account ? "dot" : "codex"),
-            choosable: !!(dotTarget && codexTarget),
-            hint: target ? "Connected" : account ? "Choose a Codex chat in settings" : "Sign in in settings"
+            // The Hold to speak value settings show: 'dot', 'new-chat' or the chat's key.
+            value: !target ? "" : target.kind === "dot" ? DOT_ID : target.kind === "new" ? NEW_CHAT_ID : chats.keyOf(target.chat),
+            hint: target ? "Connected" : "Sign in in settings"
           };
         }
         async function status() {
@@ -6666,7 +6748,7 @@
           return {
             dots: await dots.status(),
             codex: await codexStatus(),
-            destination: { kind: where.target ? where.target.kind : null, chosen: where.chosen, choosable: where.choosable }
+            destination: { kind: where.target ? where.target.kind : null, value: where.value }
           };
         }
         async function connect(sessionToken) {
@@ -6714,7 +6796,15 @@
               return { ok: true };
             case "codex_default":
               await chats.update(message.chat, void 0, true);
+              await chats.setDestination("codex");
               return status();
+            case "codex_new_task":
+              await chats.setNewTask(message.target);
+              return status();
+            case "codex_cloud_envs":
+              return { environments: (await cloud.environments()).map(function(e) {
+                return { id: e.id, label: e.label };
+              }) };
             case "destination":
               await chats.setDestination(message.destination);
               return status();
@@ -6746,13 +6836,27 @@
           if (args.chat_id !== void 0 && args.chat_id !== null && typeof args.chat_id !== "string") {
             throw PluginError("INVALID_ARGS", "Name a ChatGPT chat.");
           }
-          text += " ⌚";
+          var saved = await chats.prefs();
           var wanted = (args.chat_id || "").trim().toLowerCase();
+          var spoken = !wanted && parseStartNew(text);
+          if (spoken) {
+            text = spoken.prompt;
+            wanted = spoken.noun !== "chat" && saved.newTask ? "new task" : NEW_CHAT_ID;
+          }
+          text += " ⌚";
+          var nicknamed = Object.keys(saved.nicknames).some(function(key) {
+            return saved.nicknames[key].nickname.toLowerCase() === wanted;
+          });
+          if (NEW_TASK.indexOf(wanted) >= 0 && !nicknamed) {
+            var task = saved.newTask;
+            if (!task) throw PluginError("INVALID_ARGS", "Choose where new tasks start in plugin settings.");
+            if (task.kind === "cloud") return cloud.create({ prompt: text, environment: task.id });
+            return remote.start({ message: text, computer: task.computer, name: task.name, cwd: task.cwd });
+          }
           if (!wanted) {
             var target = (await destination()).target;
-            if (!target) {
-              throw PluginError("INVALID_ARGS", "Nowhere to send yet. Sign in with ChatGPT, then set up a Dot or pick a default chat, in plugin settings.");
-            }
+            if (!target) throw PluginError("INVALID_ARGS", "Nowhere to send yet. Sign in with ChatGPT in plugin settings.");
+            if (target.kind === "new") return chatgpt.send({ message: text });
             return target.kind === "dot" ? dots.send({ message: text }) : chats.deliver(target.chat, text);
           }
           var dot = await dots.status();
@@ -6760,7 +6864,7 @@
             return dots.send({ message: text });
           }
           if (wanted === NEW_CHAT_ID || wanted === NEW_CHAT_NAME.toLowerCase()) return chatgpt.send({ message: text });
-          return chats.send({ message: text, chat: args.chat_id });
+          return chats.send({ message: text, chat: spoken ? wanted : args.chat_id });
         }
         async function action(request) {
           var handler = request && actions[request.action];

@@ -62,12 +62,21 @@ Codex uses the shared sign-in's access token as the bearer for both halves:
   (handshake headers need the host's non-standard `WebSocket(url, protocols, { headers })`), signs
   the relay's device-key challenge, and speaks the Codex app-server's JSON-RPC through the relay's
   envelopes: `initialize`, `thread/list`, then `thread/queue/add`, which runs at once on an idle
-  session. The computer needs remote control on: the Codex app, or `codex remote-control start`.
+  session. A new task starts a session with `thread/start {cwd}` (the project folder picked in
+  settings, taken from the `cwd` of that computer's recent threads; no model, sandbox or approval
+  overrides, so the computer's Codex config applies), then `turn/start {threadId, input,
+  clientUserMessageId}` with the prompt. A start that never went out, or that the app-server refused,
+  sends nothing; if the `thread/start` reply is lost the session may exist, so that and a failed
+  `turn/start` are reported as uncertain, never to be retried automatically. The app-server unloads a thread only once
+  it has no subscribers and is not active, so closing the socket doesn't stop the running turn
+  (`app-server/src/request_processors/thread_lifecycle.rs`, `UnloadingState`). The computer needs
+  remote control on: the Codex app, or `codex remote-control start`.
 
 Both kinds show up as one list of Codex chats (`codex-chats.js`), most recent first, served with the
 Dot as `agent/chats`. In settings the user gives Codex chats nicknames and picks a default chat;
 `send_to_agent` takes a chat id from `agent/chats`, a nickname, or part of a title, and with none goes
-to the Dot or the default Codex chat, whichever settings choose (falling back to whichever is set up).
+where settings choose: the Dot (the default while the account has one and nothing else was chosen),
+a new ChatGPT chat, or the default chat, falling back in that order to whichever is set up.
 The default chat and nicknames belong to the Codex account they were set under (v0.2.0's untagged
 ones go to the first account that reads them); another account starts without them.
 

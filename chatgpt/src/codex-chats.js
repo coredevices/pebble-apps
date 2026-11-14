@@ -47,7 +47,7 @@ function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
       try { await storage.setItem(PREFS_KEY, JSON.stringify(saved)); } catch (_) { /* adopted again next read */ }
     }
     var mine = key && saved.accounts && saved.accounts[key] || {};
-    return { defaultChat: mine.defaultChat || null, nicknames: mine.nicknames || {}, destination: saved.destination || null };
+    return { defaultChat: mine.defaultChat || null, nicknames: mine.nicknames || {}, newTask: mine.newTask || null, destination: saved.destination || null };
   }
 
   async function savePrefs(value) {
@@ -56,7 +56,7 @@ function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
     var next = Object.assign({}, saved, { destination: value.destination || null });
     if (key) {
       next.accounts = Object.assign({}, saved.accounts);
-      next.accounts[key] = { defaultChat: value.defaultChat || null, nicknames: value.nicknames };
+      next.accounts[key] = { defaultChat: value.defaultChat || null, nicknames: value.nicknames, newTask: value.newTask || null };
       delete next.defaultChat;
       delete next.nicknames;
     }
@@ -181,11 +181,30 @@ function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
     return remote.send({ message: text, session: chat.id, computer: chat.computer });
   }
 
-  /** Where a send with no chat named goes when both are possible: 'dot' or 'codex'. */
+  /** Where a send with no chat named goes: 'dot', 'codex' (the default chat) or 'new_chat'. */
   async function setDestination(value) {
-    if (value !== 'dot' && value !== 'codex') throw PluginError('INVALID_ARGS', 'Choose the Dot or the Codex default chat.');
+    if (value !== 'dot' && value !== 'codex' && value !== 'new_chat') throw PluginError('INVALID_ARGS', 'Choose the Dot, a new chat or a default chat.');
     var saved = await prefs();
     saved.destination = value;
+    await savePrefs(saved);
+  }
+
+  /**
+   * Where "start a new task" goes: a new Codex session in a folder on a computer, a new Codex Cloud
+   * task in an environment, or null (off).
+   */
+  async function setNewTask(target) {
+    var value = null;
+    function text(v, max) { return typeof v === 'string' && v && v.length <= max; }
+    if (target && target.kind === 'session' && text(target.computer, 200) && text(target.cwd, 1024)) {
+      value = { kind: 'session', computer: target.computer, name: String(target.name || target.computer).slice(0, 80), cwd: target.cwd };
+    } else if (target && target.kind === 'cloud' && text(target.id, 200)) {
+      value = { kind: 'cloud', id: target.id, name: String(target.name || target.id).slice(0, 80) };
+    } else if (target) {
+      throw PluginError('INVALID_ARGS', 'Choose where new tasks start.');
+    }
+    var saved = await prefs();
+    saved.newTask = value;
     await savePrefs(saved);
   }
 
@@ -197,7 +216,7 @@ function createCodexChats(storage, remote, cloud, chatgpt, auth, now) {
 
   return {
     list: list, cached: cached, forget: forget, update: update, resolve: resolve, send: send, deliver: deliver,
-    setDestination: setDestination, prefs: prefs, keyOf: keyOf,
+    setDestination: setDestination, setNewTask: setNewTask, prefs: prefs, keyOf: keyOf,
   };
 }
 

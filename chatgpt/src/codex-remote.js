@@ -27,6 +27,11 @@ function threadLabel(thread) {
   return (thread.name && thread.name.trim()) || (thread.preview || '').trim() || thread.id;
 }
 
+/** A folder's last path segment, for labels. */
+function folderName(cwd) {
+  return String(cwd).split(/[\\/]/).filter(Boolean).pop() || String(cwd);
+}
+
 function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
   async function load() {
     var raw = await storage.getItem(KEY);
@@ -283,6 +288,8 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
             kind: 'session',
             id: thread.id,
             computer: online[i].name,
+            computerId: online[i].id,
+            cwd: typeof thread.cwd === 'string' ? thread.cwd : '',
             label: threadLabel(thread).slice(0, 80),
             state: state === 'active' ? 'working' : state === 'idle' ? 'open' : 'not open',
             updatedAt: util.toMillis(thread.recencyAt || thread.updatedAt),
@@ -337,6 +344,62 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
     }
   }
 
+  /**
+   * Starts a new Codex session in [cwd] on one computer and sends [message] as its first turn:
+   * `thread/start`, then `turn/start`, as the Codex app does. A failed start sends nothing.
+   */
+  async function start(args) {
+    var text = args && args.message;
+    if (typeof text !== 'string' || !text.trim() || text.length > 16000) {
+      throw PluginError('INVALID_ARGS', 'Provide a message between 1 and 16,000 characters.');
+    }
+    if (typeof args.cwd !== 'string' || !args.cwd) throw PluginError('INVALID_ARGS', 'Choose a project folder for new Codex sessions in settings.');
+    var account = await auth.current();
+    var session = await current(account);
+    var all = await environments(account, session);
+    var computer = all.filter(function (env) { return env.id === args.computer; })[0];
+    if (!computer || !computer.online) {
+      throw PluginError('PLUGIN_UNAVAILABLE', (computer ? computer.name : args.name || 'That computer') + ' is not online for Codex remote control. Nothing was sent.');
+    }
+    var where = computer.name + ' · ' + folderName(args.cwd);
+    var link = open(account, session, computer.id);
+    try {
+      var thread, asked = false;
+      var unsure = 'A new Codex session on ' + where + ' may have been started, but your message was not sent. ' +
+        'Check Codex before trying again; do not automatically retry.';
+      try {
+        await link.start();
+        asked = true;
+        var started = await link.request('thread/start', { cwd: args.cwd });
+        thread = started && started.thread;
+      } catch (error) {
+        // Only a request that never went out, or that the app-server refused, provably created nothing.
+        if (asked && !error.rpc) {
+          var lost = PluginError('PLUGIN_UNAVAILABLE', unsure);
+          lost.uncertain = true;
+          throw lost;
+        }
+        error.message = 'Could not start a new Codex session on ' + where + '. ' + error.message + ' Nothing was sent.';
+        throw error;
+      }
+      if (!thread || typeof thread.id !== 'string') throw PluginError('PLUGIN_UNAVAILABLE', unsure);
+      try {
+        await link.request('turn/start', {
+          threadId: thread.id,
+          input: [{ type: 'text', text: text, textElements: [] }],
+          clientUserMessageId: util.uuid(),
+        });
+      } catch (_) {
+        // The session exists now, so a retry would start a second one.
+        throw PluginError('PLUGIN_UNAVAILABLE', 'Started a new Codex session on ' + where +
+          ', but your message may not have arrived. Check it in Codex before sending again; do not automatically retry.');
+      }
+      return { text: 'Started a new Codex session on ' + where + '.', semanticResult: util.messageSent('Codex on ' + computer.name, thread.id, text) };
+    } finally {
+      link.close();
+    }
+  }
+
   async function markPaired(session) {
     session.paired = true;
     await storage.setItem(KEY, JSON.stringify(session));
@@ -374,7 +437,7 @@ function createCodexRemote(storage, fetch, now, WebSocketImpl, auth) {
     await storage.removeItem(KEY);
   }
 
-  return { load: load, enroll: enroll, computers: computers, chats: chats, pair: pair, send: send, disconnect: disconnect };
+  return { load: load, enroll: enroll, computers: computers, chats: chats, pair: pair, send: send, start: start, disconnect: disconnect };
 }
 
-module.exports = { createCodexRemote: createCodexRemote };
+module.exports = { createCodexRemote: createCodexRemote, folderName: folderName };

@@ -47,5 +47,5 @@ Find someone who already shares their location with the user, and reply with a s
 
 Read by Index and agents; `instanceId` values in the functions above come from these.
 
-- `people/location`: name, provider, configured, address, latitude, longitude, accuracyMeters, updatedAt, stale, url
+- `people/location`: name, nickname (the one saved in settings), place (the saved place they are at), provider, configured, address, latitude, longitude, accuracyMeters, updatedAt, stale, url
 

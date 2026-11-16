@@ -1277,13 +1277,24 @@ PERFORMANCE OF THIS SOFTWARE.
         var request = await pageRequest(http, from, to, mode);
         return request ? bestRoute(await get(http, MAPS_ORIGIN + "/maps/" + request)) : null;
       }
+      function topResult(text) {
+        var entity = at(parseMapsJson(text), [0, 1, 0, 14]);
+        var point = at(entity, [9]);
+        if (!Number.isFinite(at(point, [2])) || !Number.isFinite(at(point, [3]))) return null;
+        var name = at(entity, [11]);
+        var address = at(entity, [18]);
+        return {
+          latitude: point[2],
+          longitude: point[3],
+          name: typeof name === "string" ? name : "",
+          address: typeof address === "string" ? address : ""
+        };
+      }
       async function geocode(http, address) {
         var page = await get(http, MAPS_ORIGIN + "/maps/search/" + encodeURIComponent(address) + "?hl=en");
         var request = embeddedRequest(page, /search\?tbm=map&amp;[^"]*/);
         if (!request) return null;
-        var point = at(parseMapsJson(await get(http, MAPS_ORIGIN + "/" + request)), [0, 1, 0, 14, 9]);
-        if (!Number.isFinite(at(point, [2])) || !Number.isFinite(at(point, [3]))) return null;
-        return { latitude: point[2], longitude: point[3] };
+        return topResult(await get(http, MAPS_ORIGIN + "/" + request));
       }
       function straightLineMeters(a, b) {
         var radians = Math.PI / 180;
@@ -1292,7 +1303,7 @@ PERFORMANCE OF THIS SOFTWARE.
         var h = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(a.latitude * radians) * Math.cos(b.latitude * radians) * Math.pow(Math.sin(dLon / 2), 2);
         return 2 * 63710088e-1 * Math.asin(Math.min(1, Math.sqrt(h)));
       }
-      module.exports = { TRAVEL_MODES, route, geocode, straightLineMeters };
+      module.exports = { TRAVEL_MODES, route, geocode, topResult, straightLineMeters };
     }
   });
 
@@ -1375,6 +1386,8 @@ PERFORMANCE OF THIS SOFTWARE.
           address: textReading(person.address || "Location shared without an address"),
           stale: booleanReading(person.isOld)
         };
+        if (person.nickname) properties.nickname = shortText(person.nickname);
+        if (person.place) properties.place = shortText(person.place);
         if (Number.isFinite(person.latitude)) properties.latitude = numberReading(person.latitude);
         if (Number.isFinite(person.longitude)) properties.longitude = numberReading(person.longitude);
         if (Number.isFinite(person.accuracyMeters)) properties.accuracyMeters = numberReading(person.accuracyMeters);
@@ -1393,12 +1406,11 @@ PERFORMANCE OF THIS SOFTWARE.
       function cleanText(value, max) {
         return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
       }
-      function displayName(person, nicknames) {
-        var nickname = cleanText(nicknames[person.id], 40);
-        if (!nickname) return person.name;
-        return /^my\s/i.test(nickname) ? "Your " + nickname.slice(3) : nickname;
+      function coordinate(value, limit) {
+        return Number.isFinite(value) && Math.abs(value) <= limit;
       }
       function placeAt(person, places) {
+        if (!Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) return null;
         var best = null;
         places.forEach(function(place) {
           var meters = maps.straightLineMeters(person, place);
@@ -1406,16 +1418,26 @@ PERFORMANCE OF THIS SOFTWARE.
         });
         return best && best.place;
       }
+      function withSettings(person, settings) {
+        var result = Object.assign({}, person);
+        result.nickname = cleanText(settings.nicknames[person.id], 40);
+        var place = placeAt(person, settings.places);
+        result.place = place ? place.label : null;
+        return result;
+      }
+      function displayName(person) {
+        if (!person.nickname) return person.name;
+        return /^my\s/i.test(person.nickname) ? "Your " + person.nickname.slice(3) : person.nickname;
+      }
       function shortAddress(address) {
         return String(address).split(",").slice(0, 2).join(",").trim();
       }
-      function answerText(person, settings, routes, nowMs) {
-        var name = displayName(person, settings.nicknames);
+      function answerText(person, routes, nowMs) {
+        var name = displayName(person);
         if (!Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) {
           return name + " is sharing, but no current location came back.";
         }
-        var place = placeAt(person, settings.places);
-        var where = place ? place.label : person.address ? shortAddress(person.address) : person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4);
+        var where = person.place || (person.address ? shortAddress(person.address) : person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4));
         var text = name + (person.isOld ? " was last seen at " : " is at ") + where;
         var trips = Object.keys(MODE_NAMES).filter(function(mode) {
           return routes[mode];
@@ -1521,6 +1543,12 @@ PERFORMANCE OF THIS SOFTWARE.
       LocationSharingController.prototype.saveSettings = function(settings) {
         this.storage.set(SETTINGS_KEY, JSON.stringify(settings));
       };
+      LocationSharingController.prototype.lookupPlace = async function(query) {
+        var address = cleanText(query, 200);
+        var point = address && this.http ? await maps.geocode(this.http, address) : null;
+        if (!point) return null;
+        return { name: point.name, address: cleanText(point.address, 200) || address, latitude: point.latitude, longitude: point.longitude };
+      };
       LocationSharingController.prototype.routesTo = async function(person, settings) {
         var chosen = Object.keys(MODE_NAMES).filter(function(mode) {
           return settings.show[mode];
@@ -1609,10 +1637,11 @@ PERFORMANCE OF THIS SOFTWARE.
           respond.error(result.failures[0].code, result.failures[0].message);
           return;
         }
+        var settings = this.settings();
         respond.data({
           validUntilMs: this.now() + 6e4,
           instances: result.people.map(function(person) {
-            return { instanceId: person.id, properties: personProperties(person) };
+            return { instanceId: person.id, properties: personProperties(withSettings(person, settings)) };
           })
         });
       };
@@ -1642,7 +1671,9 @@ PERFORMANCE OF THIS SOFTWARE.
         try {
           var settings = this.settings();
           var result = await this.refreshProviders(providers, query);
-          var matches = matchingPeople(result.people, query, settings.nicknames);
+          var matches = matchingPeople(result.people.map(function(person) {
+            return withSettings(person, settings);
+          }), query, settings.nicknames);
           if (!matches.length) {
             if (!result.people.length && result.failures.length) {
               respond.error(result.failures[0].code, result.failures[0].message);
@@ -1660,7 +1691,7 @@ PERFORMANCE OF THIS SOFTWARE.
           var now = this.now();
           respond.ok({
             text: shown.map(function(person) {
-              return answerText(person, settings, query ? routes : {}, now);
+              return answerText(person, query ? routes : {}, now);
             }).join(" "),
             data: {
               provider: shown.length === 1 ? shown[0].provider : "Location Sharing",
@@ -1729,6 +1760,11 @@ PERFORMANCE OF THIS SOFTWARE.
               this.saveSettings(updated);
               return configReply(this);
             }
+            case "lookupPlace": {
+              var found = await this.lookupPlace(message.address);
+              if (!found) return Object.assign(configReply(this), { ok: false, message: "Google Maps couldn't find that address." });
+              return Object.assign(configReply(this), { place: found });
+            }
             case "addPlace": {
               var label = cleanText(message.label, 40);
               var address = cleanText(message.address, 200);
@@ -1737,9 +1773,9 @@ PERFORMANCE OF THIS SOFTWARE.
               if (!Number.isFinite(radius) || radius < 25 || radius > 5e3) radius = 150;
               var places = this.settings();
               if (places.places.length >= MAX_PLACES) return Object.assign(configReply(this), { ok: false, message: "You can save up to " + MAX_PLACES + " places." });
-              var point = this.http ? await maps.geocode(this.http, address) : null;
+              var point = coordinate(message.latitude, 90) && coordinate(message.longitude, 180) ? { latitude: message.latitude, longitude: message.longitude, address } : await this.lookupPlace(address);
               if (!point) return Object.assign(configReply(this), { ok: false, message: "Google Maps couldn't find that address." });
-              places.places.push({ label, address, latitude: point.latitude, longitude: point.longitude, radiusMeters: radius });
+              places.places.push({ label, address: point.address, latitude: point.latitude, longitude: point.longitude, radiusMeters: radius });
               this.saveSettings(places);
               return configReply(this);
             }
@@ -1769,7 +1805,8 @@ PERFORMANCE OF THIS SOFTWARE.
         matchingPeople,
         personProperties,
         personUrl,
-        withProvider
+        withProvider,
+        withSettings
       };
     }
   });

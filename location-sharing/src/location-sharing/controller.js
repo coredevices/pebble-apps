@@ -74,6 +74,8 @@ function personProperties(person) {
     address: textReading(person.address || "Location shared without an address"),
     stale: booleanReading(person.isOld)
   };
+  if (person.nickname) properties.nickname = shortText(person.nickname);
+  if (person.place) properties.place = shortText(person.place);
   if (Number.isFinite(person.latitude)) properties.latitude = numberReading(person.latitude);
   if (Number.isFinite(person.longitude)) properties.longitude = numberReading(person.longitude);
   if (Number.isFinite(person.accuracyMeters)) properties.accuracyMeters = numberReading(person.accuracyMeters);
@@ -93,13 +95,11 @@ function defaultSettings() {
 function cleanText(value, max) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, max) : "";
 }
-/** "my wife" reads as "Your wife"; anything else is used as typed. */
-function displayName(person, nicknames) {
-  var nickname = cleanText(nicknames[person.id], 40);
-  if (!nickname) return person.name;
-  return /^my\s/i.test(nickname) ? "Your " + nickname.slice(3) : nickname;
+function coordinate(value, limit) {
+  return Number.isFinite(value) && Math.abs(value) <= limit;
 }
 function placeAt(person, places) {
+  if (!Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) return null;
   var best = null;
   places.forEach(function(place) {
     var meters = maps.straightLineMeters(person, place);
@@ -107,18 +107,30 @@ function placeAt(person, places) {
   });
   return best && best.place;
 }
+/** The person with their saved nickname and the named place they are at, for sources, action data and answers. */
+function withSettings(person, settings) {
+  var result = Object.assign({}, person);
+  result.nickname = cleanText(settings.nicknames[person.id], 40);
+  var place = placeAt(person, settings.places);
+  result.place = place ? place.label : null;
+  return result;
+}
+/** "my wife" reads as "Your wife"; anything else is used as typed. */
+function displayName(person) {
+  if (!person.nickname) return person.name;
+  return /^my\s/i.test(person.nickname) ? "Your " + person.nickname.slice(3) : person.nickname;
+}
 function shortAddress(address) {
   return String(address).split(",").slice(0, 2).join(",").trim();
 }
 /** One notification-sized line: where they are, how fresh, and the travel times asked for. */
-function answerText(person, settings, routes, nowMs) {
-  var name = displayName(person, settings.nicknames);
+function answerText(person, routes, nowMs) {
+  var name = displayName(person);
   if (!Number.isFinite(person.latitude) || !Number.isFinite(person.longitude)) {
     return name + " is sharing, but no current location came back.";
   }
-  var place = placeAt(person, settings.places);
-  var where = place ? place.label : person.address ? shortAddress(person.address) :
-    person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4);
+  var where = person.place || (person.address ? shortAddress(person.address) :
+    person.latitude.toFixed(4) + ", " + person.longitude.toFixed(4));
   var text = name + (person.isOld ? " was last seen at " : " is at ") + where;
   var trips = Object.keys(MODE_NAMES).filter(function(mode) { return routes[mode]; });
   if (trips.length) {
@@ -219,6 +231,13 @@ LocationSharingController.prototype.settings = function() {
 LocationSharingController.prototype.saveSettings = function(settings) {
   this.storage.set(SETTINGS_KEY, JSON.stringify(settings));
 };
+/** Google Maps' top result for an address or place name, with the address Maps shows for it. */
+LocationSharingController.prototype.lookupPlace = async function(query) {
+  var address = cleanText(query, 200);
+  var point = address && this.http ? await maps.geocode(this.http, address) : null;
+  if (!point) return null;
+  return { name: point.name, address: cleanText(point.address, 200) || address, latitude: point.latitude, longitude: point.longitude };
+};
 /** Travel times from the phone's current position for the modes turned on in settings. */
 LocationSharingController.prototype.routesTo = async function(person, settings) {
   var chosen = Object.keys(MODE_NAMES).filter(function(mode) { return settings.show[mode]; });
@@ -298,10 +317,11 @@ LocationSharingController.prototype.handleSource = async function(request, respo
     respond.error(result.failures[0].code, result.failures[0].message);
     return;
   }
+  var settings = this.settings();
   respond.data({
     validUntilMs: this.now() + 6e4,
     instances: result.people.map(function(person) {
-      return { instanceId: person.id, properties: personProperties(person) };
+      return { instanceId: person.id, properties: personProperties(withSettings(person, settings)) };
     })
   });
 };
@@ -331,7 +351,7 @@ LocationSharingController.prototype.handleAction = async function(request, respo
   try {
     var settings = this.settings();
     var result = await this.refreshProviders(providers, query);
-    var matches = matchingPeople(result.people, query, settings.nicknames);
+    var matches = matchingPeople(result.people.map(function(person) { return withSettings(person, settings); }), query, settings.nicknames);
     if (!matches.length) {
       if (!result.people.length && result.failures.length) {
         respond.error(result.failures[0].code, result.failures[0].message);
@@ -349,7 +369,7 @@ LocationSharingController.prototype.handleAction = async function(request, respo
     var now = this.now();
     respond.ok({
       text: shown.map(function(person) {
-        return answerText(person, settings, query ? routes : {}, now);
+        return answerText(person, query ? routes : {}, now);
       }).join(" "),
       data: {
         provider: shown.length === 1 ? shown[0].provider : "Location Sharing",
@@ -416,6 +436,11 @@ LocationSharingController.prototype.handleConfig = async function(message) {
         this.saveSettings(updated);
         return configReply(this);
       }
+      case "lookupPlace": {
+        var found = await this.lookupPlace(message.address);
+        if (!found) return Object.assign(configReply(this), { ok: false, message: "Google Maps couldn't find that address." });
+        return Object.assign(configReply(this), { place: found });
+      }
       case "addPlace": {
         var label = cleanText(message.label, 40);
         var address = cleanText(message.address, 200);
@@ -424,9 +449,12 @@ LocationSharingController.prototype.handleConfig = async function(message) {
         if (!Number.isFinite(radius) || radius < 25 || radius > 5000) radius = 150;
         var places = this.settings();
         if (places.places.length >= MAX_PLACES) return Object.assign(configReply(this), { ok: false, message: "You can save up to " + MAX_PLACES + " places." });
-        var point = this.http ? await maps.geocode(this.http, address) : null;
+        // The page sends the coordinates it previewed; without them the address is looked up now.
+        var point = coordinate(message.latitude, 90) && coordinate(message.longitude, 180)
+          ? { latitude: message.latitude, longitude: message.longitude, address: address }
+          : await this.lookupPlace(address);
         if (!point) return Object.assign(configReply(this), { ok: false, message: "Google Maps couldn't find that address." });
-        places.places.push({ label: label, address: address, latitude: point.latitude, longitude: point.longitude, radiusMeters: radius });
+        places.places.push({ label: label, address: point.address, latitude: point.latitude, longitude: point.longitude, radiusMeters: radius });
         this.saveSettings(places);
         return configReply(this);
       }
@@ -456,5 +484,6 @@ module.exports = {
   matchingPeople,
   personProperties,
   personUrl,
-  withProvider
+  withProvider,
+  withSettings
 };

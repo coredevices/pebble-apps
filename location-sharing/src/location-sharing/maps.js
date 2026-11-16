@@ -80,14 +80,26 @@ async function route(http, from, to, mode) {
   return request ? bestRoute(await get(http, MAPS_ORIGIN + '/maps/' + request)) : null;
 }
 
-/** The coordinates of Google Maps' top result for an address, or null. */
+/** Google Maps' top result for a search: { latitude, longitude, name, address }, or null. */
+function topResult(text) {
+  var entity = at(parseMapsJson(text), [0, 1, 0, 14]);
+  var point = at(entity, [9]);
+  if (!Number.isFinite(at(point, [2])) || !Number.isFinite(at(point, [3]))) return null;
+  var name = at(entity, [11]);
+  var address = at(entity, [18]);
+  return {
+    latitude: point[2], longitude: point[3],
+    name: typeof name === 'string' ? name : '',
+    address: typeof address === 'string' ? address : ''
+  };
+}
+
+/** Where Google Maps' top result for an address or place name is, or null. */
 async function geocode(http, address) {
   var page = await get(http, MAPS_ORIGIN + '/maps/search/' + encodeURIComponent(address) + '?hl=en');
   var request = embeddedRequest(page, /search\?tbm=map&amp;[^"]*/);
   if (!request) return null;
-  var point = at(parseMapsJson(await get(http, MAPS_ORIGIN + '/' + request)), [0, 1, 0, 14, 9]);
-  if (!Number.isFinite(at(point, [2])) || !Number.isFinite(at(point, [3]))) return null;
-  return { latitude: point[2], longitude: point[3] };
+  return topResult(await get(http, MAPS_ORIGIN + '/' + request));
 }
 
 function straightLineMeters(a, b) {
@@ -99,4 +111,4 @@ function straightLineMeters(a, b) {
   return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-module.exports = { TRAVEL_MODES: TRAVEL_MODES, route: route, geocode: geocode, straightLineMeters: straightLineMeters };
+module.exports = { TRAVEL_MODES: TRAVEL_MODES, route: route, geocode: geocode, topResult: topResult, straightLineMeters: straightLineMeters };

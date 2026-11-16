@@ -36,6 +36,11 @@
     .row { display: flex; align-items: center; gap: 10px; }
     .row button { width: auto; margin-top: 0; padding: 8px 12px; }
     .hidden { display: none; }
+    .map { position: relative; height: 220px; margin-top: 10px; overflow: hidden; border-radius: 8px;
+      background: rgba(128,128,128,.15); pointer-events: none; }
+    .map img { position: absolute; width: 256px; height: 256px; }
+    .map .circle { position: absolute; box-sizing: border-box; border-radius: 50%;
+      border: 2px solid #0a84ff; background: rgba(10,132,255,.22); }
     #blocked { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: #fdecc8;
       color: #5c3d00; font-size: 14px; line-height: 1.45; }
     #blocked strong { display: block; }
@@ -127,8 +132,12 @@
     <div id="places"></div>
     <label for="placeLabel">Name</label>
     <input id="placeLabel" maxlength="40" placeholder="Home">
-    <label for="placeAddress">Address</label>
-    <input id="placeAddress" maxlength="200" autocomplete="street-address">
+    <label for="placeAddress">Address or place</label>
+    <input id="placeAddress" maxlength="200" autocomplete="street-address" placeholder="SJSU Duncan Hall">
+    <div id="placePreview" class="hidden">
+      <div id="placeFound" class="person-address"></div>
+      <div id="map" class="map"></div>
+    </div>
     <label for="placeRadius">Radius (meters)</label>
     <input id="placeRadius" type="number" inputmode="numeric" min="25" max="5000" value="150">
     <button id="addPlace" class="secondary">Add place</button>
@@ -369,15 +378,76 @@
   }
   $('saveAnswers').onclick = saveAnswers;
   $('saveNicknames').onclick = saveAnswers;
+  // Google Maps' plain tiles, with the radius drawn over them in Web Mercator at a zoom where it
+  // spans about half the map.
+  var EQUATOR_METERS_PER_TILE = 40075016.686 / 256;
+  function drawMap(point, radiusMeters) {
+    var map = $('map');
+    map.textContent = '';
+    var width = map.clientWidth, height = map.clientHeight;
+    var latRad = Math.max(-85, Math.min(85, point.latitude)) * Math.PI / 180;
+    var zoom = Math.max(3, Math.min(18, Math.round(Math.log2(EQUATOR_METERS_PER_TILE * Math.cos(latRad) * width / (4 * radiusMeters)))));
+    var tiles = Math.pow(2, zoom);
+    var metersPerPixel = EQUATOR_METERS_PER_TILE * Math.cos(latRad) / tiles;
+    var x = (point.longitude + 180) / 360 * tiles;
+    var y = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * tiles;
+    for (var ty = Math.max(0, Math.floor(y) - 1); ty <= Math.min(tiles - 1, Math.floor(y) + 1); ty++) {
+      for (var tx = Math.floor(x) - 1; tx <= Math.floor(x) + 1; tx++) {
+        var tile = document.createElement('img');
+        tile.src = 'https://mt1.google.com/vt/lyrs=m&hl=en&x=' + ((tx % tiles) + tiles) % tiles + '&y=' + ty + '&z=' + zoom;
+        tile.style.left = (width / 2 + (tx - x) * 256) + 'px';
+        tile.style.top = (height / 2 + (ty - y) * 256) + 'px';
+        map.appendChild(tile);
+      }
+    }
+    var circle = document.createElement('div');
+    circle.className = 'circle';
+    var diameter = 2 * radiusMeters / metersPerPixel;
+    circle.style.width = circle.style.height = diameter + 'px';
+    circle.style.left = (width - diameter) / 2 + 'px';
+    circle.style.top = (height - diameter) / 2 + 'px';
+    map.appendChild(circle);
+  }
+  var previewed = null;
+  function radiusMeters() { return Math.min(5000, Math.max(25, Number($('placeRadius').value) || 150)); }
+  function showPreview(place) {
+    previewed = place;
+    $('placePreview').className = place ? '' : 'hidden';
+    if (!place) return;
+    $('placeFound').textContent = (place.name ? place.name + ' · ' : '') + place.address;
+    drawMap(place, radiusMeters());
+  }
+  // Not run(): its re-render would drop unsaved nickname and checkbox edits.
+  $('placeAddress').onchange = async function () {
+    var address = $('placeAddress').value.trim();
+    showPreview(null);
+    if (!address) return;
+    busy(true);
+    say('Looking up ' + address + ' on Google Maps…');
+    try {
+      var result = await send({ type: 'lookupPlace', address: address });
+      if ($('placeAddress').value.trim() !== address) return;
+      if (result.ok === false || !result.place) { say(result.message || 'Google Maps couldn\'t find that address.'); return; }
+      showPreview(result.place);
+      say('Found ' + (result.place.name || result.place.address) + '. Check the map, then add it.');
+    } catch (error) {
+      say(error.message || 'The Location Sharing request did not complete.');
+    } finally {
+      busy(false);
+    }
+  };
+  $('placeRadius').oninput = function () { if (previewed) drawMap(previewed, radiusMeters()); };
   $('addPlace').onclick = function () {
     var label = $('placeLabel').value.trim();
-    var address = $('placeAddress').value.trim();
+    var address = previewed ? previewed.address : $('placeAddress').value.trim();
     if (!label || !address) { say('Enter a name and an address for the place.'); return; }
-    run({ type: 'addPlace', label: label, address: address, radiusMeters: Number($('placeRadius').value) },
-      'Looking up ' + address + ' on Google Maps…').then(function (result) {
+    var message = { type: 'addPlace', label: label, address: address, radiusMeters: radiusMeters() };
+    if (previewed) { message.latitude = previewed.latitude; message.longitude = previewed.longitude; }
+    run(message, previewed ? 'Adding ' + label + '…' : 'Looking up ' + address + ' on Google Maps…').then(function (result) {
       if (result && result.ok !== false) {
         $('placeLabel').value = '';
         $('placeAddress').value = '';
+        showPreview(null);
         say('Added ' + label + '.');
       }
     });

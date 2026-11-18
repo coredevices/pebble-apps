@@ -23,6 +23,12 @@
     #blocked { margin: 0 0 16px; padding: 12px 14px; border-radius: 8px; background: #fdecc8;
                color: #5c3d00; font-size: 14px; line-height: 1.45; }
     #blocked strong { display: block; }
+    .room { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+            opacity: .6; margin: 14px 0 4px; }
+    .fav { display: flex; align-items: center; justify-content: space-between; padding: 8px 0;
+           border-bottom: 1px solid rgba(128,128,128,.18); }
+    .fav button { margin: 0; padding: 4px 8px; font-size: 22px; line-height: 1; background: none;
+                  color: #ff6b00; }
   </style>
 </head>
 <body>
@@ -35,6 +41,10 @@
   </div>
 
   <div id="signedIn" class="hidden">
+    <h2>Favorites</h2>
+    <p class="hint">Shown first in the Google Home app on your watch.</p>
+    <div id="favorites">Loading devices…</div>
+
     <h2>Smart-lock PIN</h2>
     <p class="hint">Optional. Unlock uses this PIN only after Google Home returns its pinNeeded challenge.</p>
     <input id="pin" type="password" inputmode="numeric" placeholder="At least 4 digits" autocomplete="off">
@@ -61,6 +71,44 @@
     $('disconnect').classList.toggle('hidden', !signedIn);
   }
 
+  async function loadFavorites() {
+    var box = $('favorites');
+    var result = await send({ type: 'devices' });
+    if (result.error) { box.textContent = result.error; return; }
+    var devices = result.devices.slice().sort(function (a, b) {
+      return a.room.localeCompare(b.room) || a.name.localeCompare(b.name);
+    });
+    box.replaceChildren();
+    if (devices.length === 0) { box.textContent = 'No devices in your home.'; return; }
+    var room = null;
+    devices.forEach(function (device) {
+      if (device.room !== room) {
+        room = device.room;
+        var heading = document.createElement('div');
+        heading.className = 'room';
+        heading.textContent = room;
+        box.appendChild(heading);
+      }
+      var row = document.createElement('div'), name = document.createElement('span'), star = document.createElement('button');
+      row.className = 'fav';
+      name.textContent = device.name;
+      function draw() {
+        star.textContent = device.favorite ? '★' : '☆';
+        star.setAttribute('aria-label', (device.favorite ? 'Remove ' : 'Add ') + device.name + (device.favorite ? ' from' : ' to') + ' favorites');
+        star.setAttribute('aria-pressed', String(device.favorite));
+      }
+      star.onclick = async function () {
+        device.favorite = !device.favorite;
+        draw();
+        var saved = await send({ type: 'setFavorite', id: device.id, favorite: device.favorite });
+        if (saved.error) { device.favorite = !device.favorite; draw(); say(saved.error); }
+      };
+      draw();
+      row.append(name, star);
+      box.appendChild(row);
+    });
+  }
+
   async function refresh() {
     var result = await send({ type: 'status' });
     if (result.error) { say(result.error); return; }
@@ -69,6 +117,7 @@
       ? connectedAs(result.email) + (result.pinConfigured ? ' Lock PIN saved.' : '')
       : 'Not connected.');
     $('pin').value = '';
+    if (result.configured) loadFavorites().catch(function (e) { $('favorites').textContent = e.message || String(e); });
   }
 
   $('googleSignIn').onclick = async function () {
@@ -101,6 +150,7 @@
         return;
       }
       showSignedIn(true);
+      loadFavorites().catch(function () {});
       say(connectedAs(connected.email) + ' ' + connected.homes + ' home(s), ' + connected.devices + ' device(s).');
     } catch (error) {
       say(error && error.message ? error.message : String(error));

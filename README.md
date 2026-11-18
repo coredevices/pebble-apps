@@ -51,7 +51,7 @@ Each plugin has `src/icon.svg`: one 1.6px line on a 24×24 grid, round caps, no 
 | `complication-face` | Complication Face (Plugin Demo) (watchface) |
 | `find-my-phone` | Find My Phone (watchapp) |
 | `google-tasks-keep` | Google Tasks & Keep |
-| `googlehome` | Google Home |
+| `googlehome` | Google Home (watchapp) |
 | `grok-bot` | Grok Bot |
 | `hue` | Hue |
 | `location-sharing` | Location Sharing |

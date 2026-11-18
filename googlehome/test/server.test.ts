@@ -188,3 +188,16 @@ describe('group control', () => {
     expect(rows.filter((r) => !r.ok).map((r) => r.id)).toEqual(['light-3', 'lock']);
   });
 });
+
+describe('id selector', () => {
+  it('targets exactly one device even when names collide', async () => {
+    const a = device('Lamp', ['on_off'], 'a');
+    const b = device('Lamp', ['on_off'], 'b');
+    const { foyer, setOnOff } = fakeFoyer([a, b]);
+
+    await callServerTool(foyer, passcodes, 'turn_off', { id: 'b' });
+
+    expect(setOnOff).toHaveBeenCalledOnce();
+    expect(setOnOff).toHaveBeenCalledWith('b', 'agent', 'partner', false);
+  });
+});

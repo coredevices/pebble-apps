@@ -108,6 +108,11 @@ def build_watchapp(project_dir, pbw):
     if os.path.exists(pbw):
         os.remove(pbw)
     subprocess.run(["pebble", "build"], cwd=project_dir, check=True)
+    # The SDK names the pbw after the directory, which differs from package.json's name in a
+    # `<app>/pbw` project.
+    built = os.path.join(os.path.dirname(pbw), os.path.basename(os.path.abspath(project_dir)) + ".pbw")
+    if not os.path.exists(pbw):
+        os.replace(built, pbw)
     with zipfile.ZipFile(pbw) as z:
         appinfo = json.loads(z.read("appinfo.json"))
         entries = [(info, z.read(info)) for info in z.infolist() if info.filename != "appinfo.json"]

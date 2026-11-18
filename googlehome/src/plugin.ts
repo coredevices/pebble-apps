@@ -36,6 +36,24 @@ const passcodeStore: PasscodeStore = {
   },
 };
 
+// Favorite device ids, shown first on the watch. The watchapp's PKJS shares this localStorage.
+const KEY_FAVORITES = 'favorites';
+
+function favorites(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KEY_FAVORITES) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function setFavorite(id: string, favorite: boolean) {
+  const favs = favorites().filter((f) => f !== id);
+  if (favorite && id !== '') favs.push(id);
+  localStorage.setItem(KEY_FAVORITES, JSON.stringify(favs));
+}
+
 function notBlank(value: string | null | undefined): string | null {
   return value != null && value.trim() !== '' ? value : null;
 }
@@ -131,6 +149,7 @@ async function deviceInstances(foyer: FoyerClient) {
     }
   }
   const byId = new Map(states.map((state) => [state.id, state]));
+  const favs = new Set(favorites());
   return graph.devices.map((device) => {
     const state = byId.get(device.id);
     const properties: Record<string, unknown> = {
@@ -138,6 +157,7 @@ async function deviceInstances(foyer: FoyerClient) {
       room: shortText(device.roomName ?? 'Unassigned'),
       type: shortText(effectiveType(device)),
       capabilities: longText(Array.from(device.capabilities).join(', ')),
+      favorite: booleanReading(favs.has(device.id)),
     };
     if (typeof state?.online === 'boolean') properties.online = booleanReading(state.online);
     if (typeof state?.onOff === 'boolean') properties.on = booleanReading(state.onOff);
@@ -200,7 +220,7 @@ Pebble.registerSourceHandler(async function (request: any, respond: any) {
 
 const ACTIONS = new Set([
   'turn_on', 'turn_off', 'set_brightness', 'set_color_temperature', 'set_volume', 'set_muted',
-  'lock', 'unlock', 'set_thermostat', 'media_control', 'run_automation',
+  'lock', 'unlock', 'set_thermostat', 'media_control', 'run_automation', 'set_favorite',
 ]);
 const DEVICE_ACTIONS = new Set([
   'turn_on', 'turn_off', 'set_brightness', 'set_color_temperature', 'set_volume', 'set_muted',
@@ -208,7 +228,7 @@ const DEVICE_ACTIONS = new Set([
 ]);
 
 function hasSelector(args: Record<string, unknown>): boolean {
-  return ['name', 'room', 'type'].some((key) => typeof args?.[key] === 'string' && (args[key] as string).trim() !== '');
+  return ['id', 'name', 'room', 'type'].some((key) => typeof args?.[key] === 'string' && (args[key] as string).trim() !== '');
 }
 
 function failureList(failures: any[]): string {
@@ -244,8 +264,15 @@ Pebble.registerActionHandler(async function (request: any, respond: any) {
       throw new Error(`Unknown action: ${request.action}`);
     }
     const args = request.args ?? {};
+    if (request.action === 'set_favorite') {
+      const id = notBlank(String(args.id ?? ''));
+      if (id == null) throw new Error('Provide the device id.');
+      setFavorite(id, args.favorite === true);
+      respond.ok({ text: args.favorite === true ? 'Added to favorites.' : 'Removed from favorites.', refreshed: ['home/device'] });
+      return;
+    }
     if (DEVICE_ACTIONS.has(request.action) && !hasSelector(args)) {
-      throw new Error('Provide at least one device selector: name, room, or type.');
+      throw new Error('Provide at least one device selector: id, name, room, or type.');
     }
     const result = await callServerTool(await client(), passcodeStore, request.action, args);
     const outcome = actionResult(request.action, result);
@@ -304,6 +331,26 @@ Pebble.registerConfigHandler(async function (message: any, respond: any) {
         await host.secretSet(KEY_LOCK_PIN, '');
         respond({ pinConfigured: false });
         return;
+      case 'devices': {
+        const graph = await (await client()).getHomeGraph();
+        const favs = new Set(favorites());
+        respond({
+          devices: graph.devices.map((device) => ({
+            id: device.id,
+            name: device.name,
+            room: device.roomName ?? 'Unassigned',
+            favorite: favs.has(device.id),
+          })),
+        });
+        return;
+      }
+      case 'setFavorite': {
+        setFavorite(String(message.id ?? ''), message.favorite === true);
+        // The watchapp re-reads favorites with each home/device update.
+        Pebble.refreshSources(['home/device']);
+        respond({ ok: true });
+        return;
+      }
       case 'testConnection': {
         const graph = await (await client()).getHomeGraph();
         respond({ ok: true, homes: graph.homes.length, devices: graph.devices.length });

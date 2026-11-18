@@ -6,21 +6,42 @@ Reads and controls existing Google Home devices and household automations. It ca
 
 Sign in with Google in plugin settings and choose a home. Build: see the [repository README](../README.md#building).
 
+## Watchapp
+
+The same pbw is a watchapp for emery, flint and gabbro. It lists every device: **Favorites** first, then
+one section per room, each row with an icon, name and state (on/off and brightness, lock state,
+thermostat temperature and mode, Offline).
+
+- **SELECT** opens a device: Power, Brightness, Warmth, Volume, Target temperature and Mode, Lock, and
+  Favorite, as its capabilities allow. Level rows open a full-screen dial: UP/DOWN change it, and it's sent
+  700 ms after the last press, or on SELECT/BACK.
+- **Long SELECT** on a row switches it on or off (or locks it) without opening it.
+- Unlocking is left to the phone; the watch only locks.
+
+The phone side (`pbw/src/pkjs/index.js`) reads this plugin's own `home/device` source and calls its
+actions with the device's `id`, so one row controls exactly one device. Favorites can be set on the watch
+or in the plugin's settings page; the plugin publishes them as the `favorite` property.
+Temperatures follow the phone's unit setting (`preferences/units`). Changes show on the watch at once
+and are put back if Google refuses them. In the SDK emulator, whose phone can't sign in to Google, the
+app shows sample devices.
+
 ## Functions
 
 ### `turn_on(name?, room?, type?)`
 
-Turn on matching on/off devices. Requires at least one selector: name, room, or type.
+Turn on matching on/off devices. Requires at least one selector: id, name, room, or type.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix such as light, outlet, or switch.
 
 ### `turn_off(name?, room?, type?)`
 
-Turn off matching on/off devices. Requires at least one selector: name, room, or type.
+Turn off matching on/off devices. Requires at least one selector: id, name, room, or type.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix such as light, outlet, or switch.
 
@@ -29,6 +50,7 @@ Turn off matching on/off devices. Requires at least one selector: name, room, or
 Set brightness from 0 to 100 percent on every matching dimmable device.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally light.
 - `brightness_pct` (integer)
@@ -38,6 +60,7 @@ Set brightness from 0 to 100 percent on every matching dimmable device.
 Set white color temperature in Kelvin on every matching color-temperature light.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally light.
 - `kelvin` (integer): Color temperature, for example 2700 warm or 6500 cool.
@@ -47,6 +70,7 @@ Set white color temperature in Kelvin on every matching color-temperature light.
 Set volume from 0 to 100 percent on every matching speaker.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally speaker.
 - `volume_pct` (integer)
@@ -56,6 +80,7 @@ Set volume from 0 to 100 percent on every matching speaker.
 Mute or unmute every matching speaker.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally speaker.
 - `muted` (boolean)
@@ -65,6 +90,7 @@ Mute or unmute every matching speaker.
 Lock matching smart locks. Requires at least one selector; locking does not use the saved PIN.
 
 - `name` (string, optional): Lock name, exact preferred; otherwise case-insensitive substring. A trailing lock kind is tolerated.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally lock.
 
@@ -73,6 +99,7 @@ Lock matching smart locks. Requires at least one selector; locking does not use 
 PIN-gated unlock for matching smart locks after an explicit user request. Uses an explicit PIN or the PIN saved in plugin settings.
 
 - `name` (string, optional): Lock name, exact preferred; otherwise case-insensitive substring. A trailing lock kind is tolerated.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally lock.
 - `pin` (string, optional): lock PIN; settings can save it instead.
@@ -82,6 +109,7 @@ PIN-gated unlock for matching smart locks after an explicit user request. Uses a
 Set target temperature and/or mode on every matching thermostat. Supply Celsius or Fahrenheit and/or a mode.
 
 - `name` (string, optional): Thermostat name, exact preferred; otherwise case-insensitive substring. A trailing thermostat kind is tolerated.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally thermostat.
 - `temperature_c` (number, optional): Target setpoint in Celsius.
@@ -93,6 +121,7 @@ Set target temperature and/or mode on every matching thermostat. Supply Celsius 
 Play, pause, or stop media on every matching speaker or player.
 
 - `name` (string, optional): Device name, exact preferred; otherwise case-insensitive substring. A trailing speaker, player, TV, or display kind is tolerated.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally speaker.
 - `command` (string) One of `play`, `pause`, `stop`.
@@ -108,5 +137,5 @@ Run an existing manually-runnable Google Home household automation by name. This
 Read by Index and agents; `instanceId` values in the functions above come from these.
 
 - `home/home`: name, id
-- `home/device`: name, room, type, capabilities, online, on, brightness, color_temperature, volume, muted, locked, thermostat_mode, setpoint, ambient_temperature
+- `home/device`: name, room, type, capabilities, favorite (shown first on the watch), online, on, brightness, color_temperature, volume, muted, locked, thermostat_mode, setpoint, ambient_temperature
 - `home/automation`: name, manually_runnable, starters, actions

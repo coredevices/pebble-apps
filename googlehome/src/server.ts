@@ -39,6 +39,7 @@ export function inputSchema(t: ToolDef): unknown {
 
 function selectorProps(...extra: [string, ToolProperty][]): Record<string, ToolProperty> {
   const props: Record<string, ToolProperty> = {
+    id: { type: 'string', description: 'Exact device id (a home/device instanceId); targets only that device.' },
     name: {
       type: 'string',
       description:
@@ -238,6 +239,8 @@ export interface PasscodeStore {
 // -------------------------------------------------------------------------------------------------
 
 export interface Selector {
+  /** Exact device id (a home/device instanceId); targets that one device and ignores the rest. */
+  id?: string;
   name?: string;
   room?: string;
   type?: string;
@@ -389,6 +392,12 @@ async function resolve(
   sel: Selector,
   requiredCap: codec.Capability,
 ): Promise<codec.Device[]> {
+  const wantId = sel.id?.trim();
+  if (wantId) {
+    const device = (await foyer.getHomeGraph()).devices.find((d) => d.id === wantId);
+    if (device == null) throw new Error(`No devices matched id "${wantId}".`);
+    return [device];
+  }
   if (norm(sel.name) == null && norm(sel.room) == null && norm(sel.type) == null) {
     throw new Error(
       'Provide at least one selector: name, room, and/or type (e.g. type="light" for all lights, ' +
@@ -542,6 +551,7 @@ function thermostatSetpointC(args: Args): number | null {
 }
 function selectorFrom(args: Args): Selector {
   return {
+    id: optString(args, 'id') ?? undefined,
     name: optString(args, 'name') ?? undefined,
     room: optString(args, 'room') ?? undefined,
     type: optString(args, 'type') ?? undefined,

@@ -1,11 +1,46 @@
 {
   "name": "googlehome",
   "author": "Core Devices",
-  "version": "0.1.8",
+  "version": "0.2.2",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
   "pebble": {
     "displayName": "Google Home",
     "uuid": "d93ea4f2-6bb2-4f51-a766-29dbe481c170",
     "sdkVersion": "3",
+    "manifestVersion": 2,
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "CMD",
+      "INDEX",
+      "TOTAL",
+      "KEY",
+      "NAME",
+      "ROOM",
+      "STATUS",
+      "KIND",
+      "FLAGS",
+      "BRIGHT",
+      "CTEMP",
+      "VOLUME",
+      "SETPT",
+      "MODE",
+      "OP",
+      "VALUE"
+    ],
+    "resources": {
+      "media": []
+    },
     "capabilities": [
       "web_sign_in"
     ],
@@ -69,6 +104,10 @@
             ],
             "capabilities": [
               "longText"
+            ],
+            "favorite": [
+              "boolean",
+              "shortText"
             ],
             "online": [
               "boolean",
@@ -142,10 +181,14 @@
       "actions": [
         {
           "name": "turn_on",
-          "description": "Turn on matching on/off devices. Requires at least one selector: name, room, or type.",
+          "description": "Turn on matching on/off devices. Requires at least one selector: id, name, room, or type.",
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -160,6 +203,11 @@
               }
             },
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -180,10 +228,14 @@
         },
         {
           "name": "turn_off",
-          "description": "Turn off matching on/off devices. Requires at least one selector: name, room, or type.",
+          "description": "Turn off matching on/off devices. Requires at least one selector: id, name, room, or type.",
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -198,6 +250,11 @@
               }
             },
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -222,6 +279,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -246,6 +307,11 @@
             "anyOf": [
               {
                 "required": [
+                  "id"
+                ]
+              },
+              {
+                "required": [
                   "name"
                 ]
               },
@@ -268,6 +334,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -289,6 +359,11 @@
               "kelvin"
             ],
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -313,6 +388,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -337,6 +416,11 @@
             "anyOf": [
               {
                 "required": [
+                  "id"
+                ]
+              },
+              {
+                "required": [
                   "name"
                 ]
               },
@@ -359,6 +443,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing device kind is tolerated when it fits the action."
@@ -379,6 +467,11 @@
               "muted"
             ],
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -403,6 +496,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Lock name, exact preferred; otherwise case-insensitive substring. A trailing lock kind is tolerated."
@@ -417,6 +514,11 @@
               }
             },
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -441,6 +543,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Lock name, exact preferred; otherwise case-insensitive substring. A trailing lock kind is tolerated."
@@ -459,6 +565,11 @@
               }
             },
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -483,6 +594,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Thermostat name, exact preferred; otherwise case-insensitive substring. A trailing thermostat kind is tolerated."
@@ -516,6 +631,11 @@
             "anyOf": [
               {
                 "required": [
+                  "id"
+                ]
+              },
+              {
+                "required": [
                   "name"
                 ]
               },
@@ -538,6 +658,10 @@
           "parameters": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
               "name": {
                 "type": "string",
                 "description": "Device name, exact preferred; otherwise case-insensitive substring. A trailing speaker, player, TV, or display kind is tolerated."
@@ -563,6 +687,11 @@
               "command"
             ],
             "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
               {
                 "required": [
                   "name"
@@ -598,10 +727,30 @@
           },
           "destructive": true,
           "requiresConfirmation": false
+        },
+        {
+          "name": "set_favorite",
+          "description": "Add a device to, or remove it from, the favorites shown first in the Google Home watchapp.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId)."
+              },
+              "favorite": {
+                "type": "boolean",
+                "description": "true to add, false to remove."
+              }
+            },
+            "required": [
+              "id",
+              "favorite"
+            ]
+          }
         }
       ]
     },
-    "configPage": "config.html",
-    "projectType": "plugin"
+    "configPage": "config.html"
   }
 }

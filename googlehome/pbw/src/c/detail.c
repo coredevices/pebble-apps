@@ -1,7 +1,8 @@
 // Google Home watchapp: one device. A header with its badge, name and state, then a row per
 // control its capabilities allow, and Favorite. Level rows (brightness, warmth, volume, target
 // temperature) open a level window: UP/DOWN change it, and it is sent 700 ms after the last press
-// (or on SELECT / BACK), so a run of presses is one Google request.
+// (or on SELECT / BACK), so a run of presses is one Google request. On touch watches a drag
+// changes it and a tap sends it. Unlocking takes two presses (or taps) within 3 s.
 #include "googlehome.h"
 
 enum { ROW_POWER, ROW_BRIGHT, ROW_CTEMP, ROW_VOLUME, ROW_SETPT, ROW_MODE, ROW_LOCK, ROW_FAV };
@@ -12,6 +13,9 @@ static bool s_shown;  // between appear and unload
 static int s_index;  // row of the device shown; follows s_key when the list changes
 static int s_key;
 static int s_rows[8], s_row_count;
+// Unlocking takes a second press within 3 s, so a stray press or tap can't open a door.
+static AppTimer *s_unlock_timer;
+static int s_unlock_key;
 static char s_value[8][24];
 
 // --- debounced send ---------------------------------------------------------------------------
@@ -155,6 +159,32 @@ static void level_clicks(void *ctx) {
   window_single_click_subscribe(BUTTON_ID_SELECT, level_done);
 }
 
+#ifdef PBL_TOUCH
+// Touch: drag up/down changes the level (a step per 12 px), a tap sends it and closes, swiping
+// right goes back. The system bridge would turn a drag up into DOWN, so it's off for this window.
+static int s_pan_base;
+static bool s_panning;  // the phone's updates wait until the finger lifts
+
+static void level_pan(const Recognizer *r, RecognizerEvent e) {
+  if (e == RecognizerEvent_Started) s_pan_base = s_level_value;
+  s_panning = e == RecognizerEvent_Started || e == RecognizerEvent_Updated;
+  if (e != RecognizerEvent_Updated && e != RecognizerEvent_Completed) return;
+  int v = s_pan_base - pan_recognizer_get_delta_since_start(r).y / 12 * s_level_step;
+  if (v < s_level_min) v = s_level_min;
+  if (v > s_level_max) v = s_level_max;
+  if (v == s_level_value) return;
+  s_level_value = v;
+  apply_level();
+}
+
+static void level_close_now(void *data) { level_done(NULL, NULL); }
+
+// Popped from a timer: unloading the window frees the recognizer whose callback this is.
+static void level_close(const Recognizer *r, RecognizerEvent e) {
+  if (e == RecognizerEvent_Completed) app_timer_register(0, level_close_now, NULL);
+}
+#endif
+
 static void level_load(Window *w) {
   Layer *root = window_get_root_layer(w);
   window_set_background_color(w, BG_COLOR);
@@ -164,6 +194,9 @@ static void level_load(Window *w) {
 }
 
 static void level_unload(Window *w) {
+#ifdef PBL_TOUCH
+  s_panning = false;  // a pan cut short by the pop gets no Cancelled callback
+#endif
   flush_now();
   list_toast_detach();
   layer_destroy(s_level_layer);
@@ -199,6 +232,13 @@ static void level_push(int op) {
     s_level_window = window_create();
     window_set_click_config_provider(s_level_window, level_clicks);
     window_set_window_handlers(s_level_window, (WindowHandlers) { .load = level_load, .unload = level_unload });
+#ifdef PBL_TOUCH
+    // Attached once, like the window itself: they live on its root layer, which unload keeps.
+    window_set_touch_bridge_disabled(s_level_window, true);
+    window_attach_recognizer(s_level_window, pan_recognizer_create(level_pan, NULL, PanAxis_Vertical));
+    window_attach_recognizer(s_level_window, tap_recognizer_create(level_close, NULL));
+    window_attach_recognizer(s_level_window, swipe_recognizer_create(level_close, NULL, SwipeDirection_Right));
+#endif
   }
   window_stack_push(s_level_window, true);
 }
@@ -254,6 +294,13 @@ static void draw_header(GContext *ctx, const Layer *cell, uint16_t section, void
                      GTextOverflowModeTrailingEllipsis, align, NULL);
 }
 
+static bool unlock_armed(void) { return s_unlock_timer && s_unlock_key == s_key; }
+
+static void unlock_disarm(void *data) {
+  s_unlock_timer = NULL;
+  if (s_shown) menu_layer_reload_data(s_menu);
+}
+
 static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *data) {
   Device *d = dev();
   int row = s_rows[index->row];
@@ -266,7 +313,9 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
     case ROW_VOLUME: title = "Volume"; level_text(v, 24, OP_VOLUME, d->volume); break;
     case ROW_SETPT: title = "Target"; level_text(v, 24, OP_SETPT, d->setpt); break;
     case ROW_MODE: title = "Mode"; strcpy(v, d->mode ? mode_label(d->mode) : "–"); break;
-    case ROW_LOCK: title = d->flags & FLAG_LOCKED ? "Locked" : "Lock now"; strcpy(v, d->flags & FLAG_LOCKED ? "Unlock from phone" : "Unlocked"); break;
+    case ROW_LOCK: title = d->flags & FLAG_LOCKED ? "Locked" : "Lock now";
+      strcpy(v, !(d->flags & FLAG_LOCKED) ? "Unlocked" : unlock_armed() ? "Press again to unlock" : "Press twice to unlock");
+      break;
     case ROW_FAV: title = d->flags & FLAG_FAV ? "Favorite" : "Add to favorites"; strcpy(v, d->flags & FLAG_FAV ? "Remove" : "Show on top"); break;
   }
   menu_cell_basic_draw(ctx, cell, title, v, NULL);
@@ -304,7 +353,20 @@ static void select_click(MenuLayer *m, MenuIndex *index, void *ctx) {
       schedule_send(s_key, OP_MODE, d->mode);
       break;
     case ROW_LOCK:
-      if (d->flags & FLAG_LOCKED) return;
+      if (d->flags & FLAG_LOCKED) {
+        if (unlock_armed()) {
+          app_timer_cancel(s_unlock_timer);
+          s_unlock_timer = NULL;
+          d->flags &= ~FLAG_LOCKED;
+          strncpy(d->status, "Unlocking…", sizeof(d->status));
+          send_action(s_key, OP_LOCK, 0);
+        } else {
+          if (s_unlock_timer) app_timer_cancel(s_unlock_timer);
+          s_unlock_key = s_key;
+          s_unlock_timer = app_timer_register(3000, unlock_disarm, NULL);
+        }
+        break;
+      }
       d->flags |= FLAG_LOCKED;
       strncpy(d->status, "Locking…", sizeof(d->status));
       send_action(s_key, OP_LOCK, 1);
@@ -331,7 +393,11 @@ void detail_reload(void) {
   menu_layer_reload_data(s_menu);
   if (s_level_layer) {
     // The phone's word wins (a refused change, another unit) unless a press is still to be sent.
+#ifdef PBL_TOUCH
+    if (!s_send_timer && !s_panning) level_init(s_level_op);
+#else
     if (!s_send_timer) level_init(s_level_op);
+#endif
     layer_mark_dirty(s_level_layer);
   }
 }
@@ -340,6 +406,8 @@ static void window_appear(Window *window) { s_shown = true; }
 
 static void window_unload(Window *window) {
   s_shown = false;
+  if (s_unlock_timer) app_timer_cancel(s_unlock_timer);
+  s_unlock_timer = NULL;  // leaving the device abandons a half-done unlock
   flush_now();
   list_toast_detach();
 }

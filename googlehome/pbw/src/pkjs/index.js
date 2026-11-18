@@ -309,7 +309,7 @@ function actionFor(d, op, value) {
     case OP.SETPT:
       return { action: 'set_thermostat', args: fahrenheit ? { temperature_f: value / 10 } : { temperature_c: value / 10 } };
     case OP.MODE: return { action: 'set_thermostat', args: { mode: MODES[value] } };
-    case OP.LOCK: return { action: 'lock', args: {} };
+    case OP.LOCK: return { action: value ? 'lock' : 'unlock', args: {} };
   }
   return null;
 }
@@ -321,7 +321,7 @@ function applyLocally(d, op, value) {
   else if (op === OP.VOLUME) d.volume = value;
   else if (op === OP.SETPT) d.setpoint = fahrenheit ? (value / 10 - 32) * 5 / 9 : value / 10;
   else if (op === OP.MODE) d.mode = value;
-  else if (op === OP.LOCK) d.locked = true;
+  else if (op === OP.LOCK) d.locked = !!value;
 }
 
 function indexOfKey(key) {
@@ -361,7 +361,8 @@ function act(key, op, value) {
     .then(function (result) {
       if (result && result.ok) return;
       log(call.action + ' failed: ' + (result && result.code));
-      failed(d, (result && result.message) || 'Failed');
+      var message = (result && result.message) || 'Failed';
+      failed(d, /^No unlock PIN/.test(message) ? 'Save a lock PIN in settings' : message);
     }, function () { failed(d, 'Failed'); });
 }
 

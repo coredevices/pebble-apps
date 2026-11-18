@@ -153,6 +153,11 @@ int main(void) {
   app_message_register_inbox_received(inbox_received);
   app_message_register_outbox_failed(outbox_failed);
   app_message_open(512, 64);
+#ifdef PBL_TOUCH
+  // Third-party apps get no touch until they opt in: lists then scroll by drag, a tap selects a row
+  // (tap it again to open it), swiping right goes back.
+  app_touch_navigation_enable(true);
+#endif
   list_window_push();
   hello_in(300);
   app_event_loop();

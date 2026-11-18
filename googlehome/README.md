@@ -16,7 +16,10 @@ thermostat temperature and mode, Offline).
   Favorite, as its capabilities allow. Level rows open a full-screen dial: UP/DOWN change it, and it's sent
   700 ms after the last press, or on SELECT/BACK.
 - **Long SELECT** on a row switches it on or off (or locks it) without opening it.
-- Unlocking is left to the phone; the watch only locks.
+- On a locked lock, pressing SELECT twice within 3 s on the Locked row unlocks it with the PIN saved on
+  the settings page.
+- On emery and gabbro, touch works too: drag to scroll, tap a row to select it and tap again to open it,
+  swipe right to go back. On a level dial, drag up or down to change it and tap to send it.
 
 The phone side (`pbw/src/pkjs/index.js`) reads this plugin's own `home/device` source and calls its
 actions with the device's `id`, so one row controls exactly one device. Favorites can be set on the watch

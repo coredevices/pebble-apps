@@ -1,7 +1,7 @@
 {
   "name": "chatgpt",
   "author": "Core Devices",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "scripts": {
     "build": "npm --prefix .. run build",

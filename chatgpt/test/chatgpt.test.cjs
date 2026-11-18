@@ -107,7 +107,8 @@ test('a new ChatGPT chat is sent the way the web app sends it, and the receipt q
   assert.equal(result.text, 'Started a new ChatGPT chat (chat_id c-1). ChatGPT replied: Hello there.');
   assert.deepEqual(JSON.parse(result.semanticResult),
     { type: 'MESSAGE_SENT', recipientName: 'ChatGPT', text: 'hello ChatGPT ⌚', contactId: 'c-1' });
-  assert.deepEqual(f.calls.slice(before).map((c) => c.key), [REQUIREMENTS, PREPARE, CONVERSATION]);
+  // Besides these, the chat list may be read (to find the new chat's saved message).
+  assert.deepEqual(f.calls.slice(before).map((c) => c.key).filter((k) => k !== LIST), [REQUIREMENTS, PREPARE, CONVERSATION]);
 
   const sent = f.call(CONVERSATION);
   const headers = sent.init.headers;
@@ -215,6 +216,76 @@ test('a long reply is cut short, and an unfinished stream sends no reply text', 
   assert.equal(text.length, 'Started a new ChatGPT chat (chat_id c-3). ChatGPT replied: '.length + 300);
 });
 
+/** ChatGPT's reply still streaming: CoreApp's fetch only resolves once it has, past the host's 20 s limit (MOB-17384). */
+const STREAMING = () => new Promise(() => {});
+const TRIP = { [LIST]: () => json(200, { items: [{ id: 'c-9', title: 'Trip plans' }] }) };
+/** A chat whose mapping holds the sent user message once [saved()] says so, as ChatGPT kept the client id on November 18, 2026. */
+function chatWith(f, saved) {
+  return () => {
+    const sent = f.call(CONVERSATION);
+    const id = sent && sent.body.messages[0].id;
+    return json(200, { current_node: 'node-7', mapping: saved() && id ? { [id]: { id, message: { id, author: { role: 'user' } }, parent: 'node-7' } } : {} });
+  };
+}
+
+test('a reply still streaming to an existing chat is confirmed by the saved message, not by waiting for the whole reply', async () => {
+  let reads = 0;
+  const f = fixture({ routes: { ...TRIP, [CONVERSATION]: STREAMING } });
+  f.backend[`GET ${API}/conversation/c-9`] = chatWith(f, () => ++reads > 2);
+  await f.signIn();
+  const result = await f.send({ message: 'add Lisbon', chat_id: 'c-9' });
+  assert.equal(result.text, 'Sent to ChatGPT chat "Trip plans".');
+  assert.equal(JSON.parse(result.semanticResult).contactId, 'c-9');
+  assert.equal(f.calls.filter((c) => c.key === CONVERSATION).length, 1);
+});
+
+test('a new chat still streaming is found as the listed chat holding the sent message', async () => {
+  let listed = 0, reads = 0;
+  const f = fixture({ routes: {
+    [CONVERSATION]: STREAMING,
+    [LIST]: () => json(200, { items: ++listed === 1 ? [{ id: 'c-old' }] : [{ id: 'c-other' }, { id: 'c-new' }, { id: 'c-old' }] }),
+    [`GET ${API}/conversation/c-other`]: () => json(200, { current_node: 'x', mapping: {} }),
+  } });
+  f.backend[`GET ${API}/conversation/c-new`] = chatWith(f, () => ++reads > 1);
+  await f.signIn();
+  const result = await f.send({ message: 'hello', chat_id: 'new-chat' });
+  assert.equal(result.text, 'Started a new ChatGPT chat (chat_id c-new).');
+  assert.equal(JSON.parse(result.semanticResult).contactId, 'c-new');
+  assert.ok(!f.calls.some((c) => c.key === `GET ${API}/conversation/c-old`));
+});
+
+test('a stream that ends while a read is stalled decides at once, and reads stay within 30 requests', async () => {
+  let details = 0;
+  const f = fixture({ routes: TRIP });
+  f.backend[`GET ${API}/conversation/c-9`] = () => (++details === 1 ? json(200, { current_node: 'node-7', mapping: {} }) : new Promise(() => {}));
+  await f.signIn();
+  assert.equal((await f.send({ message: 'x', chat_id: 'c-9' })).text, 'Sent to ChatGPT chat "Trip plans". ChatGPT replied: Hello there.');
+
+  // A new chat among five other new ones without the message: the list and detail reads together count.
+  let release;
+  const g = fixture({ routes: {
+    [CONVERSATION]: () => new Promise((resolve) => { release = () => resolve(sse(200, REPLY_STREAM)); }),
+    [LIST]: () => json(200, { items: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id: g.calls.some((c) => c.key === CONVERSATION) ? id : 'old-' + id })) }),
+  } });
+  for (const id of 'abcde') g.backend[`GET ${API}/conversation/${id}`] = () => json(200, { current_node: 'x', mapping: {} });
+  await g.signIn();
+  const sending = g.send({ message: 'x', chat_id: 'new-chat' });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const posted = g.calls.findIndex((c) => c.key === CONVERSATION);
+  assert.equal(g.calls.length - posted - 1, 30);
+  release();
+  assert.equal((await sending).text, 'Started a new ChatGPT chat (chat_id c-1). ChatGPT replied: Hello there.');
+});
+
+test('a refused POST wins over a read that shows the message', async () => {
+  const f = fixture({ routes: { ...TRIP, [CONVERSATION]: () => json(409, {}) } });
+  f.backend[`GET ${API}/conversation/c-9`] = chatWith(f, () => true);
+  await f.signIn();
+  const result = await f.send({ message: 'add Lisbon', chat_id: 'c-9' });
+  assert.equal(result.code, 'PLUGIN_UNAVAILABLE');
+  assert.match(result.message, /HTTP 409/);
+});
+
 test('a near-expiry sign-in renews once and the whole send uses the renewed token', async () => {
   const storage = new Map();
   const f = fixture({ storage });
@@ -227,7 +298,7 @@ test('a near-expiry sign-in renews once and the whole send uses the renewed toke
   const before = f.calls.length;
   assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).ok, true);
   const during = f.calls.slice(before);
-  assert.deepEqual(during.map((c) => c.key), [SESSION, REQUIREMENTS, PREPARE, CONVERSATION]);
+  assert.deepEqual(during.map((c) => c.key).filter((k) => k !== LIST), [SESSION, REQUIREMENTS, PREPARE, CONVERSATION]);
   assert.equal(during[0].init.headers.Cookie, '__Secure-next-auth.session-token=session-2');
   assert.ok(during.slice(1).every((c) => c.init.headers.Authorization === 'Bearer ' + accessToken(NOW / 1000 + 7200)));
   assert.equal(JSON.parse(storage.get('chatgpt.codex.session.v1')).sessionToken, 'session-3');

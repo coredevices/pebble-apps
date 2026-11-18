@@ -6399,6 +6399,8 @@
       var DATA_BUILD = "prod-329d9af90bc80a50b17d4b6f95c261f7c70f5a9b";
       var POW_BUDGET_MS = 5e3;
       var MAX_REPLY = 300;
+      var TURN_WAIT_MS = 1e4;
+      var TURN_READS = 30;
       function needsBrowser() {
         return PluginError("PERMISSION_DENIED", "ChatGPT wants a browser check before taking this message. Send it from the ChatGPT app.");
       }
@@ -6553,15 +6555,43 @@
           }
           return headers;
         }
+        async function recent(session) {
+          var body = await (await call(session, "GET", "/conversations?offset=0&limit=5&order=updated")).json();
+          return (body && body.items || []).map(function(c) {
+            return c && c.id;
+          }).filter(Boolean);
+        }
+        async function savedIn(session, id, messageId, known, more) {
+          if (!id && !more()) return false;
+          var ids = id ? [id] : (await recent(session)).filter(function(c) {
+            return !known[c];
+          });
+          for (var i = 0; i < ids.length; i++) {
+            if (!more()) return false;
+            var detail = await (await call(session, "GET", "/conversation/" + encodeURIComponent(ids[i]))).json();
+            var node = detail && detail.mapping && detail.mapping[messageId];
+            if (node && node.message && node.message.author && node.message.author.role === "user") return ids[i];
+          }
+          return null;
+        }
         async function send(args) {
           checkText(args && args.message);
           var session = await signedIn();
           var id = args.conversation;
           var parent = "client-created-root";
+          var known = /* @__PURE__ */ Object.create(null), watch = true;
           if (id) {
             var detail = await (await call(session, "GET", "/conversation/" + encodeURIComponent(id))).json();
             parent = detail && detail.current_node;
             if (!parent) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT returned an incomplete chat.");
+          } else {
+            try {
+              (await recent(session)).forEach(function(c) {
+                known[c] = true;
+              });
+            } catch (_) {
+              watch = false;
+            }
           }
           var headers = await sentinel(session);
           var turn = {
@@ -6584,16 +6614,46 @@
             content: { content_type: "text", parts: [args.message] },
             metadata: {}
           };
-          var response = await call(session, "POST", "/f/conversation", Object.assign({ messages: [message], client_prepare_state: "success" }, turn), headers);
-          var stream = parseStream(await response.text());
+          function receipt(conversation, reply) {
+            var text = id ? 'Sent to ChatGPT chat "' + String(args.title || id).slice(0, 60) + '".' : "Started a new ChatGPT chat (chat_id " + conversation + ").";
+            if (reply) text += " ChatGPT replied: " + (reply.length > MAX_REPLY ? reply.slice(0, MAX_REPLY - 1) + "…" : reply);
+            return { text, semanticResult: util.messageSent(String(args.title || "ChatGPT"), id || conversation, args.message) };
+          }
+          var posted = call(session, "POST", "/f/conversation", Object.assign({ messages: [message], client_prepare_state: "success" }, turn), headers);
+          var body = posted.then(function(response) {
+            return response.text();
+          }), settled = false, failed = false;
+          posted.catch(function() {
+            failed = true;
+          });
+          body.then(function() {
+            settled = true;
+          }, function() {
+            settled = true;
+          });
+          var reads = 0, until = now() + TURN_WAIT_MS;
+          function more() {
+            return !settled && reads++ < TURN_READS && now() < until;
+          }
+          var ended = body.then(function() {
+            return false;
+          }, function() {
+            return false;
+          });
+          try {
+            while (watch) {
+              var saved = await Promise.race([savedIn(session, id, message.id, known, more), ended]);
+              if (failed || saved === false) break;
+              if (saved) return receipt(saved, "");
+            }
+          } catch (_) {
+          }
+          await posted;
+          var stream = parseStream(await body);
           if (!stream.conversation || stream.error && !stream.reply) {
             throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not confirm the message; check the chat before sending again.");
           }
-          var text = id ? 'Sent to ChatGPT chat "' + String(args.title || id).slice(0, 60) + '".' : "Started a new ChatGPT chat (chat_id " + stream.conversation + ").";
-          if (stream.done && stream.reply) {
-            text += " ChatGPT replied: " + (stream.reply.length > MAX_REPLY ? stream.reply.slice(0, MAX_REPLY - 1) + "…" : stream.reply);
-          }
-          return { text, semanticResult: util.messageSent(String(args.title || "ChatGPT"), id || stream.conversation, args.message) };
+          return receipt(stream.conversation, stream.done && stream.reply);
         }
         return { list, send };
       }

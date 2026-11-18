@@ -2,7 +2,7 @@
 
 Index plugin that sends messages to your ChatGPT Dot, to ChatGPT chats, to Codex sessions running on
 your computers, and to Codex Cloud tasks. Every action is send-only: it returns a receipt, not the
-reply (a ChatGPT chat's receipt quotes the start of the reply when it finished in time).
+reply (a ChatGPT chat's receipt quotes the start of the reply in the rare case it finished first).
 
 `plugin.js` is generated: the source is in [`..`](..)
 (`npm ci && npm run build && npm test` there).
@@ -38,7 +38,16 @@ Standard chatgpt.com conversations (`chatgpt-chats.js`) use the shared sign-in a
 proof), the sentinel's proof of work (sha3-512 of seed + base64 browser config, at most 5 s so the
 reply fits the host's 20 s action limit), `POST /backend-api/f/conversation/prepare` for the conduit
 token, then `POST /backend-api/f/conversation`, whose event stream (v1 deltas) the host fetch
-returns whole. Continuing a chat first reads its `current_node`. A turnstile flag is sent through
+returns only whole, once the reply has finished, which a long reply makes outlast the 20 s limit.
+So while it streams, the chat is read back to back (up to 30 reads or 10 s) until it holds the sent
+user message, matched by the client's message id, which ChatGPT keeps. A new chat's id only arrives
+in the stream, so its chat is found as one in `GET /backend-api/conversations` that wasn't listed
+just before the send. A refused POST still wins over a matching read, a failed read stops reading,
+and with no match in time the send waits for the stream as before. Verified November 18, 2026 in
+signed-in Chrome: the message was saved (client id kept) and the new chat listed ~2.3 s after the
+POST; with the stream aborted, ChatGPT kept generating and the web app resumed it
+(`/f/conversation/resume`). A reply finishing with no client attached at all was not checked.
+Continuing a chat first reads its `current_node`. A turnstile flag is sent through
 without a token, which ChatGPT usually accepts; when it asks for an Arkose check, or the proof of
 work runs out of time, the send is refused, as only a browser can pass those. Recent chats come from `GET /backend-api/conversations` and join the Codex
 chats in one list, with nicknames and the default chat.

@@ -1,3 +1,7 @@
+## 0.5.1
+
+- Long requests to a ChatGPT chat no longer time out with "plugin did not respond" while ChatGPT writes its reply: a message counts as sent once ChatGPT has saved it, new chats included, without waiting for the whole reply. So the receipt now rarely quotes the reply. If ChatGPT hasn't saved it within about 10 seconds, it waits for the reply as before.
+
 ## 0.5.0
 
 - Start a new Codex session on one of your computers: pick a computer and project folder next to "… start a new task …" in settings, then say "start a new task …". A new Codex Cloud task in a chosen environment works the same way.

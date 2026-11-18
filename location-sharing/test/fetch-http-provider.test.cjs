@@ -39,6 +39,16 @@ test('maps the request onto fetch and normalizes the response', async () => {
   assert.equal(timer.timers.size, 0);
 });
 
+test('asks for an uncompressed body unless the caller chose an encoding', async () => {
+  let init;
+  const provider = new FetchHttpProvider((_, value) => { init = value; return response(200, {}, []); }, fakeTimer());
+  await provider.request(request());
+  assert.equal(init.headers['Accept-Encoding'], 'identity');
+  await provider.request(request({ headers: [['accept-encoding', 'gzip']] }));
+  assert.equal(init.headers['accept-encoding'], 'gzip');
+  assert.equal(init.headers['Accept-Encoding'], undefined);
+});
+
 test('empty bodies are omitted', async () => {
   let init;
   await new FetchHttpProvider((_, value) => { init = value; return response(200, {}, []); }, fakeTimer())

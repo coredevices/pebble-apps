@@ -56,6 +56,11 @@ FetchHttpProvider.prototype.request = function (request) {
   request.headers.forEach(function (header) {
     headers[header[0]] = header[0] in headers ? headers[header[0]] + ', ' + header[1] : header[1];
   });
+  // The host hands back the body as received, so a compressed body would reach callers as
+  // gzip/brotli bytes. Same default as TlsRoutingHttpProvider.
+  if (!request.headers.some(function (header) { return header[0].toLowerCase() === 'accept-encoding'; })) {
+    headers['Accept-Encoding'] = 'identity';
+  }
   var fetchFunction = this.fetchFunction;
   var timer = this.timer;
   return new Promise(function (resolve, reject) {

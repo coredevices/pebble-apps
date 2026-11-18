@@ -407,6 +407,122 @@ PERFORMANCE OF THIS SOFTWARE.
     }
   });
 
+  // pbw/package.json
+  var require_package = __commonJS({
+    "pbw/package.json"(exports, module) {
+      module.exports = {
+        name: "location-sharing",
+        author: "Core Devices",
+        version: "0.14.1",
+        pebble: {
+          displayName: "Location Sharing",
+          uuid: "3dab147e-32f5-4e48-b980-5a0de672e085",
+          sdkVersion: "3",
+          capabilities: [
+            "web_sign_in"
+          ],
+          usesPermissions: [
+            {
+              name: "Location",
+              reason: "To show travel times from where you are to each person",
+              required: false
+            },
+            {
+              name: "Internet",
+              parameters: {
+                domains: [
+                  "google.com"
+                ]
+              },
+              reason: "To get the locations people share with you in Google Maps",
+              required: true
+            }
+          ],
+          plugin: {
+            description: "Reads the latest locations of people who already share their location with you through Google Maps.",
+            script: "plugin.js",
+            sources: [
+              {
+                category: "people",
+                items: [
+                  "location"
+                ],
+                properties: {
+                  name: [
+                    "shortText"
+                  ],
+                  nickname: [
+                    "shortText"
+                  ],
+                  place: [
+                    "shortText"
+                  ],
+                  provider: [
+                    "shortText"
+                  ],
+                  configured: [
+                    "boolean",
+                    "shortText"
+                  ],
+                  address: [
+                    "shortText",
+                    "longText"
+                  ],
+                  latitude: [
+                    "numericValue"
+                  ],
+                  longitude: [
+                    "numericValue"
+                  ],
+                  accuracyMeters: [
+                    "numericValue"
+                  ],
+                  updatedAt: [
+                    "timestamp"
+                  ],
+                  stale: [
+                    "boolean",
+                    "shortText"
+                  ],
+                  url: [
+                    "longText"
+                  ]
+                },
+                supportsMultiple: true,
+                suggestedRefreshIntervalSec: 60
+              }
+            ],
+            actions: [
+              {
+                name: "find_person",
+                displayName: "Find a person",
+                description: 'Find someone who already shares their location with the user, and reply with a short answer ready to show as a notification. Give the user the returned text as it is: it already has where they are, travel time when the user turned that on, and how fresh the location is. person can be a name or a nickname the user saved, such as "my wife". Leave person blank to list everyone sharing.',
+                parameters: {
+                  type: "object",
+                  properties: {
+                    person: {
+                      type: "string",
+                      description: 'The name or saved nickname (e.g. "my wife") of the person to find.'
+                    }
+                  },
+                  additionalProperties: false
+                },
+                targets: [
+                  "people/location"
+                ],
+                destructive: false,
+                requiresConfirmation: false,
+                callerPermissions: []
+              }
+            ]
+          },
+          configPage: "config.html",
+          projectType: "plugin"
+        }
+      };
+    }
+  });
+
   // src/google/client.js
   var require_client = __commonJS({
     "src/google/client.js"(exports, module) {
@@ -434,7 +550,7 @@ PERFORMANCE OF THIS SOFTWARE.
       var STORE_COOKIES = "location-sharing-google-cookies";
       var STORE_CACHE = "location-sharing-google-people-v1";
       var STORE_DIAGNOSTICS = "location-sharing-google-diagnostics-v1";
-      var PLUGIN_VERSION = "0.13.1";
+      var PLUGIN_VERSION = require_package().version;
       var MAX_DIAGNOSTIC_EVENTS = 40;
       var MAPS_RPC_ID = "Qt4aBe";
       var MAPS_RPC_METHOD = "/MapsLocationSharingService.GetState";
@@ -1490,7 +1606,7 @@ PERFORMANCE OF THIS SOFTWARE.
         });
         return Object.assign({
           ok: true,
-          pluginVersion: "0.13.1",
+          pluginVersion: require_package().version,
           settings: controller.settings(),
           apple: status.apple,
           google: status.google,
@@ -2168,6 +2284,11 @@ PERFORMANCE OF THIS SOFTWARE.
         request.headers.forEach(function(header) {
           headers[header[0]] = header[0] in headers ? headers[header[0]] + ", " + header[1] : header[1];
         });
+        if (!request.headers.some(function(header) {
+          return header[0].toLowerCase() === "accept-encoding";
+        })) {
+          headers["Accept-Encoding"] = "identity";
+        }
         var fetchFunction = this.fetchFunction;
         var timer = this.timer;
         return new Promise(function(resolve, reject) {

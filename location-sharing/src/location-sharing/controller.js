@@ -180,7 +180,7 @@ function configReply(controller, result) {
   });
   return Object.assign({
     ok: true,
-    pluginVersion: "0.13.1",
+    pluginVersion: require("../../pbw/package.json").version,
     settings: controller.settings(),
     apple: status.apple,
     google: status.google,

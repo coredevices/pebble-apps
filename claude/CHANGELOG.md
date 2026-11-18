@@ -1,3 +1,7 @@
+## 0.5.1
+
+- Long requests to a Claude chat no longer time out with "plugin did not respond" while Claude writes its reply: a message counts as sent once Claude has saved it, without waiting for the whole reply. If Claude hasn't saved it within about 12 seconds, it waits for the reply as before.
+
 ## 0.5.0
 
 - Start a new Claude Code session on a chosen computer or environment: pick it next to "… start a new task …" in settings, then say "start a new task …".

@@ -134,6 +134,29 @@ test('overlapping sends issue only one POST',async()=>{
   const first=sendCode(f);await ready;assert.equal((await sendCode(f)).code,'INVALID_ARGS');release();assert.equal((await first).ok,true);assert.equal(posts(f).length,1);
 });
 
+test('a reply still streaming is confirmed by the saved turn, not by waiting for the whole reply',async()=>{
+  // CoreApp's fetch only resolves once the reply has streamed; a long turn outlasts the host's 20 s limit (MOB-17384).
+  const f=fixture();await f.connect();let reads=0;
+  f.routes['POST '+POST]=()=>new Promise(()=>{});
+  // As claude.ai saved one on November 18, 2026: a server uuid, empty text, the prompt in content.
+  const SAVED='01a1ecce-ffc0-7c9e-b357-5d36760b6282',said=t=>[{type:'text',text:t,citations:[]}];
+  f.routes['GET '+DETAIL]=()=>++reads<3?json(chat()):json({...chat(),chat_messages:[...chat().chat_messages,
+    {uuid:HUMAN.replace('4444','7777'),sender:'human',text:'',content:said('hello 世界 ⌚'),parent_message_uuid:HUMAN},
+    {uuid:OTHER.replace('2222','6666'),sender:'human',text:'',content:said('something else'),parent_message_uuid:LEAF},
+    {uuid:SAVED,sender:'human',text:'',content:said('hello 世界 ⌚'),parent_message_uuid:LEAF}]});
+  const r=await sendChat(f);assert.equal(r.ok,true);assert.equal(r.message_id,SAVED);assert.equal(posts(f).length,1);
+});
+test('a refused POST and a turn that predates the send never count as the saved turn',async()=>{
+  const said=t=>[{type:'text',text:t}],OLD='01a1ecce-ffc0-7c9e-b357-5d36760b6282';
+  // Rejected while a read shows a matching turn: the rejection wins.
+  const f=fixture({['POST '+POST]:()=>json({},409)});await f.connect();let reads=0;
+  f.routes['GET '+DETAIL]=()=>++reads<2?json(chat()):json({...chat(),chat_messages:[...chat().chat_messages,{uuid:OLD,sender:'human',text:'',content:said('hello 世界 ⌚'),parent_message_uuid:LEAF}]});
+  assert.match((await sendChat(f)).message,/conflict/i);
+  // The same turn already there before sending (an older branch) is not this send's: uncertain, one POST.
+  const g=fixture({['POST '+POST]:()=>({status:200,text:async()=>'data: {}\n\n'})});await g.connect();
+  g.routes['GET '+DETAIL]=()=>json({...chat(),chat_messages:[...chat().chat_messages,{uuid:OLD,sender:'human',text:'',content:said('hello 世界 ⌚'),parent_message_uuid:LEAF}]});
+  const r=await sendChat(g);assert.match(r.message,/uncertain/);assert.equal(posts(g).length,1);
+});
 test('current Claude server-assigned UUIDs confirm a completed response stream',async()=>{
   const f=fixture({['POST '+POST]:()=>({status:200,text:async()=>
     'data: '+JSON.stringify({type:'message_start',message:{role:'assistant',uuid:OTHER,parent_uuid:HUMAN}})+'\n\ndata: {"type":"message_stop"}\n\n'})});
@@ -255,7 +278,8 @@ test('with no chat named a message starts a new conversation under the root mess
   const completion=JSON.parse(posts(f)[1].init.body);
   assert.equal(posts(f)[1].key,'POST '+BASE+'/chat_conversations/'+created.uuid+'/completion');
   assert.equal(completion.parent_message_uuid,ROOT);assert.equal(completion.prompt,'hello 世界 ⌚');
-  assert.deepEqual(f.calls.map(c=>c.key.split(' ')[0]),['POST','POST']);
+  // Besides the two POSTs, only the new chat itself may be read (for the saved turn).
+  assert.deepEqual(f.calls.filter(c=>!c.key.startsWith('GET '+BASE+'/chat_conversations/'+created.uuid+'?')).map(c=>c.key.split(' ')[0]),['POST','POST']);
 });
 test('a null chat_id means no chat was named',async()=>{
   const f=fixture();await f.connect();newChatRoutes(f);
@@ -324,7 +348,7 @@ test('chat_id "new" always starts a new Claude chat, whatever the kind and mode'
     f.calls.length=0;const r=await f.action('send_to_agent',{chat_id,message:'hello'});
     assert.match(r.text,/new chat/);assert.ok(r.session_id.startsWith('chat:'));
     assert.deepEqual(JSON.parse(r.semanticResult),{type:'MESSAGE_SENT',recipientName:'Claude',text:'hello ⌚',contactId:r.session_id});assert.ok(f.calls.some(c=>c.key===CREATE));
-    assert.ok(!f.calls.some(c=>c.key.startsWith('GET')));
+    assert.ok(!f.calls.some(c=>c.key.startsWith('GET')&&!c.key.startsWith('GET '+BASE+'/chat_conversations/'+r.session_id.slice(5)+'?')));
   }
   await f.config({type:'kind',kind:'claude'});
   assert.match((await f.action('send_to_agent',{chat_id:'new',message:'hello'})).text,/new chat/);

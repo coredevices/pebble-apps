@@ -106,8 +106,10 @@ Claude Code only when the plugin was already sending to a default Code session.
 - Chat detail: `/api/organizations/{org}/chat_conversations/{id}?tree=True&rendering_mode=messages&render_all_tools=true`.
 - Chat send: POST `…/{id}/completion`, with the current leaf and fresh human/assistant UUIDs. A
   completed SSE response supplies the actual human message ID (Claude may replace the requested
-  UUIDs). A subsequent read can also verify the requested human UUID. A bare HTTP 200 is
-  insufficient.
+  UUIDs). While the reply streams, the chat is read back to back (up to 40 reads or 12 s) for the
+  saved human turn: a human message not there before the send, with the requested UUID or with the
+  prompt's text under the leaf it was sent under. A failed POST still wins over a matching read, and a
+  failed read stops reading. A bare HTTP 200 is insufficient.
 - Environments: `GET /v1/environment_providers/private/organizations/{org}/environments?limit=1000`
   (`state: "active"` only). New session: `POST /v1/code/sessions`
   `{environment_id, config:{sources:[],outcomes:[]}, events:[]}` returns `{session:{id:"cse_…"}}`; the
@@ -122,8 +124,12 @@ Claude Code only when the plugin was already sending to a default Code session.
 - These APIs are unofficial and can change. Authentication, Cloudflare challenges, organization
   policy, and rate limits are reported separately. No challenge bypass or third-party credential
   relay is implemented.
-- CoreApp's fetch buffers the entire response and has no streaming body. Web chat completions can
-  outlast the host action timeout. A timeout or disconnected send must be treated as **uncertain
+- CoreApp's fetch buffers the entire response and has no streaming body, so a web chat completion
+  only resolves once Claude's whole reply has streamed, which can outlast the host's 20 s action
+  limit. Sends therefore return once the turn is saved, and the session teardown drops the stream.
+  Verified November 18, 2026 in signed-in Chrome: with the stream aborted 2.2 s after the POST, the
+  human turn was saved (~2.4 s, server uuid, prompt in `content`) and the reply still finished
+  (`end_turn`, ~27 s). A timeout or disconnected send must be treated as **uncertain
   delivery**: check the chat before sending again. The action description prohibits automatic
   retries. Code's event POST returns a separate acknowledgment without waiting for generation.
 - Empty chats without a verifiable current leaf and chats with an unfinished human turn are

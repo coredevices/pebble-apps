@@ -15,6 +15,9 @@ var NEW_CHAT = ['new', 'new chat'];
 // chat_id values that always start a new Claude Code session on the environment chosen in settings.
 var NEW_TASK = ['new task', 'new code', 'new session', 'new code session'];
 var ENV_ID = /^env_[A-Za-z0-9_-]{1,120}$/;
+// Reads for a just-posted chat turn while its reply streams. Claude saved one ~2.4 s after the POST
+// (November 18, 2026); plugins have no timers, so back-to-back reads are bounded by time and count.
+var TURN_WAIT_MS = 12000, TURN_READS = 40;
 // "start a new chat/task <prompt>" spoken as the message itself, when the host didn't pick a chat_id.
 var START_NEW = /^\s*(?:please\s+)?start\s+(?:a\s+)?new\s+(?:claude\s+code\s+|code\s+)?(chat|task|session)\b[\s:,.-]*/i;
 function parseStartNew(message) {
@@ -417,6 +420,20 @@ function createService(storage, fetch, now) {
     if (!data || data.uuid !== id) throw PluginError('PLUGIN_UNAVAILABLE', 'Could not start a new Claude chat. Nothing was sent.');
     return data;
   }
+  // The id of the human turn posted under [parent] once Claude has saved it, else null. Turns in
+  // [known] predate the send; a failed read throws.
+  async function savedTurn(state, chatId, parent, id, text, known) {
+    var after = await detail(state, sessionRef('chat:' + chatId));
+    var turns = (Array.isArray(after.chat_messages) ? after.chat_messages : []).filter(function (m) {
+      return m && m.sender === 'human' && UUID.test(m.uuid) && !known[m.uuid];
+    });
+    // Claude replaces the requested uuid and keeps the prompt in content, not text.
+    var turn = turns.filter(function (m) { return m.uuid === id; })[0] || turns.filter(function (m) {
+      var said = m.text || (Array.isArray(m.content) ? m.content.map(function (c) { return c && c.type === 'text' ? c.text : ''; }).join('') : '');
+      return m.parent_message_uuid === parent && said === text;
+    })[0];
+    return turn ? turn.uuid : null;
+  }
   // Posts one human turn under [parent] and returns the delivered message id, or throws uncertain().
   async function completeChat(state, chatId, data, parent, text) {
     var id = requestId(), assistantId = requestId();
@@ -424,18 +441,32 @@ function createService(storage, fetch, now) {
       turn_message_uuids: { human_message_uuid: id, assistant_message_uuid: assistantId },
       timezone: 'UTC', locale: 'en-US', attachments: [], files: [], sync_sources: [], rendering_mode: 'messages' };
     if (typeof data.model === 'string' && data.model) body.model = data.model;
-    var response = await call(state, 'POST', orgPath(state) + '/chat_conversations/' + chatId + '/completion', body);
+    var known = Object.create(null);
+    (Array.isArray(data.chat_messages) ? data.chat_messages : []).forEach(function (m) { if (m) known[m.uuid] = true; });
+    // CoreApp's fetch resolves only after Claude's whole reply has streamed, which a long turn makes
+    // outlast the host's 20 s action limit, so the chat is read for the saved turn meanwhile.
+    var posted = call(state, 'POST', orgPath(state) + '/chat_conversations/' + chatId + '/completion', body);
+    var reply = posted.then(function (response) { return response.text(); }), settled = false, failed = false;
+    posted.catch(function () { failed = true; });
+    reply.then(function () { settled = true; }, function () { settled = true; });
+    try {
+      // ponytail: back-to-back reads (~3/s on a phone) since plugins have no timers; space them if the host adds one.
+      for (var reads = 0, until = now() + TURN_WAIT_MS; reads < TURN_READS && !settled && now() < until; reads++) {
+        var saved = await savedTurn(state, chatId, parent, id, text, known);
+        if (failed) break; // A refused POST is reported as before, whatever a read showed.
+        if (saved) return saved;
+      }
+    } catch (_) { /* A failed read (a rate limit included) stops reading; the reply decides. */ }
+    await posted;
     var accepted = false;
     try {
-      var serverId = completionReceipt(await response.text(), assistantId, id);
+      var serverId = completionReceipt(await reply, assistantId, id);
       if (serverId) { id = serverId; accepted = true; }
     } catch (_) { /* Verify persisted human message below. */ }
     if (!accepted) {
       try {
-        var after = await detail(state, sessionRef('chat:' + chatId));
-        accepted = Array.isArray(after.chat_messages) && after.chat_messages.some(function (m) {
-          return m.uuid === id && m.sender === 'human';
-        });
+        var persisted = await savedTurn(state, chatId, parent, id, text, known);
+        if (persisted) { id = persisted; accepted = true; }
       } catch (_) { /* A failed read cannot establish delivery. */ }
     }
     if (!accepted) throw uncertain();

@@ -45,7 +45,10 @@ function fakeGrokBot(options = {}) {
     }
     assert.ok(url.startsWith(BOX + "/api/"), url);
     assert.equal(init.headers.authorization, "Bearer box-token");
-    assert.equal(init.headers["x-anyrun-network-token"], "net");
+    if (options.portToken) {
+      assert.equal(init.headers["x-anyrun-port-token"], options.portToken);
+      assert.equal(init.headers["x-anyrun-network-token"], undefined);
+    } else assert.equal(init.headers["x-anyrun-network-token"], "net");
     const method = url.slice(BOX.length + 5);
     if (options.fail && options.fail(method)) return json(options.failStatus || 502, {});
     switch (method) {
@@ -64,6 +67,16 @@ async function connected(grok) {
   await createService(storage, grok.fetch).config({ type: "connect", accessToken: "cursor-token" });
   return createService(storage, grok.fetch);
 }
+
+test("reaches a box that has a port token and no network token (MOB-17409)", async () => {
+  const grok = fakeGrokBot({
+    portToken: "port",
+    ensure: { gatewayUrl: BOX, gatewayToken: "box-token", networkToken: "", gatewayPortToken: "port" },
+  });
+  const settings = await createService(memoryStorage(), grok.fetch).config({ type: "connect", accessToken: "cursor-token" });
+  assert.equal(settings.selected, "a1");
+  assert.ok(grok.calls.some((c) => c.url === BOX + "/api/listAgents"));
+});
 
 test("connects, picks the first bot, sends and returns a receipt; replies are read separately", async () => {
   const grok = fakeGrokBot();
@@ -553,4 +566,23 @@ test("a failed request logs Cursor's reason with hosts, URLs and tokens redacted
   const line = logged.find((l) => l.includes("HTTP 409"));
   assert.ok(line && line.includes("failed_precondition") && line.includes("Update the app"), line);
   assert.ok(!/cursorvm|eyJ|https?:/.test(line), line);
+});
+
+test("a box 404 logs its plain body and which box fields and headers were used, no secrets", async () => {
+  const logged = [];
+  const realError = console.error;
+  console.error = (line) => logged.push(String(line));
+  try {
+    const grok = fakeGrokBot();
+    const fetch = async (url, init) => url.endsWith("/api/listAgents")
+      ? { ok: false, status: 404, text: async () => "404 page not found for ab-1.cursorvm.com\n" + ". ".repeat(40) + "privatebox.us12.cursorvm.com abcdefghijklmnopqrstuvwx0123456789" }
+      : grok.fetch(url, init);
+    await createService(memoryStorage(), fetch).config({ type: "connect", accessToken: "cursor-token" }).catch(() => {});
+  } finally {
+    console.error = realError;
+  }
+  const all = logged.join("\n");
+  assert.ok(all.includes("HTTP 404 (404 page not found for <host> . . ") && all.includes("<host> <redacted>)"), all);
+  assert.ok(all.includes("EnsureSandBox fields gatewayUrl,gatewayToken,anyrunNetworkToken; sent x-anyrun-network-token"), all);
+  assert.ok(!/cursorvm|privatebox|abcdefghij|box-token|"net"/.test(all), all);
 });

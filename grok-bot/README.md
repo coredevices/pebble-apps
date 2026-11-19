@@ -52,7 +52,8 @@ This uses no desktop app and no bridge. It is the same private API the Grok Bot 
 2. Each action calls `POST api2.cursor.sh/aiserver.v1.GrokBotService/EnsureSandBox` with that
    token and the Grok Bot desktop app's client headers (`x-cursor-client-version` 1.0.1, its user
    agent, the selected team). Cursor answers 401 to the old 0.20.0 version (MOB-17023). The reply gives the user's box (`https://…cursorvm.com`), a gateway token and
-   network headers.
+   either a network token (sent as `x-anyrun-network-token`) or a port token (sent as
+   `x-anyrun-port-token`, MOB-17409).
 3. The action then calls `POST {box}/api/<method>`:
    - `listAgents` for bots and groups.
    - `getAgentTranscriptTail {id, limit}` to read. Bot replies are

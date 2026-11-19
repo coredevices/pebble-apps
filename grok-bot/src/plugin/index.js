@@ -200,6 +200,15 @@ function createService(storage, fetch, cache) {
     } catch (e) {}
   }
 
+  // No URLs, host names or token-like strings, so the private box host and tokens never reach logs.
+  function redact(text) {
+    return String(text || "").replace(/https?:\/\/\S+/gi, "<url>")
+      .replace(/\b[\w-]+(\.[\w-]+)+\b/g, "<host>")
+      .replace(/[A-Za-z0-9_+/=-]{24,}/g, "<redacted>")
+      .replace(/\s+/g, " ").trim()
+      .slice(0, 200);
+  }
+
   async function post(url, headers, body, deadline) {
     var text, response;
     var path = url.replace(/^https:\/\/[^/]+/, "");
@@ -209,22 +218,21 @@ function createService(storage, fetch, cache) {
         text = await response.text();
       })());
     } catch (e) {
-      // The error type only: exception text can carry the private box host.
-      console.error("Grok Bot POST " + path + " failed: " + ((e && (e.code || e.name)) || "error"));
+      var what = (e && (e.code || e.name)) || "error";
+      var detail = redact(e && e.message);
+      console.error("Grok Bot POST " + path + " failed: " + what + (detail ? " (" + detail + ")" : ""));
       throw e;
     }
     if (!response.ok) {
       // Connect's error code and message say why (e.g. an outdated client). Redacted before logging:
-      // no URLs, host names or token-like strings, and nothing from a body that isn't Connect JSON.
-      var reason = "";
+      // no URLs, host names or token-like strings. A body that isn't Connect JSON (e.g. the box's
+      // edge proxy) is redacted the same way, whole, before it is cut short.
+      var reason = String(text || "");
       try {
         var err = JSON.parse(text);
-        reason = [err.code, err.message].filter(function (x) { return typeof x === "string"; }).join(": ")
-          .replace(/https?:\/\/\S+/gi, "<url>")
-          .replace(/\b[\w-]+(\.[\w-]+)+\b/g, "<host>")
-          .replace(/[A-Za-z0-9_+/=-]{24,}/g, "<redacted>")
-          .slice(0, 200);
+        reason = [err.code, err.message].filter(function (x) { return typeof x === "string"; }).join(": ");
       } catch (e) {}
+      reason = redact(reason);
       console.error("Grok Bot POST " + path + " failed: HTTP " + response.status + (reason ? " (" + reason + ")" : ""));
       throw new PluginError("HTTP", "HTTP " + response.status, response.status);
     }
@@ -258,15 +266,30 @@ function createService(storage, fetch, cache) {
     var body = await post(ENSURE_URL, apiHeaders(auth), {}, deadline);
     var url = String(body.gatewayUrl || body.gateway_url || "").replace(/\/$/, "");
     var token = body.gatewayToken || body.gateway_token;
-    if (!BOX_URL.test(url) || typeof token !== "string" || !token || /[\r\n]/.test(token))
+    // Names only: which EnsureSandBox fields were set.
+    var fields = Object.keys(body).filter(function (k) { return body[k] !== "" && body[k] != null; }).join(",") || "none";
+    if (!BOX_URL.test(url) || typeof token !== "string" || !token || /[\r\n]/.test(token)) {
+      console.error("Grok Bot EnsureSandBox: no usable box; fields " + fields + "; box URL " + (url ? (BOX_URL.test(url) ? "ok" : "unexpected host") : "missing"));
       throw new PluginError("PLUGIN_UNAVAILABLE", "Your Grok Bot computer is not available. Open Grok Bot to check your plan.");
+    }
     var headers = cleanHeaders(body.gatewayHeaders || body.gateway_headers);
     var network = body.anyrunNetworkToken || body.anyrun_network_token || body.networkToken;
-    if (!Object.keys(headers).length && typeof network === "string") headers = cleanHeaders({ "x-anyrun-network-token": network });
+    // Boxes without a network token are reached with a port token instead, as the desktop app does
+    // (MOB-17409); without either header the box's edge most likely answers 404.
+    var port = body.gatewayPortToken || body.gateway_port_token;
+    if (!Object.keys(headers).length) {
+      if (typeof network === "string" && network) headers = cleanHeaders({ "x-anyrun-network-token": network });
+      else if (typeof port === "string") headers = cleanHeaders({ "x-anyrun-port-token": port });
+    }
+    var sent = Object.keys(headers).join(",") || "none";
+    console.log("Grok Bot box: EnsureSandBox fields " + fields + "; sending " + sent);
     headers["content-type"] = "application/json";
     headers.authorization = "Bearer " + token;
     var call = function (method, args) {
-      return post(url + "/api/" + method, headers, args, deadline);
+      return post(url + "/api/" + method, headers, args, deadline).catch(function (e) {
+        console.error("Grok Bot box /api/" + method + " failed; EnsureSandBox fields " + fields + "; sent " + sent);
+        throw e;
+      });
     };
     call.host = url.slice("https://".length).toLowerCase();
     return call;

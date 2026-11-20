@@ -41,6 +41,8 @@ function showRoot(root){
   if(currentRoot.configured){
     byId('root').textContent='Connected: '+(currentRoot.name||'selected folder');
     if(!currentRoot.writable){hint.className='error';hint.textContent='Read-only: allow this plugin to change files on its permissions page, or choose the folder again.'}
+  }else if(currentRoot.gone){
+    byId('root').textContent=(currentRoot.name?'“'+currentRoot.name+'”':'The folder')+' no longer exists';hint.textContent='Choose the folder again to reconnect.'
   }else if(currentRoot.withdrawn){
     byId('root').textContent='Access to '+(currentRoot.name?'“'+currentRoot.name+'”':'the folder')+' was withdrawn';hint.textContent='Choose the folder again to reconnect.'
   }else byId('root').textContent='No folder selected';

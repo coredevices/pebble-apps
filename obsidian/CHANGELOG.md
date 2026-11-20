@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- When the chosen folder no longer exists (moved, renamed, deleted, or its app reinstalled), say so instead of reporting that access was withdrawn.
+
 ## 0.3.1
 
 - Explain why each permission is needed, and mark which are required.

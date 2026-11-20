@@ -332,12 +332,13 @@ async function rootStatus() {
     if (isNotAllowed(error) || isNotFound(error)) { status.withdrawn = true; return status; }
     throw error;
   }
-  if (handle.kind !== 'directory') { status.withdrawn = true; return status; }
+  if (handle.kind !== 'directory') { status.withdrawn = true; status.gone = await folderGone(handle); return status; }
   var readable = (await handle.queryPermission({ mode: 'read' })) === 'granted';
   var writable = readable && (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
   status.name = handle.name || current.folderName;
   status.configured = readable;
   status.withdrawn = !readable;
+  if (!readable) status.gone = await folderGone(handle);
   status.writable = writable;
   status.handle = readable ? handle : null;
   return status;
@@ -481,11 +482,19 @@ async function collectMarkdown(dir, prefix, out) {
   }
 }
 
+// The host reports a picked folder that no longer exists as NotFound, and one it may no longer open as NotAllowed.
+async function folderGone(handle) {
+  try { await (handle.kind === 'directory' ? handle.keys().next() : handle.getFile()); return false; }
+  catch (error) { return isNotFound(error); }
+}
+
 async function requireRoot(respond, write) {
   var status = await rootStatus();
   if (!status.configured) {
     console.error('Folder unavailable: ' + (status.withdrawn ? 'access withdrawn' : 'not chosen'));
-    respond.error('AUTH_REQUIRED', status.withdrawn
+    respond.error('AUTH_REQUIRED', status.gone
+      ? 'The Obsidian/Markdown folder no longer exists. It may have been moved, renamed or deleted. Choose it again in plugin settings.'
+      : status.withdrawn
       ? 'Access to the Obsidian/Markdown folder was withdrawn. Choose it again in plugin settings.'
       : 'Choose an Obsidian/Markdown folder in plugin settings first.');
     return null;
@@ -773,7 +782,7 @@ Pebble.registerActionHandler(async function (request, respond) {
 });
 
 function publicRoot(root) {
-  return { configured: root.configured, writable: root.writable, withdrawn: root.withdrawn, id: root.id, name: root.name };
+  return { configured: root.configured, writable: root.writable, withdrawn: root.withdrawn, gone: root.gone, id: root.id, name: root.name };
 }
 
 Pebble.registerConfigHandler(async function (message, respond) {

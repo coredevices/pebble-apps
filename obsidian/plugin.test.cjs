@@ -52,3 +52,10 @@ test('names stay under the file system byte limit', () => {
   assert.ok(bytes(plugin.cleanName('😀'.repeat(100))) <= 240);
   assert.ok(!plugin.cleanName('😀'.repeat(100)).includes('\uFFFD'));
 });
+
+test('a folder the host reports as NotFound is gone; NotAllowed is only withdrawn', async () => {
+  const failing = (name) => ({ kind: 'directory', keys: () => ({ next: () => Promise.reject(Object.assign(new Error(name), { name })) }) });
+  assert.strictEqual(await plugin.folderGone(failing('NotFoundError')), true);
+  assert.strictEqual(await plugin.folderGone(failing('NotAllowedError')), false);
+  assert.strictEqual(await plugin.folderGone({ kind: 'file', getFile: () => Promise.resolve({}) }), false);
+});

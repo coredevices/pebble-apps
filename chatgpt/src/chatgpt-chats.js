@@ -10,7 +10,6 @@ var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 var DATA_BUILD = 'prod-329d9af90bc80a50b17d4b6f95c261f7c70f5a9b';
 // Leaves the rest of the host's 20 s action limit for the requests and ChatGPT's reply.
 var POW_BUDGET_MS = 5000;
-var MAX_REPLY = 300;
 // Reads for a just-posted message while ChatGPT's reply streams. ChatGPT saved one ~2.3 s after the POST
 // (November 18, 2026); plugins have no timers, so back-to-back reads are bounded by time and count.
 var TURN_WAIT_MS = 10000, TURN_READS = 30;
@@ -188,7 +187,7 @@ function createChatGptChats(storage, fetch, now, auth) {
     return null;
   }
 
-  /** Sends to [args.conversation], or starts a new chat without one; the receipt quotes a reply already finished. */
+  /** Sends to [args.conversation], or starts a new chat without one; the receipt never quotes the reply. */
   async function send(args) {
     checkText(args && args.message);
     var session = await signedIn();
@@ -217,9 +216,8 @@ function createChatGptChats(storage, fetch, now, auth) {
       id: util.uuid(), author: { role: 'user' }, create_time: now() / 1000,
       content: { content_type: 'text', parts: [args.message] }, metadata: {},
     };
-    function receipt(conversation, reply) {
+    function receipt(conversation) {
       var text = id ? 'Sent to ChatGPT chat "' + String(args.title || id).slice(0, 60) + '".' : 'Started a new ChatGPT chat (chat_id ' + conversation + ').';
-      if (reply) text += ' ChatGPT replied: ' + (reply.length > MAX_REPLY ? reply.slice(0, MAX_REPLY - 1) + '…' : reply);
       return { text: text, semanticResult: util.messageSent(String(args.title || 'ChatGPT'), id || conversation, args.message) };
     }
     // CoreApp's fetch resolves only after ChatGPT's whole reply has streamed, which a long reply makes
@@ -237,7 +235,7 @@ function createChatGptChats(storage, fetch, now, auth) {
       while (watch) {
         var saved = await Promise.race([savedIn(session, id, message.id, known, more), ended]);
         if (failed || saved === false) break; // A refused POST is reported as before, whatever a read showed.
-        if (saved) return receipt(saved, '');
+        if (saved) return receipt(saved);
       }
     } catch (_) { /* A failed read (a rate limit included) stops reading; the stream decides. */ }
     await posted;
@@ -245,7 +243,7 @@ function createChatGptChats(storage, fetch, now, auth) {
     if (!stream.conversation || (stream.error && !stream.reply)) {
       throw PluginError('PLUGIN_UNAVAILABLE', 'ChatGPT did not confirm the message; check the chat before sending again.');
     }
-    return receipt(stream.conversation, stream.done && stream.reply);
+    return receipt(stream.conversation);
   }
 
   return { list: list, send: send };

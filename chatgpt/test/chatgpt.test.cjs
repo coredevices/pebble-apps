@@ -99,12 +99,12 @@ function solves(token, prefix, seed, difficulty) {
   return hash.slice(0, difficulty.length) <= difficulty && JSON.parse(Buffer.from(answer, 'base64').toString('utf8'));
 }
 
-test('a new ChatGPT chat is sent the way the web app sends it, and the receipt quotes the reply', async () => {
+test('a new ChatGPT chat is sent the way the web app sends it, and the receipt never quotes the reply', async () => {
   const f = fixture();
   await f.signIn();
   const before = f.calls.length;
   const result = await f.send({ message: 'hello ChatGPT', chat_id: 'new-chat' });
-  assert.equal(result.text, 'Started a new ChatGPT chat (chat_id c-1). ChatGPT replied: Hello there.');
+  assert.equal(result.text, 'Started a new ChatGPT chat (chat_id c-1).');
   assert.deepEqual(JSON.parse(result.semanticResult),
     { type: 'MESSAGE_SENT', recipientName: 'ChatGPT', text: 'hello ChatGPT ⌚', contactId: 'c-1' });
   // Besides these, the chat list may be read (to find the new chat's saved message).
@@ -179,7 +179,7 @@ test('an existing chat from agent/chats continues from its current message, also
     [['new-chat', 'New ChatGPT chat'], ['c-9', 'Trip plans']]);
   for (const chat_id of ['c-9', 'trip']) {
     const result = await f.send({ message: 'add Lisbon', chat_id });
-    assert.equal(result.text, 'Sent to ChatGPT chat "Trip plans". ChatGPT replied: Hello there.');
+    assert.equal(result.text, 'Sent to ChatGPT chat "Trip plans".');
     assert.deepEqual(JSON.parse(result.semanticResult),
       { type: 'MESSAGE_SENT', recipientName: 'Trip plans', text: 'add Lisbon ⌚', contactId: 'c-9' });
     const body = f.call(CONVERSATION).body;
@@ -193,7 +193,7 @@ test('a stream of full message snapshots is read too, and a stream that only err
   const snapshot = (text, extra = {}) => ({ message: { author: { role: 'assistant' }, recipient: 'all', content: { content_type: 'text', parts: [text] } }, conversation_id: 'c-2', ...extra });
   const f = fixture({ routes: { [CONVERSATION]: () => sse(200, [snapshot('Hi'), snapshot('Hi you'), 'data: [DONE]']) } });
   await f.signIn();
-  assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).text, 'Started a new ChatGPT chat (chat_id c-2). ChatGPT replied: Hi you');
+  assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).text, 'Started a new ChatGPT chat (chat_id c-2).');
 
   f.backend[CONVERSATION] = () => sse(200, [{ conversation_id: 'c-2', error: 'Something went wrong' }, 'data: [DONE]']);
   assert.match((await f.send({ message: 'x', chat_id: 'new-chat' })).message, /did not confirm/);
@@ -201,19 +201,12 @@ test('a stream of full message snapshots is read too, and a stream that only err
   assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).code, 'PERMISSION_DENIED');
 });
 
-test('a long reply is cut short, and an unfinished stream sends no reply text', async () => {
-  const long = 'x'.repeat(400);
+test('a stream that ends without finishing the reply is still a plain receipt', async () => {
   const f = fixture({ routes: { [CONVERSATION]: () => sse(200, [
-    { p: '', o: 'add', v: { message: { author: { role: 'assistant' }, recipient: 'all', content: { content_type: 'text', parts: [long] } }, conversation_id: 'c-3' } },
+    { p: '', o: 'add', v: { message: { author: { role: 'assistant' }, recipient: 'all', content: { content_type: 'text', parts: ['x'.repeat(400)] } }, conversation_id: 'c-3' } },
   ]) } });
   await f.signIn();
   assert.equal((await f.send({ message: 'x', chat_id: 'new-chat' })).text, 'Started a new ChatGPT chat (chat_id c-3).');
-  f.backend[CONVERSATION] = () => sse(200, [
-    { p: '', o: 'add', v: { message: { author: { role: 'assistant' }, recipient: 'all', content: { content_type: 'text', parts: [long] } }, conversation_id: 'c-3' } },
-    'data: [DONE]',
-  ]);
-  const text = (await f.send({ message: 'x', chat_id: 'new-chat' })).text;
-  assert.equal(text.length, 'Started a new ChatGPT chat (chat_id c-3). ChatGPT replied: '.length + 300);
 });
 
 /** ChatGPT's reply still streaming: CoreApp's fetch only resolves once it has, past the host's 20 s limit (MOB-17384). */
@@ -259,7 +252,7 @@ test('a stream that ends while a read is stalled decides at once, and reads stay
   const f = fixture({ routes: TRIP });
   f.backend[`GET ${API}/conversation/c-9`] = () => (++details === 1 ? json(200, { current_node: 'node-7', mapping: {} }) : new Promise(() => {}));
   await f.signIn();
-  assert.equal((await f.send({ message: 'x', chat_id: 'c-9' })).text, 'Sent to ChatGPT chat "Trip plans". ChatGPT replied: Hello there.');
+  assert.equal((await f.send({ message: 'x', chat_id: 'c-9' })).text, 'Sent to ChatGPT chat "Trip plans".');
 
   // A new chat among five other new ones without the message: the list and detail reads together count.
   let release;
@@ -274,7 +267,7 @@ test('a stream that ends while a read is stalled decides at once, and reads stay
   const posted = g.calls.findIndex((c) => c.key === CONVERSATION);
   assert.equal(g.calls.length - posted - 1, 30);
   release();
-  assert.equal((await sending).text, 'Started a new ChatGPT chat (chat_id c-1). ChatGPT replied: Hello there.');
+  assert.equal((await sending).text, 'Started a new ChatGPT chat (chat_id c-1).');
 });
 
 test('a refused POST wins over a read that shows the message', async () => {

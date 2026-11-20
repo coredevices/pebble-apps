@@ -1,3 +1,7 @@
+## 0.5.2
+
+- A message to a ChatGPT chat is confirmed as soon as ChatGPT has it, and the confirmation no longer quotes ChatGPT's reply. Read the answer in the ChatGPT app.
+
 ## 0.5.1
 
 - Long requests to a ChatGPT chat no longer time out with "plugin did not respond" while ChatGPT writes its reply: a message counts as sent once ChatGPT has saved it, new chats included, without waiting for the whole reply. So the receipt now rarely quotes the reply. If ChatGPT hasn't saved it within about 10 seconds, it waits for the reply as before.

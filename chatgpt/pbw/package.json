@@ -1,7 +1,7 @@
 {
   "name": "chatgpt",
   "author": "Core Devices",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "scripts": {
     "build": "npm --prefix .. run build",
@@ -79,7 +79,7 @@
       "actions": [
         {
           "name": "send_to_agent",
-          "description": "Send a message to the user's ChatGPT Dot, to a ChatGPT chat (a new one, or a recent chatgpt.com conversation), or to one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats (\"new-chat\" starts a new ChatGPT chat), or a chat nickname or part of its title; \"new task\" starts a new Codex session on the computer and project folder chosen in settings (or a new Codex Cloud task, if settings choose that), with the message as its first prompt; omit it to send where settings choose (the Dot, a new ChatGPT chat or a default chat). Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply; a ChatGPT chat's receipt may quote the start of the reply. Do not automatically retry an uncertain delivery.",
+          "description": "Send a message to the user's ChatGPT Dot, to a ChatGPT chat (a new one, or a recent chatgpt.com conversation), or to one of their Codex chats: a Codex session running on their computer, or a Codex Cloud task. chat_id is an instanceId from agent/chats (\"new-chat\" starts a new ChatGPT chat), or a chat nickname or part of its title; \"new task\" starts a new Codex session on the computer and project folder chosen in settings (or a new Codex Cloud task, if settings choose that), with the message as its first prompt; omit it to send where settings choose (the Dot, a new ChatGPT chat or a default chat). Never use it for notes, reminders, or messages meant for anyone else. Returns a receipt, not the reply. Do not automatically retry an uncertain delivery.",
           "parameters": {
             "type": "object",
             "properties": {

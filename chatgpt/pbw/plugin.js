@@ -6398,7 +6398,6 @@
       var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
       var DATA_BUILD = "prod-329d9af90bc80a50b17d4b6f95c261f7c70f5a9b";
       var POW_BUDGET_MS = 5e3;
-      var MAX_REPLY = 300;
       var TURN_WAIT_MS = 1e4;
       var TURN_READS = 30;
       function needsBrowser() {
@@ -6614,9 +6613,8 @@
             content: { content_type: "text", parts: [args.message] },
             metadata: {}
           };
-          function receipt(conversation, reply) {
+          function receipt(conversation) {
             var text = id ? 'Sent to ChatGPT chat "' + String(args.title || id).slice(0, 60) + '".' : "Started a new ChatGPT chat (chat_id " + conversation + ").";
-            if (reply) text += " ChatGPT replied: " + (reply.length > MAX_REPLY ? reply.slice(0, MAX_REPLY - 1) + "…" : reply);
             return { text, semanticResult: util.messageSent(String(args.title || "ChatGPT"), id || conversation, args.message) };
           }
           var posted = call(session, "POST", "/f/conversation", Object.assign({ messages: [message], client_prepare_state: "success" }, turn), headers);
@@ -6644,7 +6642,7 @@
             while (watch) {
               var saved = await Promise.race([savedIn(session, id, message.id, known, more), ended]);
               if (failed || saved === false) break;
-              if (saved) return receipt(saved, "");
+              if (saved) return receipt(saved);
             }
           } catch (_) {
           }
@@ -6653,7 +6651,7 @@
           if (!stream.conversation || stream.error && !stream.reply) {
             throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not confirm the message; check the chat before sending again.");
           }
-          return receipt(stream.conversation, stream.done && stream.reply);
+          return receipt(stream.conversation);
         }
         return { list, send };
       }

@@ -1,8 +1,8 @@
 # ChatGPT
 
 Index plugin that sends messages to your ChatGPT Dot, to ChatGPT chats, to Codex sessions running on
-your computers, and to Codex Cloud tasks. Every action is send-only: it returns a receipt, not the
-reply (a ChatGPT chat's receipt quotes the start of the reply in the rare case it finished first).
+your computers, and to Codex Cloud tasks. Every action is send-only: it returns a receipt, never the
+reply.
 
 `plugin.js` is generated: the source is in [`..`](..)
 (`npm ci && npm run build && npm test` there).

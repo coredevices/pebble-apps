@@ -1,0 +1,13 @@
+Send notes and todos to your Workflowy outline from your Pebble watch or Index ring.
+
+Say what you want to save, for example "Note: a reading list for winter". Notes go to the top of your Inbox, or Today, or any of your Workflowy shortcuts. Todos go to the list you name, and a todo with a date, like "buy stamps tomorrow at 3pm", lands on that day in your Workflowy calendar with the time on it.
+
+Workflowy doesn't send alerts, so use a reminders app for anything that has to buzz.
+
+Security and privacy:
+- The plugin uses your personal Workflowy API key. It's stored in your phone's secure storage and only sent to Workflowy.
+- Notes go from your phone straight to Workflowy over HTTPS.
+- The plugin only adds new bullets. It doesn't change or delete anything in your outline, and only reads the list of your shortcuts so you can pick one.
+- The source code is on GitHub.
+
+To set it up, open the plugin's settings, tap Get API key, copy your key from Workflowy and paste it in.

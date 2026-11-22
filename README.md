@@ -72,3 +72,4 @@ Each plugin has `src/icon.svg`: one 1.6px line on a 24×24 grid, round caps, no 
 | `todoist` | Todoist |
 | `weather-face` | Weather Face (Plugin Demo) (watchface) |
 | `whatsplaying` | What's Playing (watchapp) |
+| `workflowy` | Workflowy |

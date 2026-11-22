@@ -1,0 +1,186 @@
+{
+  "name": "workflowy",
+  "author": "Core Devices",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
+  "pebble": {
+    "displayName": "Workflowy",
+    "uuid": "26df8092-5b55-42fb-8902-d6f071a7f21c",
+    "sdkVersion": "3",
+    "usesPermissions": [
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "workflowy.com"
+          ]
+        },
+        "reason": "To add your notes and todos to Workflowy",
+        "required": true
+      }
+    ],
+    "plugin": {
+      "description": "Adds notes and todos to your Workflowy outline: notes to your Inbox or a shortcut, todos to a list or to their day in the Workflowy calendar.",
+      "script": "src/plugin/index.js",
+      "sources": [
+        {
+          "category": "notes",
+          "items": [
+            "destination"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ],
+            "location": [
+              "shortText",
+              "longText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "notes",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "list"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "destination": [
+              "shortText"
+            ],
+            "url": [
+              "longText"
+            ]
+          },
+          "supportsMultiple": true,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 300
+        },
+        {
+          "category": "reminders",
+          "items": [
+            "configured"
+          ],
+          "properties": {
+            "name": [
+              "shortText"
+            ],
+            "configured": [
+              "boolean",
+              "shortText"
+            ]
+          },
+          "supportsMultiple": false,
+          "callerPermissions": [],
+          "suggestedRefreshIntervalSec": 60
+        }
+      ],
+      "actions": [
+        {
+          "name": "create_note",
+          "description": "Add plain text as a bullet at the top of the user's chosen Workflowy location (Inbox by default). The first line becomes the bullet and any further lines its note. Use only when the user explicitly asks to save or send a note to Workflowy.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "enum": [
+                  "workflowy"
+                ],
+                "description": "Optional destination id from the notes/destination source."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The complete note text, preferably the user's exact words."
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "notes/destination"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        },
+        {
+          "name": "create_reminder",
+          "description": "Add a todo (checkbox bullet) to Workflowy. Use instanceId from reminders/list to choose a list (Inbox, Today, Tomorrow, Next Week or one of the user's shortcuts). With due_iso and no instanceId the todo goes on that day in the Workflowy calendar, with the date and time on it; with neither it goes to the user's default list. Workflowy sends no alerts or notifications, so use it only when the user explicitly asks for a todo or reminder in Workflowy, never for a reminder that must alert them.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string",
+                "description": "Optional list id from the reminders/list source."
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Todo text."
+              },
+              "due_iso": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Optional RFC3339 instant with the requested local wall time and its real UTC offset (for example 2026-08-27T14:30:00-07:00)."
+              },
+              "timezone": {
+                "type": "string",
+                "description": "IANA time-zone name used to write the date and time; defaults to the phone's zone."
+              },
+              "notify_before_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Ignored: Workflowy sends no alerts."
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "additionalProperties": false
+          },
+          "targets": [
+            "reminders/list"
+          ],
+          "destructive": false,
+          "requiresConfirmation": false,
+          "callerPermissions": []
+        }
+      ]
+    },
+    "configPage": "src/config.html",
+    "projectType": "plugin"
+  }
+}

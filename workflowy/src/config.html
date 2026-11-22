@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workflowy</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { font-size: 24px; margin: 0 0 8px; }
+    p { line-height: 1.45; }
+    label { display: block; font-size: 14px; font-weight: 650; margin: 20px 0 6px; }
+    input, select {
+      box-sizing: border-box; width: 100%; padding: 11px 12px; font-size: 15px;
+      border: 1px solid rgba(128,128,128,.45); border-radius: 8px;
+      background: transparent; color: inherit;
+    }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    button { padding: 11px 16px; border: 0; border-radius: 8px; font-size: 15px; background: #4772fa; color: white; }
+    button.secondary { background: rgba(128,128,128,.2); color: inherit; }
+    button:disabled { opacity: .55; }
+    #status { margin-top: 16px; padding: 11px 12px; border-radius: 8px; background: rgba(128,128,128,.15); font-size: 14px; line-height: 1.4; }
+    .hint { opacity: .72; font-size: 13px; }
+    ol { padding-left: 22px; line-height: 1.5; }
+    a { color: #668dff; }
+    #blocked { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: #fdecc8; color: #5c3d00; font-size: 14px; line-height: 1.45; }
+    #blocked strong { display: block; }
+  </style>
+</head>
+<body>
+  <p id="blocked" role="alert" hidden></p>
+  <h1>Workflowy</h1>
+  <p>Send notes and todos from your Pebble to your Workflowy outline.</p>
+
+  <ol>
+    <li>Tap <strong>Get API key</strong>. Workflowy's API key page opens in your browser.</li>
+    <li>Sign in to Workflowy if it asks, and create a key if you don't have one yet.</li>
+    <li>Copy the key, come back here, paste it below and tap <strong>Save &amp; check key</strong>.</li>
+  </ol>
+  <button id="getKey" class="secondary" type="button">Get API key</button>
+
+  <label for="key">API key</label>
+  <input id="key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false">
+  <p class="hint">The key is kept in this plugin's private settings on this phone. Leave it blank later to keep the saved key.</p>
+
+  <label for="noteTarget">Put notes at the top of</label>
+  <select id="noteTarget"></select>
+
+  <label for="reminderTarget">Put todos without a date in</label>
+  <select id="reminderTarget"></select>
+  <p class="hint">Todos with a date go on their day in the Workflowy calendar. Workflowy doesn't send alerts. To use one of your own places, add it as a shortcut in Workflowy, then reopen this page.</p>
+
+  <div class="buttons">
+    <button id="save" type="button">Save &amp; check key</button>
+    <button id="unlink" class="secondary" type="button">Disconnect</button>
+  </div>
+  <div id="status">Starting the Workflowy plugin…</div>
+
+  <script>
+    // Settings pages can only load the plugin's own domains; links to anywhere else open in the browser.
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest && event.target.closest('a[target="_blank"]');
+      if (!link || !link.href || typeof Pebble.openUrl !== 'function') return;
+      event.preventDefault();
+      Pebble.openUrl(link.href).catch(function () {});
+    });
+
+    document.getElementById('getKey').onclick = function () {
+      Pebble.openUrl('https://workflowy.com/api-key').catch(function () {});
+    };
+
+    var keyInput = document.getElementById('key');
+    var noteSelect = document.getElementById('noteTarget');
+    var reminderSelect = document.getElementById('reminderTarget');
+    var saveButton = document.getElementById('save');
+    var unlinkButton = document.getElementById('unlink');
+    var statusElement = document.getElementById('status');
+
+    function send(message) { return Pebble.sendMessage('plugin', message); }
+
+    function setBusy(busy) { saveButton.disabled = busy; unlinkButton.disabled = busy; }
+
+    function fill(select, targets, chosen) {
+      select.replaceChildren();
+      (targets.length ? targets : [{ key: 'inbox', name: 'Inbox' }]).forEach(function (target) {
+        var option = document.createElement('option');
+        option.value = target.key;
+        option.textContent = target.name;
+        select.appendChild(option);
+      });
+      select.value = chosen;
+      if (!select.value) select.value = 'inbox';
+    }
+
+    function showState(state) {
+      fill(noteSelect, state.targets || [], state.noteTarget);
+      fill(reminderSelect, state.targets || [], state.reminderTarget);
+      keyInput.value = '';
+      keyInput.placeholder = state.configured ? 'Key saved on this phone' : 'Paste your API key';
+      statusElement.textContent = state.configured ? 'Workflowy is connected.' : 'Workflowy is not connected.';
+    }
+
+    saveButton.onclick = async function () {
+      setBusy(true);
+      statusElement.textContent = 'Checking the API key…';
+      try {
+        var result = await send({ type: 'save', apiKey: keyInput.value, noteTarget: noteSelect.value, reminderTarget: reminderSelect.value });
+        if (result.error) { statusElement.textContent = result.error; return; }
+        showState(result);
+        statusElement.textContent = 'Connected and saved. You can close this page.';
+      } catch (error) {
+        statusElement.textContent = 'Could not contact the Workflowy plugin. Try reopening this page.';
+      } finally {
+        keyInput.value = '';
+        setBusy(false);
+      }
+    };
+
+    unlinkButton.onclick = async function () {
+      setBusy(true);
+      try { showState(await send({ type: 'unlink' })); }
+      catch (error) { statusElement.textContent = 'Could not disconnect Workflowy. Try reopening this page.'; }
+      finally { setBusy(false); }
+    };
+
+    function showBlocked(blocked) {
+      var host = blocked.host;
+      var banner = document.getElementById('blocked');
+      var title = document.createElement('strong');
+      title.textContent = 'Workflowy doesn\'t have permission to connect to ' + host + '.';
+      banner.replaceChildren(title, 'Go back to Workflowy\'s page and turn on "Connect to ' + host + '" under Permissions.' + (blocked.sure ? '' : ' If it\'s already on, check your internet connection.'));
+      banner.hidden = false;
+    }
+
+    Pebble.addEventListener('ready', async function (event) {
+      if (event.target !== 'plugin') return;
+      send({ type: 'reach' }).then(function (r) { if (r && r.blocked) showBlocked(r.blocked); }).catch(function () {});
+      showState(await send({ type: 'status' }));
+    });
+  </script>
+</body>
+</html>

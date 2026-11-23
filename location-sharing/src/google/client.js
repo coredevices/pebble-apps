@@ -22,6 +22,8 @@ var STORE_EMAIL = "location-sharing-google-email";
 var STORE_COOKIES = "location-sharing-google-cookies";
 var STORE_CACHE = "location-sharing-google-people-v1";
 var STORE_DIAGNOSTICS = "location-sharing-google-diagnostics-v1";
+var STORE_PAGE_TOKENS = "location-sharing-google-maps-tokens-v1";
+var PAGE_TOKENS_MAX_AGE_MS = 60 * 60 * 1000;
 var PLUGIN_VERSION = require("../../pbw/package.json").version;
 var MAX_DIAGNOSTIC_EVENTS = 40;
 var MAPS_RPC_ID = "Qt4aBe";
@@ -323,6 +325,16 @@ GoogleMapsClient.prototype.cookieHeader = function() {
     return name + "=" + cookies[name];
   }).join("; ");
 };
+// Saved with the cookies they were read for, so a refresh still running when the account changes can't leave its own behind.
+GoogleMapsClient.prototype.savedPageTokens = function(cookieHeader) {
+  try {
+    var saved = JSON.parse(this.storage.get(STORE_PAGE_TOKENS) || "null");
+    var age = saved ? Date.now() - saved.at : -1;
+    return saved && saved.xsrf && saved.kei && saved.cookies === cookieHeader && age >= 0 && age < PAGE_TOKENS_MAX_AGE_MS ? saved : null;
+  } catch (_) {
+    return null;
+  }
+};
 GoogleMapsClient.prototype.status = function() {
   var masterToken = text(this.storage.get(STORE_MASTER_TOKEN));
   var oauthToken = text(this.storage.get(STORE_OAUTH_TOKEN));
@@ -336,6 +348,7 @@ GoogleMapsClient.prototype.status = function() {
 };
 GoogleMapsClient.prototype.setCredentials = function(credentials) {
   credentials = credentials || {};
+  this.storage.delete(STORE_PAGE_TOKENS);
   var cookies = {};
   Object.keys(credentials.cookies || {}).forEach(function(name) {
     var value = credentials.cookies[name];
@@ -472,52 +485,74 @@ GoogleMapsClient.prototype.refresh = async function() {
         this.recordDiagnostic("rotate-cookies", { unavailable: true });
       }
     }
-    stage = "maps-page";
-    var mapsPageUrl = mapsUrl(MAPS_HOME_URL, account, { hl: "en" });
-    var mapsPage = await request(this.effects, "GET", mapsPageUrl, browserHeaders);
-    this.recordDiagnostic("maps-page", { httpStatus: mapsPage.status, responseCharacters: mapsPage.text.length });
-    if (mapsPage.status === 401 || mapsPage.status === 403) {
-      throw googleError("AUTH_REQUIRED", "Google Maps location sharing authorization expired. Sign in again.", ERROR_KINDS.TRANSPORT, { httpStatus: mapsPage.status, stage });
+    // The Maps page is about 200 KB and only read for two tokens, so a web session reuses them.
+    var tokens = cookieHeader ? this.savedPageTokens(cookieHeader) : null;
+    var reused = !!tokens;
+    var found = null;
+    while (!found) {
+      if (!tokens) {
+        stage = "maps-page";
+        var mapsPageUrl = mapsUrl(MAPS_HOME_URL, account, { hl: "en" });
+        var mapsPage = await request(this.effects, "GET", mapsPageUrl, browserHeaders);
+        this.recordDiagnostic("maps-page", { httpStatus: mapsPage.status, responseCharacters: mapsPage.text.length });
+        if (mapsPage.status === 401 || mapsPage.status === 403) {
+          throw googleError("AUTH_REQUIRED", "Google Maps location sharing authorization expired. Sign in again.", ERROR_KINDS.TRANSPORT, { httpStatus: mapsPage.status, stage });
+        }
+        if (mapsPage.status < 200 || mapsPage.status >= 300) {
+          throw googleError("GOOGLE_LOCATION_UNAVAILABLE", "Google Maps could not load the location-sharing session (HTTP " + mapsPage.status + ").", ERROR_KINDS.TRANSPORT, { httpStatus: mapsPage.status, stage: "maps-page" });
+        }
+        tokens = mapsPageTokens(mapsPage.text);
+        this.recordDiagnostic("maps-page-tokens", {
+          hasXsrf: !!tokens.xsrf,
+          hasKei: !!tokens.kei,
+          accountBound: !!text(account.email)
+        });
+        if (cookieHeader) this.storage.set(STORE_PAGE_TOKENS, JSON.stringify({ xsrf: tokens.xsrf, kei: tokens.kei, cookies: cookieHeader, at: Date.now() }));
+      }
+      try {
+        var locationHeaders = Object.assign({}, browserHeaders, {
+          "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+          "X-Same-Domain": "1",
+          "Origin": "https://www.google.com",
+          "Referer": "https://www.google.com/maps/"
+        });
+        stage = "location-sharing-rpc";
+        var locationUrl = mapsUrl(LOCATION_URL, account, {
+          rpcids: MAPS_RPC_ID,
+          hl: "en",
+          rt: "c"
+        });
+        var location = await request(this.effects, "POST", locationUrl, locationHeaders, mapsBatchBody(tokens));
+        this.recordDiagnostic("location-sharing-rpc", {
+          httpStatus: location.status,
+          responseCharacters: location.text.length,
+          hasRpcEnvelope: location.text.indexOf('[["wrb.fr"') !== -1
+        });
+        if (location.status === 401 || location.status === 403) {
+          throw googleError("AUTH_REQUIRED", "Google Maps location sharing authorization expired. Sign in again.", ERROR_KINDS.TRANSPORT, { httpStatus: location.status, stage });
+        }
+        if (location.status < 200 || location.status >= 300) {
+          throw googleError(
+            "GOOGLE_LOCATION_UNAVAILABLE",
+            "Google Maps location sharing request failed (HTTP " + location.status + ").",
+            ERROR_KINDS.TRANSPORT,
+            { httpStatus: location.status, stage: "location-sharing-rpc" }
+          );
+        }
+        found = parseLocationResponse(location.text);
+      } catch (error) {
+        if (!reused || error.code === "GOOGLE_LOCATION_NETWORK_ERROR") throw error;
+      }
+      // Google may answer old tokens with an error or with nobody, so those are checked with new ones.
+      if (reused && (!found || (!found.length && this.people.length))) {
+        this.recordDiagnostic("saved-page-tokens-rejected");
+        this.storage.delete(STORE_PAGE_TOKENS);
+        found = null;
+        tokens = null;
+      }
+      reused = false;
     }
-    if (mapsPage.status < 200 || mapsPage.status >= 300) {
-      throw googleError("GOOGLE_LOCATION_UNAVAILABLE", "Google Maps could not load the location-sharing session (HTTP " + mapsPage.status + ").", ERROR_KINDS.TRANSPORT, { httpStatus: mapsPage.status, stage: "maps-page" });
-    }
-    var tokens = mapsPageTokens(mapsPage.text);
-    this.recordDiagnostic("maps-page-tokens", {
-      hasXsrf: !!tokens.xsrf,
-      hasKei: !!tokens.kei,
-      accountBound: !!text(account.email)
-    });
-    var locationHeaders = Object.assign({}, browserHeaders, {
-      "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
-      "X-Same-Domain": "1",
-      "Origin": "https://www.google.com",
-      "Referer": "https://www.google.com/maps/"
-    });
-    stage = "location-sharing-rpc";
-    var locationUrl = mapsUrl(LOCATION_URL, account, {
-      rpcids: MAPS_RPC_ID,
-      hl: "en",
-      rt: "c"
-    });
-    var location = await request(this.effects, "POST", locationUrl, locationHeaders, mapsBatchBody(tokens));
-    this.recordDiagnostic("location-sharing-rpc", {
-      httpStatus: location.status,
-      responseCharacters: location.text.length,
-      hasRpcEnvelope: location.text.indexOf('[["wrb.fr"') !== -1
-    });
-    if (location.status === 401 || location.status === 403) {
-      throw googleError("AUTH_REQUIRED", "Google Maps location sharing authorization expired. Sign in again.", ERROR_KINDS.TRANSPORT, { httpStatus: location.status, stage });
-    }
-    if (location.status < 200 || location.status >= 300) {
-      throw googleError(
-        "GOOGLE_LOCATION_UNAVAILABLE",
-        "Google Maps location sharing request failed (HTTP " + location.status + ").",
-        ERROR_KINDS.TRANSPORT,
-        { httpStatus: location.status, stage: "location-sharing-rpc" }
-      );
-    }
-    this.people = parseLocationResponse(location.text);
+    this.people = found;
     this.storage.set(STORE_CACHE, JSON.stringify(this.people));
     this.recordDiagnostic("parse-success", { peopleCount: this.people.length });
     return this.people.slice();
@@ -530,7 +565,7 @@ GoogleMapsClient.prototype.cached = function() {
   return this.people.slice();
 };
 GoogleMapsClient.prototype.clear = function() {
-  [STORE_MASTER_TOKEN, STORE_OAUTH_TOKEN, STORE_ANDROID_ID, STORE_EMAIL, STORE_COOKIES, STORE_CACHE].forEach(this.storage.delete.bind(this.storage));
+  [STORE_MASTER_TOKEN, STORE_OAUTH_TOKEN, STORE_ANDROID_ID, STORE_EMAIL, STORE_COOKIES, STORE_CACHE, STORE_PAGE_TOKENS].forEach(this.storage.delete.bind(this.storage));
   this.people = [];
 };
 module.exports = {

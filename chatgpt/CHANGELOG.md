@@ -1,3 +1,7 @@
+## 0.5.3
+
+- When ChatGPT refuses a new message ("ChatGPT did not accept a new message"), it now says which step ChatGPT refused, and the phone log records the shape of what ChatGPT answered and its short reason fields (no tokens, ids or message text), so a bug report can show the cause.
+
 ## 0.5.2
 
 - A message to a ChatGPT chat is confirmed as soon as ChatGPT has it, and the confirmation no longer quotes ChatGPT's reply. Read the answer in the ChatGPT app.

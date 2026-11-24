@@ -44,7 +44,7 @@ const REPLY_STREAM = [
 ];
 
 function fixture({ routes = {}, storage = new Map(), clock = { now: NOW } } = {}) {
-  const calls = [];
+  const calls = [], logs = [];
   const backend = {
     [SESSION]: () => json(200, { accessToken: accessToken(), sessionToken: 'session-2' }),
     [LIST]: () => json(200, { items: [] }),
@@ -66,6 +66,7 @@ function fixture({ routes = {}, storage = new Map(), clock = { now: NOW } } = {}
   let action, config, source;
   vm.runInNewContext(SOURCE, {
     fetch, btoa, atob, WebSocket: class {}, Date: FakeDate,
+    console: { log() {}, error: (line) => logs.push(line) },
     Pebble: {
       secureStorage: {
         getItem: async (k) => (storage.has(k) ? storage.get(k) : null),
@@ -88,7 +89,7 @@ function fixture({ routes = {}, storage = new Map(), clock = { now: NOW } } = {}
   }));
   const signIn = () => configure({ type: 'codex_connect', session_token: 'session-1' });
   const call = (key) => calls.filter((c) => c.key === key).at(-1);
-  return { calls, storage, backend, clock, configure, send, agentChats, signIn, call };
+  return { calls, logs, storage, backend, clock, configure, send, agentChats, signIn, call };
 }
 
 /** What the server checks: sha3-512 of seed + answer starts at or below the difficulty. */
@@ -148,6 +149,20 @@ test('a turnstile flag still sends', async () => {
   await f.signIn();
   await f.send({ message: 'hi', chat_id: 'new-chat' });
   assert.ok(f.calls.some((c) => c.key === CONVERSATION));
+});
+
+test('a 2xx answer without a token logs field names and short reasons only, and names the step', async () => {
+  const f = fixture({ routes: { [REQUIREMENTS]: () => json(200, { persona: 'chatgpt-freeaccount', detail: { token: 'secret-1' }, account_id: 'secret-3' }) } });
+  await f.signIn();
+  const requirements = await f.send({ message: 'hi', chat_id: 'new-chat' });
+  assert.equal(requirements.message, 'ChatGPT did not accept a new message (requirements). Try again later.');
+  f.backend[REQUIREMENTS] = () => json(200, { token: 't' });
+  f.backend[PREPARE] = () => json(200, { status: 'blocked', message: 'secret-2', items: ['secret-4'] });
+  const prepare = await f.send({ message: 'hi', chat_id: 'new-chat' });
+  assert.match(prepare.message, /\(prepare\)/);
+  assert.ok(f.logs.includes('ChatGPT POST /sentinel/chat-requirements gave no token: persona="chatgpt-freeaccount", detail:object, account_id:string'), f.logs.join('\n'));
+  assert.ok(f.logs.includes('ChatGPT POST /f/conversation/prepare gave no token: status="blocked", message:string, items:array'), f.logs.join('\n'));
+  assert.ok(!f.logs.some((l) => /secret-/.test(l)));
 });
 
 test('an Arkose check or an unsolvable proof of work refuses the send before anything is posted', async () => {

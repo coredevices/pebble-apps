@@ -6408,6 +6408,16 @@
           throw PluginError("INVALID_ARGS", "Provide a message between 1 and 16,000 characters.");
         }
       }
+      var REASON_FIELDS = ["persona", "status", "detail", "reason", "code", "type", "error"];
+      function refused(step, path, body) {
+        var fields = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body).map(function(k) {
+          var v = body[k];
+          var scalar = typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+          return REASON_FIELDS.indexOf(k) >= 0 && scalar ? k + "=" + JSON.stringify(String(v).slice(0, 80)) : k + ":" + (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
+        }).join(", ") : Array.isArray(body) ? "array" : body === null ? "null" : typeof body;
+        console.error("ChatGPT POST " + path + " gave no token: " + fields);
+        return PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not accept a new message (" + step + "). Try again later.");
+      }
       function failure(status) {
         if (status === 401) return PluginError("AUTH_REQUIRED", "ChatGPT sign-in expired. Sign in again in plugin settings.");
         if (status === 403) return PluginError("PERMISSION_DENIED", "ChatGPT blocked this message from the plugin. Send it from the ChatGPT app.");
@@ -6542,7 +6552,7 @@
           var p = solve(String(Math.random()), "0fffff", config, now);
           if (!p) throw needsBrowser();
           var req = await (await call(session, "POST", "/sentinel/chat-requirements", { p: "gAAAAAC" + p })).json();
-          if (!req || !req.token) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not accept a new message. Try again later.");
+          if (!req || !req.token) throw refused("requirements", "/sentinel/chat-requirements", req);
           console.log("ChatGPT chat requirements: proof of work " + !!(req.proofofwork && req.proofofwork.required) + ", turnstile " + !!(req.turnstile && req.turnstile.required) + ", arkose " + !!(req.arkose && req.arkose.required));
           if (req.arkose && req.arkose.required) throw needsBrowser();
           var headers = { "openai-sentinel-chat-requirements-token": req.token };
@@ -6603,7 +6613,7 @@
           };
           if (id) turn.conversation_id = id;
           var prepared = await (await call(session, "POST", "/f/conversation/prepare", Object.assign({ client_prepare_state: "none" }, turn))).json();
-          if (!prepared || !prepared.conduit_token) throw PluginError("PLUGIN_UNAVAILABLE", "ChatGPT did not accept a new message. Try again later.");
+          if (!prepared || !prepared.conduit_token) throw refused("prepare", "/f/conversation/prepare", prepared);
           headers["x-conduit-token"] = prepared.conduit_token;
           headers["Accept"] = "text/event-stream";
           var message = {

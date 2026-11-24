@@ -15,11 +15,11 @@ var PLUGIN_UUID = 'd93ea4f2-6bb2-4f51-a766-29dbe481c170';
 var MAX_DEVICES = 48;
 
 var CMD = { HELLO: 1, DEVICE: 2, ACT: 3, TOAST: 4 };
-var OP = { POWER: 1, BRIGHT: 2, CTEMP: 3, VOLUME: 4, SETPT: 5, MODE: 6, LOCK: 7, FAV: 8 };
+var OP = { POWER: 1, BRIGHT: 2, CTEMP: 3, VOLUME: 4, SETPT: 5, MODE: 6, LOCK: 7, FAV: 8, SCENE: 9 };
 var KIND = { GENERIC: 0, LIGHT: 1, OUTLET: 2, SWITCH: 3, THERMOSTAT: 4, LOCK: 5, SPEAKER: 6, TV: 7, FAN: 8 };
 var FLAG = {
   ON: 1, ONLINE: 2, FAV: 4, CAN_POWER: 8, CAN_BRIGHT: 16, CAN_CTEMP: 32, CAN_VOLUME: 64,
-  CAN_LOCK: 128, CAN_THERMO: 256, LOCKED: 512, FAHRENHEIT: 1024
+  CAN_LOCK: 128, CAN_THERMO: 256, LOCKED: 512, FAHRENHEIT: 1024, CAN_SCENE: 2048
 };
 var MODES = ['', 'off', 'heat', 'cool', 'eco', 'heatcool'];
 var MODE_LABEL = ['', 'Off', 'Heat', 'Cool', 'Eco', 'Auto'];
@@ -182,7 +182,7 @@ function deviceFrom(instance) {
     caps: caps,
     favorite: mock ? favorites().indexOf(instance.instanceId) >= 0 : bool(p.favorite),
     hasState: p.online != null || p.on != null || p.locked != null || p.setpoint != null,
-    online: bool(p.online) !== false,
+    online: caps.scene || bool(p.online) !== false,
     on: bool(p.on),
     brightness: num(p.brightness),
     ctemp: num(p.color_temperature),
@@ -195,6 +195,7 @@ function deviceFrom(instance) {
 }
 
 function statusOf(d) {
+  if (d.caps.scene) return 'Scene';
   if (!d.online) return 'Offline';
   if (d.caps.thermostat) {
     var parts = [];
@@ -221,6 +222,7 @@ function rowFor(d, index, total) {
   if (d.caps.volume) flags |= FLAG.CAN_VOLUME;
   if (d.caps.lock) flags |= FLAG.CAN_LOCK;
   if (d.caps.thermostat) flags |= FLAG.CAN_THERMO;
+  if (d.caps.scene) flags |= FLAG.CAN_SCENE;
   if (d.locked) flags |= FLAG.LOCKED;
   if (fahrenheit) flags |= FLAG.FAHRENHEIT;
   var setpoint = toUnit(d.setpoint);
@@ -310,6 +312,7 @@ function actionFor(d, op, value) {
       return { action: 'set_thermostat', args: fahrenheit ? { temperature_f: value / 10 } : { temperature_c: value / 10 } };
     case OP.MODE: return { action: 'set_thermostat', args: { mode: MODES[value] } };
     case OP.LOCK: return { action: value ? 'lock' : 'unlock', args: {} };
+    case OP.SCENE: return { action: 'activate_scene', args: {} };
   }
   return null;
 }
@@ -350,16 +353,18 @@ function act(key, op, value) {
   }
   var call = actionFor(d, op, value);
   if (!call) return;
+  var done = op === OP.SCENE ? function () { send({ CMD: CMD.TOAST, STATUS: clip(d.name + ' activated', 39) }); } : null;
   if (mock) {
     applyLocally(d, op, value);
     sendRows(false);
+    if (done) done();
     return;
   }
   call.args.id = d.id;
   log(call.action + ' on #' + index);
   Pebble.invokeAction({ plugin: PLUGIN_UUID, action: call.action, args: call.args, timeoutMs: 20000 })
     .then(function (result) {
-      if (result && result.ok) return;
+      if (result && result.ok) { if (done) done(); return; }
       log(call.action + ' failed: ' + (result && result.code));
       var message = (result && result.message) || 'Failed';
       failed(d, /^No unlock PIN/.test(message) ? 'Save a lock PIN in settings' : message);
@@ -376,7 +381,8 @@ var MOCK = [
   ['5', 'Front Door', 'Hallway', 'action.devices.types.LOCK', 'lock', { locked: true }],
   ['6', 'Coffee Maker', 'Kitchen', 'action.devices.types.OUTLET', 'on_off', { on: false }],
   ['7', 'Pendant Lights', 'Kitchen', 'action.devices.types.LIGHT', 'on_off, brightness', { on: true, brightness: 100 }],
-  ['8', 'Ceiling Fan', 'Bedroom', 'action.devices.types.FAN', 'on_off', { on: false, online: false }]
+  ['8', 'Ceiling Fan', 'Bedroom', 'action.devices.types.FAN', 'on_off', { on: false, online: false }],
+  ['9', 'Evening', 'Unassigned', 'action.devices.types.SCENE', 'scene', { online: false }]
 ];
 
 function mockInstances() {

@@ -16,6 +16,8 @@ thermostat temperature and mode, Offline).
   Favorite, as its capabilities allow. Level rows open a full-screen dial: UP/DOWN change it, and it's sent
   700 ms after the last press, or on SELECT/BACK.
 - **Long SELECT** on a row switches it on or off (or locks it) without opening it.
+- Scenes (from Hue, TP-Link and other linked services) run on **SELECT**; long SELECT opens them to
+  add or remove the favorite.
 - On a locked lock, pressing SELECT twice within 3 s on the Locked row unlocks it with the PIN saved on
   the settings page.
 - On emery and gabbro, touch works too: drag to scroll, tap a row to select it and tap again to open it,
@@ -128,6 +130,15 @@ Play, pause, or stop media on every matching speaker or player.
 - `room` (string, optional): Exact room name, case-insensitive.
 - `type` (string, optional): Device type suffix, normally speaker.
 - `command` (string) One of `play`, `pause`, `stop`.
+
+### `activate_scene(name?, room?, type?)`
+
+Activate matching Google Home scenes (scene devices from Hue, TP-Link and other linked services).
+
+- `name` (string, optional): Scene name, exact preferred; otherwise case-insensitive substring.
+- `id` (string, optional): Exact device id (a `home/device` instanceId); targets only that device.
+- `room` (string, optional): Exact room name, case-insensitive.
+- `type` (string, optional): Device type suffix, normally scene.
 
 ### `run_automation(name)`
 

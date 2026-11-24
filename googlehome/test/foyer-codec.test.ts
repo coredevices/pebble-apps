@@ -146,9 +146,10 @@ describe('parse*', () => {
       'action.devices.traits.LockUnlock',
       'action.devices.traits.TemperatureSetting',
       'action.devices.traits.TransportControl',
+      'action.devices.traits.Scene',
     ]);
     expect([...caps].sort()).toEqual(
-      ['brightness', 'color', 'color_temperature', 'lock', 'media_transport', 'on_off', 'thermostat', 'volume'].sort(),
+      ['brightness', 'color', 'color_temperature', 'lock', 'media_transport', 'on_off', 'scene', 'thermostat', 'volume'].sort(),
     );
   });
 });

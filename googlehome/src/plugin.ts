@@ -220,11 +220,11 @@ Pebble.registerSourceHandler(async function (request: any, respond: any) {
 
 const ACTIONS = new Set([
   'turn_on', 'turn_off', 'set_brightness', 'set_color_temperature', 'set_volume', 'set_muted',
-  'lock', 'unlock', 'set_thermostat', 'media_control', 'run_automation', 'set_favorite',
+  'lock', 'unlock', 'set_thermostat', 'media_control', 'activate_scene', 'run_automation', 'set_favorite',
 ]);
 const DEVICE_ACTIONS = new Set([
   'turn_on', 'turn_off', 'set_brightness', 'set_color_temperature', 'set_volume', 'set_muted',
-  'lock', 'unlock', 'set_thermostat', 'media_control',
+  'lock', 'unlock', 'set_thermostat', 'media_control', 'activate_scene',
 ]);
 
 function hasSelector(args: Record<string, unknown>): boolean {

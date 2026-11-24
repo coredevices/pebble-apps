@@ -280,6 +280,7 @@ const SELECTOR_KIND_WORDS: Record<codec.Capability, ReadonlySet<string>> = {
   volume: new Set(['speaker', 'speakers']),
   lock: new Set(['lock', 'locks']),
   thermostat: new Set(['thermostat', 'thermostats']),
+  scene: new Set(['scene', 'scenes']),
   media_transport: new Set([
     'speaker',
     'speakers',
@@ -624,6 +625,8 @@ export async function callServerTool(
       return applyControl(foyer, args, 'on_off', 'on/off', (d) => foyer.setOnOff(d.id, agent(d), partner(d), true));
     case 'turn_off':
       return applyControl(foyer, args, 'on_off', 'on/off', (d) => foyer.setOnOff(d.id, agent(d), partner(d), false));
+    case 'activate_scene':
+      return applyControl(foyer, args, 'scene', 'scenes', (d) => foyer.activateScene(d.id, agent(d), partner(d)));
     case 'set_brightness': {
       const pct = requireInt(args, 'brightness_pct');
       return applyControl(foyer, args, 'brightness', 'brightness', (d) =>

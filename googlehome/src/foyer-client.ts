@@ -197,6 +197,10 @@ export class FoyerClient {
     return this.update(deviceId, codec.buildMediaCommand(deviceId, agentId, partnerDeviceId, command));
   }
 
+  async activateScene(deviceId: string, agentId: string, partnerDeviceId: string): Promise<codec.DeviceState> {
+    return this.update(deviceId, codec.buildActivateScene(deviceId, agentId, partnerDeviceId));
+  }
+
   async listAutomations(): Promise<codec.Automation[]> {
     const structureId = (await this.fetchHomeGraph()).homes[0]?.id;
     if (structureId == null) throw new Error('No structure/home found; cannot list automations.');

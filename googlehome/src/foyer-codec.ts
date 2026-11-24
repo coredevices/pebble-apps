@@ -41,7 +41,8 @@ export type Capability =
   | 'volume'
   | 'lock'
   | 'thermostat'
-  | 'media_transport';
+  | 'media_transport'
+  | 'scene';
 
 export interface Device {
   id: string;
@@ -324,6 +325,15 @@ export function buildThermostatSetpoint(
   return buildUpdateFields(deviceId, agentId, partnerDeviceId, 'temperatureSetting', fields);
 }
 
+/**
+ * Scene (Hue, TP-Link, SmartThings scenes linked to Google Home): the smart-home ActivateScene
+ * command as `["scene",[["deactivate",false]]]`. ponytail: not captured from the Google Home app
+ * yet; if Google refuses it the watch shows the error. Capture it from a real scene and fix here.
+ */
+export function buildActivateScene(deviceId: string, agentId: string, partnerDeviceId: string): JsonArr {
+  return buildUpdate(deviceId, agentId, partnerDeviceId, 'scene', 'deactivate', boolWrapper(false));
+}
+
 export const MEDIA_COMMANDS = ['play', 'pause', 'stop'];
 
 /** Media play/pause/stop via `mediaState.playbackState` (playing/paused/stopped). */
@@ -420,6 +430,9 @@ export function deriveCapabilities(traits: string[]): Set<Capability> {
       case 'transportcontrol':
       case 'mediastate':
         caps.add('media_transport');
+        break;
+      case 'scene':
+        caps.add('scene');
         break;
     }
   }

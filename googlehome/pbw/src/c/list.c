@@ -1,5 +1,5 @@
 // Google Home watchapp: main list. Favorites first, then one section per room (the phone sends
-// devices sorted by room). SELECT opens a device, long SELECT switches it on/off (or locks it).
+// devices sorted by room). SELECT opens a device (or runs a scene), long SELECT switches it on/off (or locks it).
 #include "googlehome.h"
 
 static Window *s_window;
@@ -99,7 +99,14 @@ static void draw_row(GContext *ctx, const Layer *cell, MenuIndex *index, void *d
   }
 }
 
+// A scene runs at once; long SELECT opens it, for Favorite.
 static void select_click(MenuLayer *menu, MenuIndex *index, void *ctx) {
+  Device *d = &g_devices[device_at(index)];
+  if (d->flags & FLAG_CAN_SCENE) {
+    send_action(d->key, OP_SCENE, 1);
+    vibes_short_pulse();
+    return;
+  }
   detail_window_push(device_at(index));
 }
 

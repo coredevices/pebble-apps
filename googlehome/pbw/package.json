@@ -1,7 +1,7 @@
 {
   "name": "googlehome",
   "author": "Core Devices",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "keywords": [
     "pebble-app"
   ],
@@ -693,6 +693,53 @@
             "required": [
               "command"
             ],
+            "anyOf": [
+              {
+                "required": [
+                  "id"
+                ]
+              },
+              {
+                "required": [
+                  "name"
+                ]
+              },
+              {
+                "required": [
+                  "room"
+                ]
+              },
+              {
+                "required": [
+                  "type"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "activate_scene",
+          "description": "Activate matching Google Home scenes (scene devices from Hue, TP-Link and other linked services).",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact device id (a home/device instanceId); targets only that device."
+              },
+              "name": {
+                "type": "string",
+                "description": "Scene name, exact preferred; otherwise case-insensitive substring."
+              },
+              "room": {
+                "type": "string",
+                "description": "Exact room name, case-insensitive."
+              },
+              "type": {
+                "type": "string",
+                "description": "Device type suffix, normally scene."
+              }
+            },
             "anyOf": [
               {
                 "required": [

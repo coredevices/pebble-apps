@@ -455,7 +455,13 @@ function dailySeries(daily, sun, midnight, iconPixelSize, unit, wanted) {
 function hourlySeries(timeseries, seen, midnight, iconPixelSize, unit) {
   var byTime = {};
   timeseries.forEach(function (entry) {
-    byTime[Date.parse(entry.time)] = { temp: entry.data.instant.details.air_temperature, symbol: symbolOf(entry) };
+    var next = entry.data.next_1_hours && entry.data.next_1_hours.details || {};
+    byTime[Date.parse(entry.time)] = {
+      temp: entry.data.instant.details.air_temperature,
+      symbol: symbolOf(entry),
+      chance: typeof next.probability_of_precipitation === 'number' ? next.probability_of_precipitation : null,
+      amount: typeof next.precipitation_amount === 'number' ? next.precipitation_amount : null,
+    };
   });
   var hours = [];
   for (var h = 0; h < HOURS; h++) {
@@ -464,6 +470,8 @@ function hourlySeries(timeseries, seen, midnight, iconPixelSize, unit) {
   }
   var temps = hours.map(function (hour) { return hour ? hour.temp : null; });
   var symbols = hours.map(function (hour) { return hour ? hour.symbol : null; });
+  var chances = hours.map(function (hour) { return hour && hour.chance !== undefined ? hour.chance : null; });
+  var amounts = hours.map(function (hour) { return hour && hour.amount !== undefined ? hour.amount : null; });
   var condition = { shortText: { values: symbols.map(function (s) { return s ? conditionText(s) : null; }) } };
   if (iconPixelSize) {
     var size = Math.min(iconPixelSize.w, iconPixelSize.h);
@@ -483,6 +491,14 @@ function hourlySeries(timeseries, seen, midnight, iconPixelSize, unit) {
     }),
     hourly_condition: over(midnight, HOUR_MS, condition),
     hourly_condition_code: over(midnight, HOUR_MS, { longText: { values: symbols.map(function (s) { return s ? conditionCode(s) : null; }) } }),
+    hourly_precipitation: over(midnight, HOUR_MS, {
+      numericValue: { values: chances, unit: '%', min: 0, max: 100 },
+      shortText: { values: chances.map(function (c) { return c === null ? null : Math.round(c) + '%'; }) },
+    }),
+    hourly_precipitation_amount: over(midnight, HOUR_MS, {
+      numericValue: { values: amounts, unit: 'mm', min: 0 },
+      shortText: { values: amounts.map(function (a) { return a === null ? null : a + ' mm'; }) },
+    }),
   };
 }
 

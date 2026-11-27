@@ -167,6 +167,8 @@ static void layers_center_in_window(PopupWindow *popup_window) {
   }
   layer_frame.origin.y = window_frame.size.h / 2 - pdc_frame.h / 2;
   layer_set_frame(popup_window->layer, layer_frame);
+  // the graphic is centred, so where it ends depends on the screen height. The title follows it
+  const int16_t text_origin_y = layer_frame.origin.y + pdc_frame.h + 1;
 #else
   // change layer size based on image size, to center image
   GRect image_frame = gbitmap_get_bounds(popup_window->image);
@@ -183,6 +185,9 @@ static void layers_center_in_window(PopupWindow *popup_window) {
 
   // center the text layer
   GRect text_frame = layer_get_frame(text_layer_get_layer(popup_window->text));
+#ifndef PBL_PLATFORM_APLITE
+  text_frame.origin.y = text_origin_y;
+#endif
   text_frame.size.w = layer_get_bounds(window_get_root_layer(popup_window->window)).size.w -
     ((popup_window->action_visible) ? horiz_off : 0);
   layer_set_frame(text_layer_get_layer(popup_window->text), text_frame);
@@ -333,7 +338,9 @@ static void prv_window_load(Window* window){
   const int text_layer_origin_y = 110;
 #endif
   popup_window->text = text_layer_create(GRect(0, text_layer_origin_y, bounds.size.w, 36));
-  text_layer_set_font(popup_window->text, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD));
+  // the taller displays have denser pixels, 18pt reads too small
+  text_layer_set_font(popup_window->text, fonts_get_system_font(
+    bounds.size.h > 180 ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD));
   text_layer_set_text_alignment(popup_window->text, GTextAlignmentCenter);
   text_layer_set_background_color(popup_window->text, GColorClear);
   text_layer_set_text(popup_window->text, popup_window->title);
